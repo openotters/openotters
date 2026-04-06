@@ -1,0 +1,149 @@
+syntax = "proto3";
+
+package openotters.daemon.v1;
+
+option go_package = "github.com/openotters/cli/api/v1;daemonv1";
+
+service Runtime {
+  rpc GetInfo(GetInfoRequest) returns (GetInfoResponse);
+  rpc SaveAgentImage(SaveAgentImageRequest) returns (SaveAgentImageResponse);
+  rpc PullAgentImage(PullRequest) returns (PullResponse);
+  rpc PushAgentImage(PushRequest) returns (PushResponse);
+  rpc ListImages(ListImagesRequest) returns (ListImagesResponse);
+  rpc RemoveImage(RemoveImageRequest) returns (RemoveImageResponse);
+  rpc DescribeImage(DescribeImageRequest) returns (DescribeImageResponse);
+  rpc CreateAgent(CreateAgentRequest) returns (CreateAgentResponse);
+  rpc ListAgents(ListAgentsRequest) returns (ListAgentsResponse);
+  rpc StopAgent(StopAgentRequest) returns (StopAgentResponse);
+  rpc RemoveAgent(RemoveAgentRequest) returns (RemoveAgentResponse);
+  rpc ChatWithAgent(ChatRequest) returns (ChatResponse);
+  rpc ChatStreamWithAgent(ChatStreamRequest) returns (stream ChatStreamEvent);
+}
+
+message GetInfoRequest {}
+
+message GetInfoResponse {
+  string registry_addr = 1;
+}
+
+message SaveAgentImageRequest {
+  bytes oci_artifact = 1;
+  repeated string tags = 2;
+}
+
+message SaveAgentImageResponse {
+  string digest = 1;
+  repeated string tags = 2;
+}
+
+message PullRequest {
+  string ref = 1;
+  repeated string tags = 2;
+}
+
+message PullResponse {
+  string digest = 1;
+  repeated string tags = 2;
+}
+
+message PushRequest {
+  string ref = 1;
+}
+
+message PushResponse {
+  string digest = 1;
+  string ref = 2;
+}
+
+message ListImagesRequest {}
+
+message ImageInfo {
+  string ref = 1;
+  string digest = 2;
+  string artifact_type = 3;
+  int64 size = 4;
+}
+
+message ListImagesResponse {
+  repeated ImageInfo images = 1;
+}
+
+message RemoveImageRequest {
+  string ref = 1;
+}
+
+message RemoveImageResponse {}
+
+message DescribeImageRequest {
+  string ref = 1;
+}
+
+message DescribeImageResponse {
+  string ref = 1;
+  string digest = 2;
+  string artifact_type = 3;
+  string config = 4;
+  repeated string layers = 5;
+  map<string, string> labels = 6;
+}
+
+message CreateAgentRequest {
+  string name = 1;
+  string ref = 2;
+}
+
+message CreateAgentResponse {
+  string id = 1;
+  string name = 2;
+  string status = 3;
+}
+
+message ListAgentsRequest {}
+
+message AgentInfo {
+  string id = 1;
+  string name = 2;
+  string model = 3;
+  string status = 4;
+  string root = 5;
+  int64 created_at = 6;
+}
+
+message ListAgentsResponse {
+  repeated AgentInfo agents = 1;
+}
+
+message StopAgentRequest {
+  string ref = 1;
+}
+
+message StopAgentResponse {}
+
+message RemoveAgentRequest {
+  string ref = 1;
+}
+
+message RemoveAgentResponse {}
+
+message ChatRequest {
+  string ref = 1;
+  string session_id = 2;
+  string prompt = 3;
+}
+
+message ChatResponse {
+  string response = 1;
+}
+
+message ChatStreamRequest {
+  string ref = 1;
+  string session_id = 2;
+  string prompt = 3;
+}
+
+message ChatStreamEvent {
+  string type = 1;
+  int32 step = 2;
+  string tool = 3;
+  string content = 4;
+}

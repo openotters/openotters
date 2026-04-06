@@ -1,0 +1,15 @@
+version: '3'
+
+includes:
+    default: .tk/default/Taskfile.yaml
+    git: .tk/git/Taskfile.yaml
+    golangci: .tk/golangci/Taskfile.yaml
+    install: .tk/install/Taskfile.yaml
+    license: .tk/license/Taskfile.yaml
+    trufflehog: .tk/trufflehog/Taskfile.yaml
+    
+
+dotenv:
+  - .env
+  - PROJECT
+  - .env.default

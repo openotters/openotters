@@ -1,0 +1,102 @@
+version: '3'
+
+vars:
+  DEFAULT_GO_BIN: 'go'
+  DEFAULT_LICENSE_PACKAGE: 'github.com/nishanths/license/v5'
+  DEFAULT_LICENSE_BIN_NAME: 'license'
+  DEFAULT_LICENSE_VERSION: 'latest'
+  DEFAULT_LICENSE_TYPE: 'mit'
+  DEFAULT_LICENSE_FILENAME: 'LICENSE.md'
+  DEFAULT_LICENSE_NAME:
+    sh: gh api user -t '{{ "{{ .login }} <{{ .email }}>" }}'
+  DEFAULT_LICENSE_YEAR:
+    sh: date +'%Y'
+  DEFAULT_LICENSE_PROJECT:
+    sh: gh repo view --json name -t '{{ "{{ .name }}" }}'
+
+tasks:
+  default:
+    cmds:
+      - task: generate
+
+  pre-commit:
+    cmds:
+      - task: default
+
+  run:
+    desc: Run license
+    vars:
+      BIN_NAME: '{{ .BIN_NAME | default .DEFAULT_LICENSE_BIN_NAME }}'
+      LICENSE_ARGS: '{{ .LICENSE_ARGS | default .DEFAULT_LICENSE_ARGS }}'
+    summary: |
+      Run License. The purpose is to have a reusable way to run License.
+
+      The following variables are available:
+
+      | VARIABLE            | DESCRIPTION               | DEFAULT |
+      |---------------------|---------------------------|---------|
+      | `LICENSE_ARGS`     | license arguments        | `{{ .DEFAULT_LICENSE_ARGS }}` |
+      | `BIN_NAME` | license bin name         | `{{ .DEFAULT_LICENSE_BIN_NAME }}` |
+
+      Usual environment variables used for building a golang application are obviously available like:
+        - `GOOS` for setting the build OS
+        - `GOARCH` for setting the build architecture
+
+      Extra arguments can be provided using `--` (non exclusive with `LICENSE_ARGS`).
+
+      Examples:
+        - `SOURCES=./cmd/... task {{ .TASK }}` is similar to `license-lint`
+        - `task {{ .TASK }} -- -v` is similar to `license-lint -v`
+        - `LICENSE_ARGS="-v" task {{ .TASK }}` is similar to `license-lint -v`
+
+    cmd: 'go tool {{.BIN_NAME }} {{.LICENSE_ARGS}} {{.CLI_ARGS}}'
+
+  install:
+    vars:
+      GO_BIN: '{{.GO_BIN | default .DEFAULT_GO_BIN}}'
+      PACKAGE: '{{.PACKAGE | default .DEFAULT_LICENSE_PACKAGE}}'
+      VERSION: '{{.VERSION | default .DEFAULT_LICENSE_VERSION}}'
+    cmd: '{{.GO_BIN}} get -tool {{.PACKAGE}}@{{.VERSION}}'
+    status:
+      - go tool | grep {{.PACKAGE}}
+
+  uninstall:
+    vars:
+      PACKAGE: '{{.PACKAGE | default .DEFAULT_LICENSE_PACKAGE}}'
+      GO_BIN: '{{.GO_BIN | default .DEFAULT_GO_BIN}}'
+    cmd: '{{.GO_BIN}} get -tool {{.PACKAGE}}@none'
+
+  generate:
+    desc: Generate License
+    summary: |
+      Generate a standardized MIT license file for the project.
+
+      This task helps in creating a license file using relevant project details fetched from the environment when possible. It standardizes the licensing process ensuring consistency across projects.
+      
+      The following variables are available:
+
+      | VARIABLE          | DESCRIPTION                     | DEFAULT                           |
+      |-------------------|---------------------------------|-----------------------------------|
+      | `LICENSE_NAME`    | Name of the license holder      | `{{.DEFAULT_LICENSE_NAME}}`       |
+      | `LICENSE_TYPE`    | Type of the license             | `{{.DEFAULT_LICENSE_TYPE}}`       |
+      | `LICENSE_FILENAME`| Output filename for the license | `{{.DEFAULT_LICENSE_FILENAME}}`   |
+      | `LICENSE_YEAR`    | Year of the license             | `{{.DEFAULT_LICENSE_YEAR}}`       |
+      | `LICENSE_PROJECT` | Project name                    | `{{.DEFAULT_LICENSE_PROJECT}}`    |
+
+      Example usage:
+        - `task generate` generates a standard MIT license.
+        - `LICENSE_NAME='Jane Doe <jane.doe@example.com>' task generate` customizes the license holder name and email.
+    vars:
+      NAME: '{{.LICENSE_NAME | default .DEFAULT_LICENSE_NAME}}'
+      TYPE: '{{.LICENSE_TYPE | default .DEFAULT_LICENSE_TYPE}}'
+      FILENAME: '{{.LICENSE_FILENAME | default .DEFAULT_LICENSE_FILENAME}}'
+      YEAR: '{{.LICENSE_YEAR | default .DEFAULT_LICENSE_YEAR}}'
+      PROJECT: '{{.LICENSE_PROJECT | default .DEFAULT_LICENSE_PROJECT}}'
+
+    status:
+      - test -f '{{ .FILENAME }}'
+
+    cmd:
+      task: run
+      vars:
+        CLI_ARGS: '-n "{{.NAME}}" -y "{{.YEAR}}" {{if .PROJECT }}-p "{{.PROJECT}}"{{end}} -o {{.FILENAME}} {{.TYPE}}'
