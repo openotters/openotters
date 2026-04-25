@@ -13,7 +13,7 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/merlindorin/go-shared v0.0.0-20260401200857-a37e8564e29e
 	github.com/opencontainers/image-spec v1.1.1
-	github.com/openotters/agentfile v1.0.0-alpha
+	github.com/openotters/agentfile v1.0.0-alpha.1
 	github.com/openotters/bin v1.0.0-alpha
 	go.uber.org/zap v1.27.1
 	golang.org/x/term v0.42.0

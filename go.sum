@@ -980,8 +980,8 @@ github.com/opencontainers/image-spec v1.1.1 h1:y0fUlFfIZhPF1W537XOLg0/fcx6zcHCJw
 github.com/opencontainers/image-spec v1.1.1/go.mod h1:qpqAh3Dmcf36wStyyWU+kCeDgrGnAve2nCC8+7h8Q0M=
 github.com/opencontainers/runc v1.2.8 h1:RnEICeDReapbZ5lZEgHvj7E9Q3Eex9toYmaGBsbvU5Q=
 github.com/opencontainers/runc v1.2.8/go.mod h1:cC0YkmZcuvr+rtBZ6T7NBoVbMGNAdLa/21vIElJDOzI=
-github.com/openotters/agentfile v1.0.0-alpha h1:h+UFp6d8ZfDNoU0kKCHr6FYFM32OOBldBPWOS+GNlTo=
-github.com/openotters/agentfile v1.0.0-alpha/go.mod h1:W//rk+fXDaRGvMdWzaEbazLgVxw/ZfZuXeV93TOoBRM=
+github.com/openotters/agentfile v1.0.0-alpha.1 h1:DpV1gPfkKJJsPQNJNlgaawL8Wvl0ymAkBiK8R3yT1L0=
+github.com/openotters/agentfile v1.0.0-alpha.1/go.mod h1:xcnUOmn/5GEN+6zdrNrtg71nGRGLOacCf/k61kfmBLM=
 github.com/openotters/bin v1.0.0-alpha h1:IQxezw1/8lQBntkhtIyzd36fxtJMpo/VXQjojRHRbEI=
 github.com/openotters/bin v1.0.0-alpha/go.mod h1:PMnCWtpgMwMShzilGgObcPj1gTilxuGxHCr9MWwgG9k=
 github.com/opentracing/opentracing-go v1.2.0 h1:uEJPy/1a5RIPAJ0Ov+OIO8OxWu77jEv+1B0VhjKrZUs=

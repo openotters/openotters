@@ -981,8 +981,12 @@ func (d *Daemon) CreateAgent(
 		return nil, err
 	}
 
+	digestResolver := func(r string) string { return d.resolveLocalDigest(ctx, r) }
+
 	agentOpts := []system.AgentOption{
 		system.WithModelResolver(d.providers.Resolve),
+		system.WithImageRef(ref.String()),
+		system.WithDigestResolver(digestResolver),
 	}
 
 	if len(mounts) > 0 {
@@ -991,19 +995,18 @@ func (d *Daemon) CreateAgent(
 
 	d.pool.Add(id, ref, agentOpts, overrides...)
 
+	// Provenance fields are populated lazily by hydrateProvenance the
+	// first time List() inspects this agent — the workspace is what
+	// writes agent.yaml, and that runs in pool.Add's goroutine.
 	ma := &managedAgent{
-		id:            id,
-		name:          name,
-		agentName:     agentName,
-		model:         af.Agent.Model,
-		tag:           stripLoopbackPrefixes(ref.String()),
-		status:        statusCreated,
-		createdAt:     time.Now(),
-		mounts:        mounts,
-		runtimeRef:    af.Agent.Runtime,
-		imageDigest:   d.resolveLocalDigest(ctx, ref.String()),
-		runtimeDigest: d.resolveLocalDigest(ctx, af.Agent.Runtime),
-		tools:         d.collectTools(ctx, af.Agent.Bins),
+		id:        id,
+		name:      name,
+		agentName: agentName,
+		model:     af.Agent.Model,
+		tag:       stripLoopbackPrefixes(ref.String()),
+		status:    statusCreated,
+		createdAt: time.Now(),
+		mounts:    mounts,
 	}
 
 	if req.GetModel() != "" {
@@ -1039,10 +1042,50 @@ func (d *Daemon) CreateAgent(
 	}, nil
 }
 
+// hydrateProvenance lazily reads each agent's etc/agent.yaml on the
+// first List() call after creation/restore and copies the workspace-
+// written Provenance + per-tool Ref/Digest fields into managedAgent's
+// in-memory cache. Best-effort: if the chroot or agent.yaml isn't
+// present yet (workspace materialisation runs in pool.Add's
+// goroutine and is async w.r.t. List), the cached fields stay empty
+// and the next call retries.
+func (d *Daemon) hydrateProvenance(ma *managedAgent) {
+	if ma.imageDigest != "" || len(ma.tools) > 0 {
+		return
+	}
+
+	chroot := filepath.Join(d.agentsDir, ma.id.String())
+
+	rt, err := agentpkg.LoadRuntime(osfs.New(chroot))
+	if err != nil {
+		return
+	}
+
+	if rt.Provenance != nil {
+		ma.imageDigest = rt.Provenance.ImageDigest
+		ma.runtimeRef = rt.Provenance.RuntimeRef
+		ma.runtimeDigest = rt.Provenance.RuntimeDigest
+	}
+
+	if len(rt.Tools) > 0 {
+		ma.tools = make([]agentTool, 0, len(rt.Tools))
+		for _, t := range rt.Tools {
+			ma.tools = append(ma.tools, agentTool{
+				Name:        t.Name,
+				Ref:         t.Ref,
+				Digest:      t.Digest,
+				Description: t.Description,
+			})
+		}
+	}
+}
+
 func (d *Daemon) List() []*daemonv1.AgentInfo {
 	infos := make([]*daemonv1.AgentInfo, 0, len(d.agents))
 
 	for _, ma := range d.agents {
+		d.hydrateProvenance(ma)
+
 		status := ma.status
 
 		var addr string
@@ -1259,27 +1302,6 @@ func (d *Daemon) resolveLocalDigest(ctx context.Context, ref string) string {
 	}
 
 	return info.digest
-}
-
-// collectTools turns the Agentfile's BIN directives into the in-memory
-// shape ListAgents serialises. Digests are resolved via the local
-// registry for the same best-effort reason as resolveLocalDigest.
-func (d *Daemon) collectTools(ctx context.Context, bins []*spec.Bin) []agentTool {
-	if len(bins) == 0 {
-		return nil
-	}
-
-	out := make([]agentTool, 0, len(bins))
-	for _, b := range bins {
-		out = append(out, agentTool{
-			Name:        b.Name,
-			Ref:         b.Image,
-			Digest:      d.resolveLocalDigest(ctx, b.Image),
-			Description: b.Description,
-		})
-	}
-
-	return out
 }
 
 func (d *Daemon) resolve(ref string) (*managedAgent, error) {
