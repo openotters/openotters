@@ -24,15 +24,6 @@ func generateName() string {
 	return randElement(adjectives) + "-" + randElement(animals)
 }
 
-func generateID() string {
-	b := make([]byte, 4)
-	if _, err := rand.Read(b); err != nil {
-		panic(fmt.Sprintf("crypto/rand failed: %v", err))
-	}
-
-	return fmt.Sprintf("%x", b)
-}
-
 func randElement(list []string) string {
 	n, err := rand.Int(rand.Reader, big.NewInt(int64(len(list))))
 	if err != nil {

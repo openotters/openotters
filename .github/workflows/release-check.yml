@@ -1,0 +1,44 @@
+name: Release check
+
+# Runs `goreleaser check` on every PR and push that touches the
+# release config or the binaries it builds. Catches YAML errors,
+# missing fields, and cross-references (brews → tap, archives →
+# builds) before a tag push makes them a real problem.
+on:
+  pull_request:
+    paths:
+      - '.goreleaser.yaml'
+      - '.github/workflows/release.yml'
+      - '.github/workflows/release-check.yml'
+      - 'cmd/otters/**'
+      - 'cmd/ottersd/**'
+      - 'go.mod'
+      - 'go.sum'
+  push:
+    branches:
+      - main
+    paths:
+      - '.goreleaser.yaml'
+      - '.github/workflows/release.yml'
+      - '.github/workflows/release-check.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Validate goreleaser config
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser
+          version: '~> v2'
+          args: check

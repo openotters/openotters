@@ -2,10 +2,12 @@ syntax = "proto3";
 
 package openotters.daemon.v1;
 
-option go_package = "github.com/openotters/cli/api/v1;daemonv1";
+option go_package = "github.com/openotters/openotters/api/v1;daemonv1";
 
 service Runtime {
   rpc GetInfo(GetInfoRequest) returns (GetInfoResponse);
+  rpc BuildAgent(BuildAgentRequest) returns (BuildAgentResponse);
+  rpc BuildToolImage(BuildToolImageRequest) returns (BuildToolImageResponse);
   rpc SaveAgentImage(SaveAgentImageRequest) returns (SaveAgentImageResponse);
   rpc PullAgentImage(PullRequest) returns (PullResponse);
   rpc PushAgentImage(PushRequest) returns (PushResponse);
@@ -14,16 +16,107 @@ service Runtime {
   rpc DescribeImage(DescribeImageRequest) returns (DescribeImageResponse);
   rpc CreateAgent(CreateAgentRequest) returns (CreateAgentResponse);
   rpc ListAgents(ListAgentsRequest) returns (ListAgentsResponse);
+  rpc StartAgent(StartAgentRequest) returns (StartAgentResponse);
   rpc StopAgent(StopAgentRequest) returns (StopAgentResponse);
   rpc RemoveAgent(RemoveAgentRequest) returns (RemoveAgentResponse);
   rpc ChatWithAgent(ChatRequest) returns (ChatResponse);
+  rpc PromptObject(PromptObjectRequest) returns (PromptObjectResponse);
   rpc ChatStreamWithAgent(ChatStreamRequest) returns (stream ChatStreamEvent);
+  rpc ListSessionMessages(ListSessionMessagesRequest) returns (ListSessionMessagesResponse);
+  rpc GetAgentLogs(GetAgentLogsRequest) returns (GetAgentLogsResponse);
+  rpc ListModels(ListModelsRequest) returns (ListModelsResponse);
+}
+
+message ListModelsRequest {}
+
+message ListModelsResponse {
+  repeated Model models = 1;
+}
+
+// Model is one entry in the daemon's provider catalogue — flattened
+// across providers so `otters models ls` can render a single table.
+// Ref is "<provider>/<name>", matching the format used by Agentfile's
+// MODEL directive and `otters run --model`. Enriched metadata
+// (display_name, context window, pricing, reasoning support) is
+// populated from Catwalk when the provider is known there; zero for
+// user-defined / self-hosted providers.
+message Model {
+  string provider = 1;
+  string name = 2;
+  string ref = 3;
+  string api_base = 4;
+  string display_name = 5;
+  int64 context_window = 6;
+  int64 default_max_tokens = 7;
+  double cost_input_per_1m = 8;
+  double cost_output_per_1m = 9;
+  bool can_reason = 10;
+}
+
+message GetAgentLogsRequest {
+  // Agent id, name, or id prefix — same resolver as start/stop/rm.
+  string ref = 1;
+  // Return at most this many trailing bytes. 0 means "no byte cap".
+  int64 tail_bytes = 2;
+  // Return at most this many trailing lines. 0 means "no line cap".
+  // If both tail_bytes and tail_lines are non-zero, tail_lines wins.
+  int64 tail_lines = 3;
+}
+
+message GetAgentLogsResponse {
+  bytes content = 1;
+  string path = 2;
 }
 
 message GetInfoRequest {}
 
 message GetInfoResponse {
   string registry_addr = 1;
+  string socket_path = 2;
+  string log_dir = 3;
+  string agents_dir = 4;
+  string data_dir = 5;
+  string runtime_path = 6;
+  string version = 7;
+  string commit = 8;
+  string build_date = 9;
+  int32 agents_running = 10;
+  int32 agents_total = 11;
+  int32 providers = 12;
+}
+
+message BuildAgentRequest {
+  // Absolute or daemon-resolvable path to an Agentfile on the daemon
+  // host's filesystem. Contexts and ADD files are read relative to the
+  // file's directory as usual.
+  string agentfile_path = 1;
+  repeated string tags = 2;
+}
+
+message BuildAgentResponse {
+  string digest = 1;
+  repeated string tags = 2;
+  string ref = 3;
+}
+
+message ToolPlatform {
+  string os       = 1; // "linux", "darwin", …
+  string arch     = 2; // "amd64", "arm64", …
+  string bin_path = 3; // absolute path on daemon host
+}
+
+message BuildToolImageRequest {
+  string name        = 1;
+  string description = 2;
+  string usage       = 3;
+  repeated string tags = 4;
+  repeated ToolPlatform platforms = 5;
+}
+
+message BuildToolImageResponse {
+  string digest = 1;
+  repeated string tags = 2;
+  string ref = 3;
 }
 
 message SaveAgentImageRequest {
@@ -87,9 +180,27 @@ message DescribeImageResponse {
   map<string, string> labels = 6;
 }
 
+message Mount {
+  // Absolute host path. Resolved client-side (abs, tilde, CWD) before
+  // the RPC; the daemon does not touch the user's filesystem lookup
+  // rules beyond validating existence with os.Stat.
+  string host = 1;
+  // Chroot-relative path; must start with "/". Cleaned via
+  // filepath.Clean; cannot collide with agent-internal prefixes
+  // (/etc/context, /etc/data, /usr/bin, /usr/local/bin, /var).
+  string target = 2;
+  // Optional short description, surfaced to the LLM via the
+  // auto-generated /etc/context/MOUNTS.md so the agent knows what
+  // the mount is for without the user having to repeat it in prompt.
+  string description = 3;
+}
+
 message CreateAgentRequest {
   string name = 1;
   string ref = 2;
+  string model = 3;
+  string runtime = 4;
+  repeated Mount mounts = 5;
 }
 
 message CreateAgentResponse {
@@ -107,11 +218,20 @@ message AgentInfo {
   string status = 4;
   string root = 5;
   int64 created_at = 6;
+  string addr = 7;
+  string image = 8;
+  repeated Mount mounts = 9;
 }
 
 message ListAgentsResponse {
   repeated AgentInfo agents = 1;
 }
+
+message StartAgentRequest {
+  string ref = 1;
+}
+
+message StartAgentResponse {}
 
 message StopAgentRequest {
   string ref = 1;
@@ -135,6 +255,24 @@ message ChatResponse {
   string response = 1;
 }
 
+// PromptObject sends a one-shot, stateless structured-output query
+// to a running agent. schema_json is a JSON Schema doc that the
+// runtime unmarshals into fantasy/schema.Schema. object_json is the
+// resulting object (valid JSON bytes); raw_text is the model's raw
+// reply, mostly useful for debugging when JSON repair kicked in.
+message PromptObjectRequest {
+  string ref         = 1;
+  string prompt      = 2;
+  bytes  schema_json = 3;
+  string schema_name = 4;
+  string schema_desc = 5;
+}
+
+message PromptObjectResponse {
+  bytes  object_json = 1;
+  string raw_text    = 2;
+}
+
 message ChatStreamRequest {
   string ref = 1;
   string session_id = 2;
@@ -146,4 +284,20 @@ message ChatStreamEvent {
   int32 step = 2;
   string tool = 3;
   string content = 4;
+}
+
+message ListSessionMessagesRequest {
+  string ref        = 1;
+  string session_id = 2;
+  int32  limit      = 3;
+}
+
+message SessionMessage {
+  string role       = 1;
+  string content    = 2;
+  int64  created_at = 3;
+}
+
+message ListSessionMessagesResponse {
+  repeated SessionMessage messages = 1;
 }

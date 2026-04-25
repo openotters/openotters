@@ -1,0 +1,105 @@
+version: 2
+
+project_name: otters
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: otters
+    main: ./cmd/otters
+    binary: otters
+    env:
+      - CGO_ENABLED=0
+    goos: [darwin, linux]
+    goarch: [amd64, arm64]
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
+      - -X main.commit={{.Commit}}
+      - -X main.date={{.Date}}
+      - -X main.buildSource=goreleaser
+
+  - id: ottersd
+    main: ./cmd/ottersd
+    binary: ottersd
+    env:
+      - CGO_ENABLED=0
+    goos: [darwin, linux]
+    goarch: [amd64, arm64]
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
+      - -X main.commit={{.Commit}}
+      - -X main.date={{.Date}}
+      - -X main.buildSource=goreleaser
+
+archives:
+  - id: all
+    ids: [otters, ottersd]
+    name_template: >-
+      otters_{{ .Os }}_{{ .Arch }}
+    formats: [tar.gz]
+    files:
+      - LICENSE.md
+      - README.md
+
+checksum:
+  name_template: "checksums.txt"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
+
+brews:
+  - name: otters
+    repository:
+      owner: openotters
+      name: homebrew-tap
+      # Optional: a PAT with repo scope on the tap. Set via env in CI.
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+    directory: Formula
+    homepage: https://github.com/openotters/openotters
+    description: "Build, run, and chat with AI agents"
+    license: MIT
+    install: |
+      bin.install "otters"
+      bin.install "ottersd"
+    service: |
+      run [opt_bin/"ottersd", "serve"]
+      keep_alive successful_exit: false, crashed: true
+      log_path var/"log/ottersd.log"
+      error_log_path var/"log/ottersd.err.log"
+    test: |
+      assert_match "otters", shell_output("#{bin}/otters --version")
+    caveats: |
+      The otters daemon (ottersd) has been installed but is not running.
+
+      To run it in the background (launchd on macOS, systemd --user on Linux):
+        brew services start otters
+
+      To run it in the foreground for debugging:
+        ottersd serve
+
+      Default paths:
+        socket:      ~/.otters/otters.sock
+        agent data:  ~/.otters/agents
+        logs:        #{var}/log/ottersd.{log,err.log} (service mode only)
+
+      Get started once the daemon is running:
+        otters --help
+        otters run <Agentfile>
+
+      Stop the service:
+        brew services stop otters
+
+release:
+  github:
+    owner: openotters
+    name: openotters
+  prerelease: auto

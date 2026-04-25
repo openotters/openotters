@@ -1,9 +1,15 @@
 # openotters
 
-[![Go Reference](https://pkg.go.dev/badge/github.com/openotters/cli.svg)](https://pkg.go.dev/github.com/openotters/cli)
-[![Go Report Card](https://goreportcard.com/badge/github.com/openotters/cli)](https://goreportcard.com/report/github.com/openotters/cli)
+[![Go Reference](https://pkg.go.dev/badge/github.com/openotters/openotters.svg)](https://pkg.go.dev/github.com/openotters/openotters)
+[![Go Report Card](https://goreportcard.com/badge/github.com/openotters/openotters)](https://goreportcard.com/report/github.com/openotters/openotters)
 [![golangci-lint](https://github.com/openotters/openotters/actions/workflows/golangci.yml/badge.svg)](https://github.com/openotters/openotters/actions/workflows/golangci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE.md)
+[![Status: experimental](https://img.shields.io/badge/status-experimental-orange.svg)](#)
+
+> ⚠️ **Experimental.** openotters is in early alpha. APIs, CLI flags, the
+> Agentfile grammar, and the on-disk daemon state can all change between
+> tagged releases without a deprecation cycle. Don't use it for anything
+> you wouldn't be willing to rebuild from scratch tomorrow.
 
 Build, run, and manage AI agents from your terminal. Think Docker, but for autonomous agents.
 
@@ -11,6 +17,8 @@ Build, run, and manage AI agents from your terminal. Think Docker, but for auton
 * [openotters](#openotters)
   * [Why openotters?](#why-openotters)
   * [Install](#install)
+    * [Homebrew (macOS and Linux)](#homebrew-macos-and-linux)
+    * [Go (any platform)](#go-any-platform)
   * [Quick start](#quick-start)
   * [Commands](#commands)
   * [Configuration](#configuration)
@@ -46,9 +54,8 @@ BIN jq   ghcr.io/openotters/tools/jq:latest   "Process JSON"
 Then:
 
 ```sh
-openotters build -f Agentfile
-openotters run support-bot:latest
-openotters chat support-bot
+otters run ./Agentfile --name support-bot
+otters chat support-bot
 ```
 
 **What you get:**
@@ -61,9 +68,18 @@ openotters chat support-bot
 
 ## Install
 
+### Homebrew (macOS and Linux)
+
 ```sh
-go install github.com/openotters/cli/cmd/openotters@latest
-go install github.com/openotters/cli/cmd/openotters-daemon@latest
+brew install openotters/tap/otters
+brew services start otters   # starts ottersd in the background
+```
+
+### Go (any platform)
+
+```sh
+go install github.com/openotters/openotters/cmd/otters@latest
+go install github.com/openotters/openotters/cmd/ottersd@latest
 ```
 
 ## Quick start
@@ -71,55 +87,68 @@ go install github.com/openotters/cli/cmd/openotters-daemon@latest
 **1. Configure your LLM provider**
 
 ```sh
-mkdir -p ~/.openotters
-cat > ~/.openotters/providers.yaml << EOF
+mkdir -p ~/.otters
+cat > ~/.otters/providers.yaml << EOF
 providers:
   - name: anthropic
     api-key: ${ANTHROPIC_API_KEY}
 EOF
 ```
 
-**2. Start the daemon** (keep it running in a separate terminal)
+**2. Start the daemon** (Homebrew users can skip — `brew services start otters` already did this)
 
 ```sh
-openotters-daemon
+ottersd serve
 ```
 
-**3. Build and run an agent**
+**3. Run an agent straight from an Agentfile**
 
 ```sh
-openotters build -f Agentfile
-openotters run support-bot:latest
-openotters chat support-bot
+otters run ./Agentfile --name support-bot
+otters chat support-bot
 ```
 
-**4. Push to a registry**
+`otters run` accepts an Agentfile path, a build-context directory, or a registry ref
+— it builds if needed, then creates and starts the agent in one step.
+
+**4. Push the built image to a remote registry**
 
 ```sh
-openotters push ghcr.io/myorg/support-bot:v1.0
+otters image push ghcr.io/myorg/support-bot:v1.0
 ```
 
 ## Commands
 
-| Command          | Description                                                         |
-|------------------|---------------------------------------------------------------------|
-| `build`          | Build an OCI artifact from an Agentfile and save to daemon registry |
-| `pull`           | Pull an agent image from a remote registry                          |
-| `push`           | Push a local image to a remote registry                             |
-| `run`            | Create and start an agent from a registry image                     |
-| `ps`             | List running agents                                                 |
-| `stop`           | Stop a running agent                                                |
-| `rm`             | Remove an agent                                                     |
-| `chat`           | Interactive terminal chat with a running agent                      |
-| `image ls`       | List images in the local registry                                   |
-| `image rm`       | Remove an image                                                     |
-| `image describe` | Inspect an image (manifest, layers, config)                         |
+Top-level lifecycle commands are Docker-flavoured shortcuts; each also exists under
+the fully-qualified `otters agent …` form.
+
+| Command         | Description                                                         |
+|-----------------|---------------------------------------------------------------------|
+| `run`           | Run an agent from an Agentfile, build context, or image ref         |
+| `ps` / `ls`     | List running agents                                                 |
+| `start`         | Start a stopped agent                                               |
+| `stop`          | Stop a running agent                                                |
+| `rm`            | Remove an agent                                                     |
+| `chat`          | Interactive terminal chat with a running agent                      |
+| `prompt`        | One-shot prompt; `--schema` / `--schema-file` returns JSON          |
+| `logs`          | Print the runtime log file for an agent                             |
+| `info`          | Show daemon info (socket, paths, version, agent counts)             |
+| `version`       | Print the CLI version                                               |
+
+Management command groups:
+
+| Group    | Subcommands                                                             | Purpose                                                             |
+|----------|-------------------------------------------------------------------------|---------------------------------------------------------------------|
+| `agent`  | `run`, `ls`, `start`, `stop`, `rm`, `chat`, `prompt`, `logs`, `inspect` | Fully-qualified agent lifecycle.                                    |
+| `image`  | `build`, `push`, `pull`, `ls`, `rm`, `inspect` (alias `describe`)       | Agent OCI image management.                                         |
+| `bin`    | `build`, `push`, `pull`, `ls`, `rm`, `inspect`                          | Binary tool image management (the artifacts `BIN` directives pull). |
+| `models` | `ls`                                                                    | List models advertised by configured providers.                     |
 
 ## Configuration
 
 ### Providers
 
-LLM API keys live in `~/.openotters/providers.yaml`:
+LLM API keys live in `~/.otters/providers.yaml`:
 
 ```yaml
 providers:
@@ -133,14 +162,14 @@ Environment variables are expanded at load time. No secrets ever end up in agent
 
 ### Daemon socket
 
-Default: `~/.openotters/openotters.sock`
+Default: `~/.otters/otters.sock`
 
 Override with `--socket` on the CLI or `--socket-path` on the daemon.
 
 ## Architecture
 
 ```
-openotters CLI ──gRPC──► openotters-daemon
+otters CLI ──gRPC──► ottersd
                               │
                               ├── embedded OCI registry
                               ├── agent lifecycle (create/stop/remove)
@@ -148,30 +177,40 @@ openotters CLI ──gRPC──► openotters-daemon
                               └── SQLite state persistence
 ```
 
-The **CLI** is a thin shell — all commands delegate to the daemon via gRPC over a Unix socket, except `build` which
-runs client-side (needs access to the local filesystem).
+The **CLI** is a thin shell — every command delegates to the daemon over a Unix
+socket. `otters run ./Agentfile` hands the absolute path to the daemon, which
+runs the build itself; the CLI never touches build internals.
 
-The **daemon** manages agent lifecycles using the [agentfile](https://github.com/openotters/agentfile) library and
-runs agents with the [runtime](https://github.com/openotters/runtime).
+The **daemon** manages agent lifecycles using the
+[agentfile](https://github.com/openotters/agentfile) library and runs each agent
+as a subprocess of the [runtime](https://github.com/openotters/runtime).
 
 ## Daemon gRPC API
 
 Proto definition: [`api/v1/daemon.proto`](api/v1/daemon.proto)
 
-| RPC                   | Description                                         |
-|-----------------------|-----------------------------------------------------|
-| `SaveAgentImage`      | Import a built OCI artifact into the local registry |
-| `PullAgentImage`      | Pull an image from a remote registry into local     |
-| `PushAgentImage`      | Push a local image to a remote registry             |
-| `ListImages`          | List images in the embedded registry                |
-| `RemoveImage`         | Remove an image                                     |
-| `DescribeImage`       | Inspect an image                                    |
-| `CreateAgent`         | Pull image, materialize workspace, start runtime    |
-| `ListAgents`          | List running/stopped agents                         |
-| `StopAgent`           | Stop an agent                                       |
-| `RemoveAgent`         | Remove an agent and its workspace                   |
-| `ChatWithAgent`       | Send a prompt to a running agent                    |
-| `ChatStreamWithAgent` | Streaming chat with tool call events                |
+| RPC                   | Description                                                       |
+|-----------------------|-------------------------------------------------------------------|
+| `GetInfo`             | Daemon info: socket, registry addr, data dirs, version, counts    |
+| `BuildAgent`          | Build an agent OCI image from an Agentfile on the daemon host     |
+| `BuildToolImage`      | Build a multi-arch bin-tool image from local binaries             |
+| `SaveAgentImage`      | Import an already-built OCI artifact into the local registry      |
+| `PullAgentImage`      | Pull an image from a remote registry into local                   |
+| `PushAgentImage`      | Push a local image to a remote registry                           |
+| `ListImages`          | List images in the embedded registry                              |
+| `RemoveImage`         | Remove an image                                                   |
+| `DescribeImage`       | Inspect an image (manifest, config, layers, labels)               |
+| `CreateAgent`         | Materialize workspace, start runtime subprocess                   |
+| `ListAgents`          | List running and stopped agents                                   |
+| `StartAgent`          | Re-start a previously stopped agent                               |
+| `StopAgent`           | Stop a running agent                                              |
+| `RemoveAgent`         | Remove an agent and its workspace                                 |
+| `ChatWithAgent`       | One-shot prompt; returns the final assistant response             |
+| `ChatStreamWithAgent` | Streaming chat — per-step events, tool calls, token deltas        |
+| `PromptObject`        | One-shot, stateless structured JSON output against a JSON Schema  |
+| `ListSessionMessages` | Return persisted messages for an agent/session                    |
+| `GetAgentLogs`        | Return the tail of the agent's runtime log file                   |
+| `ListModels`          | Enumerate models advertised by configured providers               |
 
 ## License
 

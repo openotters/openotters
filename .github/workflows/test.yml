@@ -1,0 +1,68 @@
+name: test
+
+# Runs `go test -race -cover` on every PR and push to main, then enforces
+# a coverage floor on the public-API package (pkg/*).
+#
+# Excluded from the floor:
+#   - api/v1     — protoc-generated stubs.
+#   - cmd/*      — binary entry points (each `package main`).
+#   - internal/* — implementation helpers, not part of the public API.
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    strategy:
+      matrix:
+        go: ['1.26']
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ matrix.go }}
+          cache: true
+
+      - name: Run tests with race detector + coverage
+        run: |
+          go test -race -covermode=atomic -coverprofile=coverage.out ./...
+
+      - name: Compute coverage on public-API packages
+        id: cov
+        run: |
+          awk 'NR==1 || !/api\/v1|cmd\/|\/internal/' \
+            coverage.out > coverage.core.out
+          total=$(go tool cover -func=coverage.core.out | awk '/^total:/ {print $3}' | tr -d %)
+          echo "public API coverage: ${total}%"
+          echo "public_api=${total}" >> "$GITHUB_OUTPUT"
+
+      - name: Enforce coverage threshold
+        env:
+          THRESHOLD: '75'
+          ACTUAL: ${{ steps.cov.outputs.public_api }}
+        run: |
+          awk -v a="$ACTUAL" -v t="$THRESHOLD" 'BEGIN {
+            if (a+0 < t+0) {
+              printf "public-API coverage %s%% is below the %s%% threshold\n", a, t
+              exit 1
+            }
+            printf "public-API coverage %s%% meets the %s%% threshold\n", a, t
+          }'
+
+      - name: Upload coverage artifact
+        if: matrix.os == 'ubuntu-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: |
+            coverage.out
+            coverage.core.out
+          retention-days: 7

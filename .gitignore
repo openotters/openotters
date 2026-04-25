@@ -5,7 +5,8 @@
 .task
 
 ### Install ###
-bin
+# Anchor to repo root so any future pkg/bin subpackage isn't ignored.
+/bin
 
 ### dotenv ###
 .env
@@ -359,3 +360,7 @@ $RECYCLE.BIN/
 # Windows shortcuts
 *.lnk
 
+
+### Local additions ###
+# Local dev provider config may hold API keys; load from ~/.otters/ instead.
+providers.yaml

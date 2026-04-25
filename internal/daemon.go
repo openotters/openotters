@@ -2,70 +2,546 @@ package internal
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"time"
 
-	"charm.land/fantasy"
-	"github.com/openotters/agentfile/executor"
-	"github.com/openotters/agentfile/export"
-	afoci "github.com/openotters/agentfile/oci"
-	"github.com/openotters/agentfile/spec"
-	afstore "github.com/openotters/agentfile/store"
-	daemonv1 "github.com/openotters/cli/api/v1"
-	"github.com/openotters/runtime/pkg/agent"
-	"github.com/openotters/runtime/pkg/memory"
-	"github.com/openotters/runtime/pkg/tool"
+	"github.com/go-git/go-billy/v6/osfs"
+	"github.com/google/uuid"
 	"go.uber.org/zap"
-	"gopkg.in/yaml.v3"
-	_ "modernc.org/sqlite" // sqlite driver
 	"oras.land/oras-go/v2"
 	orasmem "oras.land/oras-go/v2/content/memory"
+
+	agentpkg "github.com/openotters/agentfile/agent"
+	"github.com/openotters/agentfile/agent/system"
+	agentbuild "github.com/openotters/agentfile/build"
+	"github.com/openotters/agentfile/export"
+	agentoci "github.com/openotters/agentfile/oci"
+	"github.com/openotters/agentfile/spec"
+	afstore "github.com/openotters/agentfile/store"
+	"github.com/openotters/bin/pkg/bin"
+	daemonv1 "github.com/openotters/openotters/api/v1"
 )
 
 const (
-	statusStopped = "stopped"
-	statusPending = "pending"
-	statusRunning = "running"
-	defaultTag    = "latest"
+	statusCreated   = "created"
+	statusStopped   = "stopped"
+	statusPending   = "pending"
+	statusRunning   = "running"
+	statusInitError = "init_error"
+	defaultTag      = "latest"
 )
 
-type runningAgent struct {
-	id        string
+type managedAgent struct {
+	id        uuid.UUID
 	name      string
 	agentName string
 	model     string
-	root      string
 	tag       string
 	status    string
 	createdAt time.Time
-	svc       *agent.Service
-	lm        fantasy.LanguageModel
-	cancel    context.CancelFunc
-	af        *spec.Agentfile
+	mounts    []system.Mount
+}
+
+// mountsFromPersisted translates the SQLite JSON form back into the
+// system.Mount struct the provider consumes. Inverse of the
+// conversion inside CreateAgent.
+func mountsFromPersisted(pms []persistedMount) []system.Mount {
+	if len(pms) == 0 {
+		return nil
+	}
+
+	out := make([]system.Mount, 0, len(pms))
+	for _, pm := range pms {
+		out = append(out, system.Mount{
+			Host:        pm.Host,
+			Target:      pm.Target,
+			Description: pm.Description,
+		})
+	}
+
+	return out
+}
+
+// mountsToPersisted is the write-side counterpart used when
+// persisting a freshly-created agent's mounts to the state store.
+func mountsToPersisted(ms []system.Mount) []persistedMount {
+	if len(ms) == 0 {
+		return nil
+	}
+
+	out := make([]persistedMount, 0, len(ms))
+	for _, m := range ms {
+		out = append(out, persistedMount{
+			Host:        m.Host,
+			Target:      m.Target,
+			Description: m.Description,
+		})
+	}
+
+	return out
+}
+
+// reservedMountPrefixes are chroot paths the agent's own tooling
+// owns. Refusing mounts against them prevents a user from shadowing
+// the runtime binary, the staged context/data layers, or the log
+// directory — all of which would break materialization or hide
+// security-relevant state from the agent.
+//
+//nolint:gochecknoglobals // immutable allow-list, used as a constant
+var reservedMountPrefixes = []string{
+	"/etc/context",
+	"/etc/data",
+	"/usr/bin",
+	"/usr/local/bin",
+	"/var",
+}
+
+// validateMounts translates an incoming slice of daemonv1.Mount into
+// the internal system.Mount form, rejecting anything that would leave
+// the daemon in a bad state: relative/empty paths, missing host
+// files, reserved target prefixes, duplicate targets. The client is
+// expected to have resolved `~`/`$PWD`/relative host paths already.
+func validateMounts(in []*daemonv1.Mount) ([]system.Mount, error) {
+	if len(in) == 0 {
+		return nil, nil
+	}
+
+	out := make([]system.Mount, 0, len(in))
+	seen := make(map[string]struct{}, len(in))
+
+	for _, m := range in {
+		host := m.GetHost()
+		if !filepath.IsAbs(host) {
+			return nil, fmt.Errorf("mount host path must be absolute: %q", host)
+		}
+
+		if _, err := os.Stat(host); err != nil {
+			return nil, fmt.Errorf("mount host %s: %w", host, err)
+		}
+
+		target := filepath.Clean(m.GetTarget())
+		if target == "." || target == "/" || !strings.HasPrefix(target, "/") {
+			return nil, fmt.Errorf("mount target must be an absolute chroot path: %q", m.GetTarget())
+		}
+
+		if strings.Contains(target, "/..") {
+			return nil, fmt.Errorf("mount target %q cannot traverse (..)", m.GetTarget())
+		}
+
+		for _, reserved := range reservedMountPrefixes {
+			if target == reserved || strings.HasPrefix(target, reserved+"/") {
+				return nil, fmt.Errorf("mount target %q collides with reserved prefix %s", target, reserved)
+			}
+		}
+
+		if _, dup := seen[target]; dup {
+			return nil, fmt.Errorf("duplicate mount target %q", target)
+		}
+
+		seen[target] = struct{}{}
+
+		out = append(out, system.Mount{
+			Host:        host,
+			Target:      target,
+			Description: m.GetDescription(),
+		})
+	}
+
+	return out, nil
+}
+
+// mountsToProto converts system.Mount slices to the protobuf form
+// returned by ListAgents so the CLI `otters agent inspect` / `ps -v`
+// can surface them.
+func mountsToProto(ms []system.Mount) []*daemonv1.Mount {
+	if len(ms) == 0 {
+		return nil
+	}
+
+	out := make([]*daemonv1.Mount, 0, len(ms))
+	for _, m := range ms {
+		out = append(out, &daemonv1.Mount{
+			Host:        m.Host,
+			Target:      m.Target,
+			Description: m.Description,
+		})
+	}
+
+	return out
 }
 
 type Daemon struct {
-	agents    map[string]*runningAgent
-	mu        sync.RWMutex
+	pool      *Pool
 	providers *ProviderRegistry
 	registry  *EmbeddedRegistry
 	state     *StateStore
 	logger    *zap.Logger
+	logDir    string
+	agentsDir string
+	dataDir   string
+	runtime   string
+	socket    string
+	version   string
+	commit    string
+	buildDate string
+	catwalk   *catwalkCatalogue
+
+	agents map[string]*managedAgent
 }
 
-func NewDaemon(providers *ProviderRegistry, reg *EmbeddedRegistry, state *StateStore, logger *zap.Logger) *Daemon {
+// DaemonOption configures the Daemon at construction time.
+type DaemonOption func(*daemonConfig)
+
+type daemonConfig struct {
+	localRuntime string
+	socket       string
+	version      string
+	commit       string
+	buildDate    string
+}
+
+// WithLocalRuntime overrides the runtime binary with a local filesystem
+// path — bypasses the OCI pull of ghcr.io/openotters/runtime:latest.
+// Useful during development when the published image lags local changes.
+func WithLocalRuntime(path string) DaemonOption {
+	return func(c *daemonConfig) { c.localRuntime = path }
+}
+
+// WithSocket records the unix socket the daemon is served on. Purely
+// informational — used by `otters info` to report the listen path.
+func WithSocket(path string) DaemonOption {
+	return func(c *daemonConfig) { c.socket = path }
+}
+
+// WithBuildInfo stamps the daemon's build coordinates so `otters info`
+// can surface the running version/commit/date. Populated from ldflags
+// in cmd/ottersd/main.go.
+func WithBuildInfo(version, commit, date string) DaemonOption {
+	return func(c *daemonConfig) {
+		c.version = version
+		c.commit = commit
+		c.buildDate = date
+	}
+}
+
+func NewDaemon(
+	providers *ProviderRegistry, reg *EmbeddedRegistry, state *StateStore,
+	logger *zap.Logger, opts ...DaemonOption,
+) *Daemon {
+	cfg := daemonConfig{}
+	for _, o := range opts {
+		o(&cfg)
+	}
+
+	home, _ := os.UserHomeDir()
+	dataDir := filepath.Join(home, ".otters")
+	agentsDir := filepath.Join(dataDir, "agents")
+	logDir := filepath.Join(dataDir, "logs")
+
+	_ = os.MkdirAll(agentsDir, 0o755)
+	_ = os.MkdirAll(logDir, 0o755)
+
+	root := osfs.New(agentsDir)
+
+	providerOpts := []system.ProviderOption{
+		system.WithLogDir(logDir),
+	}
+
+	if cfg.localRuntime != "" {
+		providerOpts = append(providerOpts, system.WithLocalRuntime(cfg.localRuntime))
+	}
+
+	if reg != nil {
+		providerOpts = append(providerOpts, system.WithPuller(newCachingBinPuller(reg.Addr())))
+	}
+
+	// Each agent gets a target bound to its own ref, resolving against the
+	// embedded registry directly — no in-memory staging. On construction
+	// failure we hand back a stub that returns the underlying error on
+	// every call so the agent surfaces it cleanly instead of nil-derefing
+	// in afstore.Load.
+	storeFor := func(ref spec.Reference) oras.ReadOnlyTarget {
+		t, err := newRegistryTarget(ref)
+		if err != nil {
+			logger.Error("registry target", zap.String("ref", ref.String()), zap.Error(err))
+
+			return erroringTarget{err: err}
+		}
+
+		return t
+	}
+
+	provider := system.NewProvider(root, storeFor, providerOpts...)
+
+	daemonLogger := logger.Named("daemon")
+
 	return &Daemon{
-		agents:    make(map[string]*runningAgent),
+		pool:      NewPool(provider, WithMaxConcurrent(10), WithLogger(daemonLogger.Named("pool"))),
 		providers: providers,
 		registry:  reg,
 		state:     state,
-		logger:    logger.Named("daemon"),
+		logger:    daemonLogger,
+		logDir:    logDir,
+		agentsDir: agentsDir,
+		dataDir:   dataDir,
+		runtime:   cfg.localRuntime,
+		socket:    cfg.socket,
+		version:   cfg.version,
+		commit:    cfg.commit,
+		buildDate: cfg.buildDate,
+		catwalk:   newCatwalkCatalogue(),
+		agents:    make(map[string]*managedAgent),
 	}
+}
+
+// Info returns a snapshot of the daemon's runtime coordinates for
+// display by `otters info`. Cheap — everything is in-memory.
+func (d *Daemon) Info() DaemonInfo {
+	running := 0
+
+	for _, ma := range d.agents {
+		if a, ok := d.pool.Get(ma.id); ok && a.Status().String() == statusRunning {
+			running++
+		}
+	}
+
+	registryAddr := ""
+	if d.registry != nil {
+		registryAddr = d.registry.Addr()
+	}
+
+	providerCount := 0
+	if d.providers != nil {
+		providerCount = d.providers.Count()
+	}
+
+	return DaemonInfo{
+		RegistryAddr:  registryAddr,
+		SocketPath:    d.socket,
+		LogDir:        d.logDir,
+		AgentsDir:     d.agentsDir,
+		DataDir:       d.dataDir,
+		RuntimePath:   d.runtime,
+		Version:       d.version,
+		Commit:        d.commit,
+		BuildDate:     d.buildDate,
+		AgentsRunning: running,
+		AgentsTotal:   len(d.agents),
+		Providers:     providerCount,
+	}
+}
+
+// DaemonInfo is a plain-data snapshot of the daemon's current
+// configuration. Mirrored one-for-one into daemonv1.GetInfoResponse by
+// the gRPC handler; kept as its own type so non-gRPC callers (tests,
+// future local APIs) don't need to import the generated package.
+type DaemonInfo struct {
+	RegistryAddr  string
+	SocketPath    string
+	LogDir        string
+	AgentsDir     string
+	DataDir       string
+	RuntimePath   string
+	Version       string
+	Commit        string
+	BuildDate     string
+	AgentsRunning int
+	AgentsTotal   int
+	Providers     int
+}
+
+// ModelInfo is one row of the daemon's provider catalogue — the
+// shape returned by Daemon.Models and wired to daemonv1.Model by the
+// gRPC handler. Ref is the Agentfile-compatible "<provider>/<name>"
+// form so the CLI can present a paste-ready value alongside the
+// structured columns. Enriched fields come from Catwalk (Charm's
+// curated metadata DB) when the provider is recognised there;
+// otherwise they stay zero.
+type ModelInfo struct {
+	Provider         string
+	Name             string
+	Ref              string
+	DisplayName      string
+	APIBase          string
+	ContextWindow    int64
+	DefaultMaxTokens int64
+	CostInputPer1M   float64
+	CostOutputPer1M  float64
+	CanReason        bool
+}
+
+// Models returns every model reachable through the daemon's
+// configured providers. Precedence:
+//  1. Explicit `models:` list in providers.yaml — authoritative.
+//  2. Catwalk (Charm's community-curated model DB) matched by
+//     provider name — gives rich metadata (cost, context, reasoning).
+//  3. A synthetic "<provider>/*" placeholder — fallback when Catwalk
+//     doesn't know the provider (self-hosted, private, etc.).
+func (d *Daemon) Models(ctx context.Context) []ModelInfo {
+	if d.providers == nil {
+		return nil
+	}
+
+	var out []ModelInfo
+
+	d.providers.Each(func(p *ProviderConfig) {
+		// Explicit config wins — authoritative and cheap.
+		if len(p.Models) > 0 {
+			for _, m := range p.Models {
+				out = append(out, ModelInfo{
+					Provider: p.Name,
+					Name:     m,
+					Ref:      p.Name + "/" + m,
+					APIBase:  p.APIBase,
+				})
+			}
+
+			return
+		}
+
+		// Ask Catwalk for the provider's model catalogue.
+		models, err := d.catwalk.modelsFor(ctx, p.Name)
+		if err != nil {
+			d.logger.Warn("catwalk fetch failed",
+				zap.String("provider", p.Name),
+				zap.Error(err),
+			)
+		}
+
+		if len(models) == 0 {
+			out = append(out, ModelInfo{
+				Provider: p.Name,
+				Name:     "*",
+				Ref:      p.Name + "/*",
+				APIBase:  p.APIBase,
+			})
+
+			return
+		}
+
+		for _, m := range models {
+			out = append(out, ModelInfo{
+				Provider:         p.Name,
+				Name:             m.ID,
+				Ref:              p.Name + "/" + m.ID,
+				DisplayName:      m.Name,
+				APIBase:          p.APIBase,
+				ContextWindow:    m.ContextWindow,
+				DefaultMaxTokens: m.DefaultMaxTokens,
+				CostInputPer1M:   m.CostPer1MIn,
+				CostOutputPer1M:  m.CostPer1MOut,
+				CanReason:        m.CanReason,
+			})
+		}
+	})
+
+	return out
+}
+
+// AgentLogs returns the tail of the runtime log file for the agent
+// identified by ref. If tailLines > 0, return only the last N lines
+// (wins over tailBytes). Otherwise if tailBytes > 0, return only the
+// last N bytes. With both zero, the full file is returned.
+func (d *Daemon) AgentLogs(ref string, tailBytes, tailLines int64) ([]byte, string, error) {
+	ma, err := d.resolve(ref)
+	if err != nil {
+		return nil, "", err
+	}
+
+	path := filepath.Join(d.logDir, ma.id.String()+".log")
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, path, nil
+		}
+
+		return nil, path, err
+	}
+
+	switch {
+	case tailLines > 0:
+		return tailByLines(data, tailLines), path, nil
+	case tailBytes > 0 && int64(len(data)) > tailBytes:
+		return data[int64(len(data))-tailBytes:], path, nil
+	default:
+		return data, path, nil
+	}
+}
+
+// tailByLines returns the last n complete lines of data. A trailing
+// newline is preserved. If data has fewer than n lines, the whole
+// buffer comes back untouched.
+func tailByLines(data []byte, n int64) []byte {
+	if n <= 0 || len(data) == 0 {
+		return data
+	}
+
+	// Ignore a trailing newline so "hello\n" counts as one line, not two.
+	end := len(data)
+	if data[end-1] == '\n' {
+		end--
+	}
+
+	count := int64(0)
+
+	for i := end - 1; i >= 0; i-- {
+		if data[i] != '\n' {
+			continue
+		}
+
+		count++
+		if count == n {
+			return data[i+1:]
+		}
+	}
+
+	return data
+}
+
+// Run initializes the pool synchronously (so rootCtx is live before
+// any Add / Restore lands) and then spawns the lifecycle goroutine
+// that blocks until ctx is cancelled. Returns an error if Init fails
+// (double-start); the wait goroutine logs its own errors.
+func (d *Daemon) Run(ctx context.Context) error {
+	if err := d.pool.Init(ctx); err != nil {
+		return fmt.Errorf("starting pool: %w", err)
+	}
+
+	go func() {
+		if err := d.pool.Wait(); err != nil {
+			d.logger.Error("pool error", zap.Error(err))
+		}
+	}()
+
+	return nil
+}
+
+// Start re-runs a previously-stopped agent. Non-blocking: the pool spawns
+// a goroutine to handle the actual restart. Status transitions are visible
+// via List once the runtime subprocess is back up.
+func (d *Daemon) Start(ctx context.Context, ref string) error {
+	ma, err := d.resolve(ref)
+	if err != nil {
+		return err
+	}
+
+	if startErr := d.pool.Start(ma.id); startErr != nil {
+		return startErr
+	}
+
+	ma.status = statusRunning
+
+	if updateErr := d.state.UpdateStatus(ctx, ma.id.String(), statusRunning); updateErr != nil {
+		d.logger.Warn("failed to persist start", zap.Error(updateErr))
+	}
+
+	d.logger.Info("agent started", zap.String("id", ma.id.String()), zap.String("name", ma.name))
+
+	return nil
 }
 
 func (d *Daemon) RegistryAddr() string {
@@ -77,7 +553,7 @@ func (d *Daemon) RegistryAddr() string {
 }
 
 func (d *Daemon) Restore(ctx context.Context) error {
-	persisted, err := d.state.ListAgents()
+	persisted, err := d.state.ListAgents(ctx)
 	if err != nil {
 		return fmt.Errorf("loading state: %w", err)
 	}
@@ -86,88 +562,246 @@ func (d *Daemon) Restore(ctx context.Context) error {
 		return nil
 	}
 
-	var running, pending, stopped int
+	var restored int
 
 	for _, pa := range persisted {
-		root := d.agentRoot(pa.Name)
-
-		if _, statErr := os.Stat(root); os.IsNotExist(statErr) {
-			d.logger.Warn("workspace missing, skipping agent",
-				zap.String("name", pa.Name), zap.String("root", root))
+		id, parseErr := uuid.Parse(pa.ID)
+		if parseErr != nil {
+			d.logger.Warn("invalid agent ID, skipping", zap.String("id", pa.ID))
 
 			continue
 		}
 
-		fullRef := d.registry.Addr() + "/" + pa.Tag
+		ref := d.resolveStoredTag(pa.Tag)
 
-		_, af, pullErr := d.pullImage(ctx, fullRef)
-		if pullErr != nil {
-			d.logger.Warn("failed to pull agentfile, skipping agent",
-				zap.String("name", pa.Name), zap.String("tag", pa.Tag), zap.Error(pullErr))
-
-			continue
+		var overrides []spec.Override
+		if pa.Model != "" {
+			overrides = append(overrides, spec.WithModel(pa.Model))
 		}
 
-		if af.Agent == nil {
-			d.logger.Warn("no agent in image, skipping", zap.String("tag", pa.Tag))
+		mounts := mountsFromPersisted(pa.Mounts)
 
-			continue
+		d.agents[pa.ID] = &managedAgent{
+			id:        id,
+			name:      pa.Name,
+			agentName: pa.AgentName,
+			model:     pa.Model,
+			tag:       pa.Tag,
+			status:    pa.Status,
+			createdAt: pa.CreatedAt,
+			mounts:    mounts,
 		}
 
-		ra := &runningAgent{
-			id: pa.ID, name: pa.Name, agentName: pa.AgentName,
-			model: pa.Model, root: root, tag: pa.Tag,
-			createdAt: pa.CreatedAt, af: af,
+		agentOpts := []system.AgentOption{
+			system.WithModelResolver(d.providers.Resolve),
 		}
 
-		switch {
-		case pa.Status == statusStopped:
-			ra.status = statusStopped
-			stopped++
-		case d.providers.ModelAvailable(pa.Model):
-			svc, lm, cancel, startErr := d.startAgent(ctx, root)
-			if startErr != nil {
-				d.logger.Warn("failed to start agent, marking pending",
-					zap.String("name", pa.Name), zap.Error(startErr))
-
-				ra.status = statusPending
-				pending++
-			} else {
-				ra.svc = svc
-				ra.lm = lm
-				ra.cancel = cancel
-				ra.status = statusRunning
-				running++
-			}
-		default:
-			ra.status = statusPending
-			pending++
+		if len(mounts) > 0 {
+			agentOpts = append(agentOpts, system.WithMounts(mounts))
 		}
 
-		d.mu.Lock()
-		d.agents[pa.ID] = ra
-		d.mu.Unlock()
+		if pa.Status != statusStopped {
+			d.pool.Add(id, ref, agentOpts, overrides...)
+
+			d.agents[pa.ID].status = statusRunning
+			restored++
+
+			d.logger.Info("agent restored",
+				zap.String("id", pa.ID),
+				zap.String("name", pa.Name),
+				zap.String("image", pa.Tag),
+				zap.String("model", pa.Model),
+			)
+		} else {
+			d.logger.Info("agent restored (stopped)",
+				zap.String("id", pa.ID),
+				zap.String("name", pa.Name),
+				zap.String("image", pa.Tag),
+			)
+		}
 	}
 
-	d.logger.Info("agents restored",
-		zap.Int("running", running),
-		zap.Int("pending", pending),
-		zap.Int("stopped", stopped),
-	)
+	d.logger.Info("agents restored", zap.Int("count", restored), zap.Int("total", len(persisted)))
 
 	return nil
 }
 
-func (d *Daemon) agentRoot(name string) string {
-	home, _ := os.UserHomeDir()
+// resolveStoredTag turns a persisted tag (the path-only form, e.g.
+// "reader:latest" or "ghcr.io/foo/agent:v1") into the live local ref
+// by prepending the current embedded registry address. It also defends
+// against legacy rows that stored the addr-prefixed form (including
+// port-drifted doubles like "127.0.0.1:OLDPORT/reader:latest"): any
+// leading "127.0.0.1:<port>/" segments are stripped first.
+func (d *Daemon) resolveStoredTag(tag string) spec.Reference {
+	tag = stripLoopbackPrefixes(tag)
 
-	return filepath.Join(home, ".openotters", "agents", name)
+	return d.localRef(tag)
+}
+
+// stripLoopbackPrefixes removes every leading "127.0.0.1:<port>/"
+// component from a stored image tag. Agents persisted under previous
+// daemon runs may carry one — or several, if restore re-prefixed — so
+// loop until the tag no longer starts with a loopback host:port path.
+func stripLoopbackPrefixes(tag string) string {
+	const loopback = "127.0.0.1:"
+
+	for strings.HasPrefix(tag, loopback) {
+		slash := strings.Index(tag, "/")
+		if slash < 0 {
+			return tag
+		}
+
+		tag = tag[slash+1:]
+	}
+
+	return tag
+}
+
+// Build parses the Agentfile at req.AgentfilePath on the daemon host,
+// runs the resolve → build → push pipeline into the embedded registry,
+// and returns the resulting digest + tags. This moves all heavy build
+// logic server-side; the CLI just ships the path.
+func (d *Daemon) Build(
+	ctx context.Context, req *daemonv1.BuildAgentRequest,
+) (*daemonv1.BuildAgentResponse, error) {
+	path := strings.TrimSpace(req.GetAgentfilePath())
+	if path == "" {
+		return nil, fmt.Errorf("agentfile_path is required")
+	}
+
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		return nil, fmt.Errorf("resolving agentfile path: %w", err)
+	}
+
+	if _, err = os.Stat(abs); err != nil {
+		return nil, fmt.Errorf("agentfile %s: %w", abs, err)
+	}
+
+	store := orasmem.New()
+
+	built, err := agentbuild.FromFile(ctx, abs, store)
+	if err != nil {
+		return nil, fmt.Errorf("building %s: %w", abs, err)
+	}
+
+	tags := req.GetTags()
+	if len(tags) == 0 {
+		name := built.Reference.Name
+		if name == "" {
+			name = "agent"
+		}
+
+		tags = []string{name + ":" + spec.DefaultTag}
+	}
+
+	srcRef := built.Digest.String()
+
+	pushed := make([]string, 0, len(tags))
+	for _, tag := range tags {
+		ref := d.localRef(tag)
+		if _, pushErr := d.pushImage(ctx, store, srcRef, ref); pushErr != nil {
+			return nil, fmt.Errorf("pushing %s: %w", tag, pushErr)
+		}
+
+		pushed = append(pushed, tag)
+	}
+
+	d.logger.Info("agent built",
+		zap.String("path", abs),
+		zap.String("digest", built.Digest.String()),
+		zap.Strings("tags", pushed),
+	)
+
+	return &daemonv1.BuildAgentResponse{
+		Digest: built.Digest.String(),
+		Tags:   pushed,
+		Ref:    built.Reference.String(),
+	}, nil
+}
+
+// BuildTool builds a multi-arch tool OCI image from the per-platform
+// binaries on the daemon host, then pushes it to the embedded registry
+// under the requested tags. Mirrors `Build` (agent) but uses
+// bintool/pkg/bin's BuildIndex for multi-arch packing.
+func (d *Daemon) BuildTool(
+	ctx context.Context, req *daemonv1.BuildToolImageRequest,
+) (*daemonv1.BuildToolImageResponse, error) {
+	name := strings.TrimSpace(req.GetName())
+	if name == "" {
+		return nil, fmt.Errorf("name is required")
+	}
+
+	if len(req.GetPlatforms()) == 0 {
+		return nil, fmt.Errorf("at least one platform is required")
+	}
+
+	platforms := make([]bin.PlatformBuild, 0, len(req.GetPlatforms()))
+
+	for _, p := range req.GetPlatforms() {
+		abs, absErr := filepath.Abs(p.GetBinPath())
+		if absErr != nil {
+			return nil, fmt.Errorf("resolving %s: %w", p.GetBinPath(), absErr)
+		}
+
+		if _, statErr := os.Stat(abs); statErr != nil {
+			return nil, fmt.Errorf("binary %s: %w", abs, statErr)
+		}
+
+		platforms = append(platforms, bin.PlatformBuild{
+			OS:      p.GetOs(),
+			Arch:    p.GetArch(),
+			BinPath: filepath.Base(abs),
+			Src:     osfs.New(filepath.Dir(abs)),
+		})
+	}
+
+	store := orasmem.New()
+
+	dig, err := bin.BuildIndex(ctx, bin.BuildOptions{
+		Name:        name,
+		BinPath:     platforms[0].BinPath,
+		Description: req.GetDescription(),
+		Usage:       req.GetUsage(),
+	}, platforms, store)
+	if err != nil {
+		return nil, fmt.Errorf("building: %w", err)
+	}
+
+	tags := req.GetTags()
+	if len(tags) == 0 {
+		tags = []string{name + ":" + spec.DefaultTag}
+	}
+
+	// bin.BuildIndex tags the index as "latest" in the store.
+	pushed := make([]string, 0, len(tags))
+	for _, tag := range tags {
+		ref := d.localRef(tag)
+		if _, pushErr := d.pushImage(ctx, store, "latest", ref); pushErr != nil {
+			return nil, fmt.Errorf("pushing %s: %w", tag, pushErr)
+		}
+
+		pushed = append(pushed, tag)
+	}
+
+	d.logger.Info("tool built",
+		zap.String("name", name),
+		zap.String("digest", dig.String()),
+		zap.Int("platforms", len(platforms)),
+		zap.Strings("tags", pushed),
+	)
+
+	return &daemonv1.BuildToolImageResponse{
+		Digest: dig.String(),
+		Tags:   pushed,
+		Ref:    name + ":" + spec.DefaultTag,
+	}, nil
 }
 
 func (d *Daemon) Save(
 	ctx context.Context, req *daemonv1.SaveAgentImageRequest,
 ) (*daemonv1.SaveAgentImageResponse, error) {
-	store, digest, err := export.Import(req.GetOciArtifact())
+	store, digest, err := importArtifact(ctx, req.GetOciArtifact())
 	if err != nil {
 		return nil, fmt.Errorf("importing artifact: %w", err)
 	}
@@ -175,125 +809,137 @@ func (d *Daemon) Save(
 	tags := req.GetTags()
 
 	for _, tag := range tags {
-		ref := d.registry.Addr() + "/" + tag
+		ref := d.localRef(tag)
 
-		if _, pushErr := d.pushImage(ctx, store, ref); pushErr != nil {
+		if _, pushErr := d.pushImage(ctx, store, digest, ref); pushErr != nil {
 			return nil, fmt.Errorf("saving %s to local registry: %w", tag, pushErr)
 		}
 	}
 
-	d.logger.Info("image saved",
-		zap.String("digest", digest),
-		zap.Strings("tags", tags),
-	)
+	d.logger.Info("image saved", zap.String("digest", digest), zap.Strings("tags", tags))
 
-	return &daemonv1.SaveAgentImageResponse{
-		Digest: digest,
-		Tags:   tags,
-	}, nil
+	return &daemonv1.SaveAgentImageResponse{Digest: digest, Tags: tags}, nil
 }
 
 func (d *Daemon) Pull(
 	ctx context.Context, req *daemonv1.PullRequest,
 ) (*daemonv1.PullResponse, error) {
-	ref := req.GetRef()
+	ref := spec.ParseReference(req.GetRef())
 
-	store, af, err := d.pullImage(ctx, ref)
+	if d.registry != nil && strings.HasPrefix(ref.Name, d.registry.Addr()) {
+		return nil, fmt.Errorf("cannot pull a local reference %s", ref)
+	}
+
+	store, err := d.pullImage(ctx, ref)
 	if err != nil {
 		return nil, fmt.Errorf("pulling %s: %w", ref, err)
 	}
 
+	// Local ref preserves the remote path verbatim under the embedded
+	// registry. Additional `tags` on the request are treated as full
+	// paths to mirror under as well (same shape as the remote ref).
+	tag := ref.Tag
+	if tag == "" {
+		tag = defaultTag
+	}
+
 	tags := req.GetTags()
 	if len(tags) == 0 {
-		name := "agent"
-		if af.Agent != nil && af.Agent.Name != "" {
-			name = af.Agent.Name
-		}
-
-		tag := afoci.ParseTag(ref)
-		if tag == "" {
-			tag = defaultTag
-		}
-
-		tags = []string{name + ":" + tag}
+		tags = []string{ref.Name + ":" + tag}
 	}
 
 	var digest string
 
-	for _, tag := range tags {
-		localRef := d.registry.Addr() + "/" + tag
+	for _, t := range tags {
+		parsed := spec.ParseReference(t)
 
-		dig, pushErr := d.pushImage(ctx, store, localRef)
+		localRef := spec.Reference{
+			Name: d.registry.Addr() + "/" + parsed.Name,
+			Tag:  parsed.Tag,
+		}
+
+		dig, pushErr := d.pushImage(ctx, store, ref.String(), localRef)
 		if pushErr != nil {
-			return nil, fmt.Errorf("saving %s to local registry: %w", tag, pushErr)
+			return nil, fmt.Errorf("saving %s to local registry: %w", t, pushErr)
 		}
 
 		digest = dig
 	}
 
-	d.logger.Info("image pulled",
-		zap.String("ref", ref),
-		zap.Strings("tags", tags),
-	)
+	d.logger.Info("image pulled", zap.String("ref", req.GetRef()), zap.Strings("tags", tags))
 
-	return &daemonv1.PullResponse{
-		Digest: digest,
-		Tags:   tags,
-	}, nil
+	return &daemonv1.PullResponse{Digest: digest, Tags: tags}, nil
 }
 
 func (d *Daemon) Push(
 	ctx context.Context, req *daemonv1.PushRequest,
 ) (*daemonv1.PushResponse, error) {
-	ref := req.GetRef()
+	ref := spec.ParseReference(req.GetRef())
 
-	parts := strings.SplitN(ref, "/", 2)
-	localTag := parts[len(parts)-1]
-	localRef := d.registry.Addr() + "/" + localTag
+	// Local and remote refs share the same repo path + tag. The local copy
+	// lives at <embeddedAddr>/<Name>:<Tag>; pushing copies it verbatim to
+	// <Name>:<Tag> on the remote registry. If the user built under a bare
+	// name that has no registry component (e.g. `jina:latest`), that image
+	// simply isn't pushable — no inference.
+	localRef := spec.Reference{
+		Name: d.registry.Addr() + "/" + ref.Name,
+		Tag:  ref.Tag,
+	}
 
-	d.logger.Info("pulling from local registry", zap.String("local", localRef))
+	d.logger.Info("pulling from local registry", zap.String("local", localRef.String()))
 
-	store, _, err := d.pullImage(ctx, localRef)
+	store, err := d.pullImage(ctx, localRef)
 	if err != nil {
 		return nil, fmt.Errorf("pulling from local registry: %w", err)
 	}
 
-	d.logger.Info("pushing to remote", zap.String("ref", ref))
+	d.logger.Info("pushing to remote", zap.String("ref", ref.String()))
 
-	digest, err := d.pushImage(ctx, store, ref)
+	digest, err := d.pushImage(ctx, store, localRef.String(), ref)
 	if err != nil {
 		return nil, fmt.Errorf("pushing to %s: %w", ref, err)
 	}
 
-	return &daemonv1.PushResponse{
-		Digest: digest,
-		Ref:    ref,
-	}, nil
+	return &daemonv1.PushResponse{Digest: digest, Ref: req.GetRef()}, nil
 }
 
-func (d *Daemon) Create(
-	ctx context.Context, req *daemonv1.CreateAgentRequest,
+//nolint:funlen // sequential agent-creation flow reads more clearly straight-through
+func (d *Daemon) CreateAgent(
+	ctx context.Context,
+	req *daemonv1.CreateAgentRequest,
 ) (*daemonv1.CreateAgentResponse, error) {
-	ref := req.GetRef()
+	refStr := req.GetRef()
 
-	if !strings.Contains(ref, "/") {
-		ref = d.registry.Addr() + "/" + ref
+	if !strings.Contains(refStr, "/") {
+		refStr = d.registry.Addr() + "/" + refStr
 	}
 
-	store, af, err := d.pullImage(ctx, ref)
+	ref := spec.ParseReference(refStr)
+
+	// Load metadata straight from the embedded registry — no staging.
+	target, err := newRegistryTarget(ref)
 	if err != nil {
-		return nil, fmt.Errorf("pulling agent image %s: %w", req.GetRef(), err)
+		return nil, fmt.Errorf("opening %s: %w", ref, err)
+	}
+
+	_, af, loadErr := afstore.Load(ctx, target, ref)
+	if loadErr != nil {
+		return nil, fmt.Errorf("loading agentfile from %s: %w", req.GetRef(), loadErr)
 	}
 
 	if af.Agent == nil {
 		return nil, fmt.Errorf("no agent defined in image %s", req.GetRef())
 	}
 
-	id := generateID()
+	id := uuid.New()
 
 	name := req.GetName()
 	if name == "" {
 		name = generateName()
+	}
+
+	if d.nameExists(name) {
+		return nil, fmt.Errorf("agent with name %q already exists", name)
 	}
 
 	agentName := af.Agent.Name
@@ -301,384 +947,338 @@ func (d *Daemon) Create(
 		agentName = name
 	}
 
-	root := d.agentRoot(name)
+	var overrides []spec.Override
 
-	e := executor.NewFileExecutor(root)
-	e.BinPuller = afoci.RemotePuller()
-
-	if _, execErr := e.Execute(ctx, store, defaultTag); execErr != nil {
-		return nil, fmt.Errorf("setting up workspace: %w", execErr)
+	if req.GetModel() != "" && req.GetModel() != af.Agent.Model {
+		overrides = append(overrides, spec.WithModel(req.GetModel()))
 	}
 
-	ra := &runningAgent{
-		id: id, name: name, agentName: agentName,
-		model: af.Agent.Model, root: root, tag: extractTag(ref),
-		createdAt: time.Now(), af: af,
+	if req.GetRuntime() != "" && req.GetRuntime() != af.Agent.Runtime {
+		overrides = append(overrides, spec.WithRuntime(req.GetRuntime()))
 	}
 
-	if d.providers.ModelAvailable(af.Agent.Model) {
-		svc, lm, cancel, startErr := d.startAgent(ctx, root)
-		if startErr != nil {
-			return nil, startErr
-		}
-
-		ra.svc = svc
-		ra.lm = lm
-		ra.cancel = cancel
-		ra.status = statusRunning
-	} else {
-		ra.status = statusPending
-		d.logger.Warn("model not available, agent pending",
-			zap.String("model", af.Agent.Model),
-			zap.String("name", name),
-		)
+	mounts, err := validateMounts(req.GetMounts())
+	if err != nil {
+		return nil, err
 	}
 
-	d.mu.Lock()
-	d.agents[id] = ra
-	d.mu.Unlock()
+	agentOpts := []system.AgentOption{
+		system.WithModelResolver(d.providers.Resolve),
+	}
 
-	if saveErr := d.state.SaveAgent(persistedAgent{
-		ID: id, Name: name, AgentName: agentName,
-		Model: af.Agent.Model, Tag: ra.tag, Status: ra.status,
-		CreatedAt: ra.createdAt,
+	if len(mounts) > 0 {
+		agentOpts = append(agentOpts, system.WithMounts(mounts))
+	}
+
+	d.pool.Add(id, ref, agentOpts, overrides...)
+
+	ma := &managedAgent{
+		id:        id,
+		name:      name,
+		agentName: agentName,
+		model:     af.Agent.Model,
+		tag:       stripLoopbackPrefixes(ref.String()),
+		status:    statusCreated,
+		createdAt: time.Now(),
+		mounts:    mounts,
+	}
+
+	if req.GetModel() != "" {
+		ma.model = req.GetModel()
+	}
+
+	d.agents[id.String()] = ma
+
+	if saveErr := d.state.SaveAgent(ctx, persistedAgent{
+		ID:        id.String(),
+		Name:      name,
+		AgentName: agentName,
+		Model:     ma.model,
+		Runtime:   af.Agent.Runtime,
+		Tag:       ma.tag,
+		Status:    statusCreated,
+		CreatedAt: ma.createdAt,
+		Mounts:    mountsToPersisted(mounts),
 	}); saveErr != nil {
-		d.logger.Warn("failed to persist agent", zap.Error(err))
+		d.logger.Warn("failed to persist agent", zap.Error(saveErr))
 	}
 
 	d.logger.Info("agent created",
-		zap.String("id", id),
+		zap.String("id", id.String()),
 		zap.String("name", name),
 		zap.String("agent", agentName),
-		zap.String("model", af.Agent.Model),
-		zap.String("status", ra.status),
+		zap.String("model", ma.model),
+		zap.String("status", ma.status),
 	)
 
 	return &daemonv1.CreateAgentResponse{
-		Id: id, Name: name, Status: ra.status,
+		Id: id.String(), Name: name, Status: ma.status,
 	}, nil
 }
 
-type agentConfig struct {
-	Name    string            `yaml:"name"`
-	Model   string            `yaml:"model"`
-	Configs map[string]string `yaml:"configs,omitempty"`
-	Tools   []agentConfigTool `yaml:"tools,omitempty"`
-}
-
-type agentConfigTool struct {
-	Name        string `yaml:"name"`
-	Description string `yaml:"description,omitempty"`
-	Binary      string `yaml:"binary"`
-}
-
-func (d *Daemon) startAgent(
-	ctx context.Context, root string,
-) (*agent.Service, fantasy.LanguageModel, context.CancelFunc, error) {
-	cfg, err := d.loadAgentConfig(root)
-	if err != nil {
-		return nil, nil, nil, err
-	}
-
-	provider, modelName := parseModel(cfg.Model)
-	if provider == "" {
-		return nil, nil, nil, fmt.Errorf("invalid model format: expected 'provider/model'")
-	}
-
-	contextDir := filepath.Join(root, "etc", "context")
-
-	contextFiles, err := discoverContextFiles(contextDir)
-	if err != nil {
-		return nil, nil, nil, fmt.Errorf("discovering context files: %w", err)
-	}
-
-	systemPrompt, err := agent.BuildSystemPrompt(contextDir, contextFiles)
-	if err != nil {
-		return nil, nil, nil, fmt.Errorf("building system prompt: %w", err)
-	}
-
-	agentTools, err := d.loadTools(cfg.Tools, root)
-	if err != nil {
-		return nil, nil, nil, err
-	}
-
-	apiKey, apiBase, resolveErr := d.providers.Resolve(cfg.Model)
-	if resolveErr != nil {
-		return nil, nil, nil, resolveErr
-	}
-
-	agentCtx, cancel := context.WithCancel(ctx)
-
-	maxTokens := configInt(cfg.Configs, "max-tokens", 4096)
-	maxIterations := configInt(cfg.Configs, "max-iterations", 20)
-
-	fantasyAgent, lm, createErr := agent.CreateAgent(agentCtx, agent.Config{
-		Provider: provider, ModelName: modelName,
-		APIKey: apiKey, APIBase: apiBase,
-		MaxTokens: maxTokens, MaxIterations: maxIterations,
-	}, systemPrompt, agentTools, d.logger)
-	if createErr != nil {
-		cancel()
-
-		return nil, nil, nil, fmt.Errorf("creating agent: %w", createErr)
-	}
-
-	dbPath := filepath.Join(root, "var", "lib", "memory.db")
-
-	db, dbErr := sql.Open("sqlite", dbPath)
-	if dbErr != nil {
-		cancel()
-
-		return nil, nil, nil, fmt.Errorf("opening sqlite: %w", dbErr)
-	}
-
-	memStore, storeErr := memory.NewStore(db)
-	if storeErr != nil {
-		cancel()
-		db.Close()
-
-		return nil, nil, nil, fmt.Errorf("creating memory store: %w", storeErr)
-	}
-
-	memStrategy := configStr(cfg.Configs, "memory-strategy", "summarize")
-	memMaxMsgs := configInt(cfg.Configs, "memory-max-messages", 20)
-
-	compactor := memory.NewCompactor(memory.Config{
-		Strategy:    memStrategy,
-		MaxMessages: memMaxMsgs,
-	}, d.logger)
-
-	svc := agent.NewService(fantasyAgent, lm, memStore, compactor, d.logger)
-
-	return svc, lm, cancel, nil
-}
-
-func (d *Daemon) loadAgentConfig(root string) (*agentConfig, error) {
-	path := filepath.Join(root, "etc", "agent.yaml")
-
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return nil, fmt.Errorf("reading agent config: %w", err)
-	}
-
-	var cfg agentConfig
-	if err = yaml.Unmarshal(data, &cfg); err != nil {
-		return nil, fmt.Errorf("parsing agent config: %w", err)
-	}
-
-	return &cfg, nil
-}
-
-func (d *Daemon) loadTools(
-	tools []agentConfigTool, root string,
-) ([]fantasy.AgentTool, error) {
-	if len(tools) == 0 {
-		return nil, nil
-	}
-
-	defs := make([]tool.Def, len(tools))
-	for i, t := range tools {
-		binary := t.Binary
-		if !filepath.IsAbs(binary) {
-			binary = filepath.Join(root, binary)
-		}
-
-		defs[i] = tool.Def{
-			Name: t.Name, Description: t.Description,
-			Binary: binary,
-		}
-	}
-
-	dataDir := filepath.Join(root, "etc", "data")
-
-	return tool.LoadTools(defs, dataDir, d.logger)
-}
-
 func (d *Daemon) List() []*daemonv1.AgentInfo {
-	d.mu.RLock()
-	defer d.mu.RUnlock()
-
 	infos := make([]*daemonv1.AgentInfo, 0, len(d.agents))
-	for _, ra := range d.agents {
+
+	for _, ma := range d.agents {
+		status := ma.status
+
+		var addr string
+		if a, ok := d.pool.Get(ma.id); ok {
+			if sa, isSystem := a.(*system.Agent); isSystem {
+				addr = sa.Addr()
+			}
+
+			status = a.Status().String()
+		}
+
 		infos = append(infos, &daemonv1.AgentInfo{
-			Id: ra.id, Name: ra.name, Model: ra.model,
-			Status: ra.status, Root: ra.root,
-			CreatedAt: ra.createdAt.Unix(),
+			Id: ma.id.String(), Name: ma.name, Model: ma.model,
+			Status:    status,
+			CreatedAt: ma.createdAt.Unix(),
+			Addr:      addr,
+			Image:     ma.tag,
+			Mounts:    mountsToProto(ma.mounts),
 		})
 	}
 
 	return infos
 }
 
-func (d *Daemon) Stop(ref string) error {
-	ra, err := d.resolve(ref)
+func (d *Daemon) Stop(ctx context.Context, ref string) error {
+	ma, err := d.resolve(ref)
 	if err != nil {
 		return err
 	}
 
-	if ra.cancel != nil {
-		ra.cancel()
+	if stopErr := d.pool.Stop(ctx, ma.id); stopErr != nil {
+		return stopErr
 	}
 
-	ra.status = statusStopped
+	ma.status = statusStopped
 
-	if updateErr := d.state.UpdateStatus(ra.id, statusStopped); updateErr != nil {
+	if updateErr := d.state.UpdateStatus(ctx, ma.id.String(), statusStopped); updateErr != nil {
 		d.logger.Warn("failed to persist stop", zap.Error(updateErr))
 	}
 
-	d.logger.Info("agent stopped", zap.String("id", ra.id), zap.String("name", ra.name))
+	d.logger.Info("agent stopped", zap.String("id", ma.id.String()), zap.String("name", ma.name))
 
 	return nil
 }
 
-func (d *Daemon) Remove(ref string) error {
-	ra, err := d.resolve(ref)
+func (d *Daemon) Remove(ctx context.Context, ref string) error {
+	ma, err := d.resolve(ref)
 	if err != nil {
 		return err
 	}
 
-	if ra.cancel != nil {
-		ra.cancel()
+	if rmPoolErr := d.pool.Remove(ctx, ma.id); rmPoolErr != nil {
+		d.logger.Warn("pool remove failed", zap.Error(rmPoolErr))
 	}
 
-	d.mu.Lock()
-	delete(d.agents, ra.id)
-	d.mu.Unlock()
+	delete(d.agents, ma.id.String())
 
-	if rmErr := d.state.RemoveAgent(ra.id); rmErr != nil {
-		d.logger.Warn("failed to persist removal", zap.Error(err))
+	if rmErr := d.state.RemoveAgent(ctx, ma.id.String()); rmErr != nil {
+		d.logger.Warn("failed to persist removal", zap.Error(rmErr))
 	}
 
-	if err = os.RemoveAll(ra.root); err != nil {
-		d.logger.Warn("failed to remove root", zap.String("root", ra.root), zap.Error(err))
-	}
-
-	d.logger.Info("agent removed", zap.String("id", ra.id), zap.String("name", ra.name))
+	d.logger.Info("agent removed", zap.String("id", ma.id.String()), zap.String("name", ma.name))
 
 	return nil
 }
 
-func (d *Daemon) resolve(ref string) (*runningAgent, error) {
-	d.mu.RLock()
-	defer d.mu.RUnlock()
-
-	if ra, ok := d.agents[ref]; ok {
-		return ra, nil
+func (d *Daemon) ChatWithAgent(ctx context.Context, ref, sessionID, prompt string) (string, error) {
+	ma, err := d.resolve(ref)
+	if err != nil {
+		return "", err
 	}
 
-	for _, ra := range d.agents {
-		if ra.name == ref {
-			return ra, nil
+	a, ok := d.pool.Get(ma.id)
+	if !ok || a == nil {
+		return "", fmt.Errorf("agent %q is not running", ma.name)
+	}
+
+	prompter, ok := a.(agentpkg.Prompter)
+	if !ok {
+		return "", fmt.Errorf("agent %q does not support chat", ma.name)
+	}
+
+	var buf strings.Builder
+
+	req := agentpkg.PromptRequest{SessionID: sessionID, Prompt: prompt}
+	if promptErr := prompter.Prompt(ctx, req, &buf); promptErr != nil {
+		return "", promptErr
+	}
+
+	return buf.String(), nil
+}
+
+// PromptObjectWithAgent runs a one-shot structured-output query
+// against the agent identified by ref. Stateless — no session
+// memory, no tool loop. Returns the object as raw JSON bytes, ready
+// to be placed on the wire.
+func (d *Daemon) PromptObjectWithAgent(
+	ctx context.Context, ref, prompt string, schema []byte, schemaName, schemaDesc string,
+) ([]byte, error) {
+	ma, err := d.resolve(ref)
+	if err != nil {
+		return nil, err
+	}
+
+	a, ok := d.pool.Get(ma.id)
+	if !ok || a == nil {
+		return nil, fmt.Errorf("agent %q is not running", ma.name)
+	}
+
+	prompter, ok := a.(agentpkg.ObjectPrompter)
+	if !ok {
+		return nil, fmt.Errorf("agent %q does not support structured output", ma.name)
+	}
+
+	return prompter.PromptObject(ctx, agentpkg.ObjectPromptRequest{
+		Prompt:            prompt,
+		Schema:            schema,
+		SchemaName:        schemaName,
+		SchemaDescription: schemaDesc,
+	})
+}
+
+// ListSessionMessages returns historical messages for (ref, sessionID)
+// by asking the running agent's SessionReader. Used by the CLI to
+// preload prompt history when a chat session opens.
+func (d *Daemon) ListSessionMessages(
+	ctx context.Context, ref, sessionID string, limit int,
+) ([]agentpkg.SessionMessage, error) {
+	ma, err := d.resolve(ref)
+	if err != nil {
+		return nil, err
+	}
+
+	a, ok := d.pool.Get(ma.id)
+	if !ok || a == nil {
+		return nil, fmt.Errorf("agent %q is not running", ma.name)
+	}
+
+	reader, ok := a.(agentpkg.SessionReader)
+	if !ok {
+		return nil, fmt.Errorf("agent %q does not expose session history", ma.name)
+	}
+
+	return reader.ListSessionMessages(ctx, sessionID, limit)
+}
+
+// ChatStreamWithAgent invokes the agent's StreamPrompter and forwards every
+// event to cb as it arrives. Callers (the gRPC stream handler) translate cb
+// invocations into wire events.
+func (d *Daemon) ChatStreamWithAgent(
+	ctx context.Context, ref, sessionID, prompt string, cb func(agentpkg.PromptEvent),
+) error {
+	ma, err := d.resolve(ref)
+	if err != nil {
+		return err
+	}
+
+	a, ok := d.pool.Get(ma.id)
+	if !ok || a == nil {
+		return fmt.Errorf("agent %q is not running", ma.name)
+	}
+
+	streamer, ok := a.(agentpkg.StreamPrompter)
+	if !ok {
+		return fmt.Errorf("agent %q does not support streaming chat", ma.name)
+	}
+
+	return streamer.PromptStream(ctx, agentpkg.PromptRequest{SessionID: sessionID, Prompt: prompt}, cb)
+}
+
+func (d *Daemon) nameExists(name string) bool {
+	for _, ma := range d.agents {
+		if ma.name == name {
+			return true
 		}
 	}
 
-	for id, ra := range d.agents {
+	return false
+}
+
+func (d *Daemon) resolve(ref string) (*managedAgent, error) {
+	if ma, ok := d.agents[ref]; ok {
+		return ma, nil
+	}
+
+	for _, ma := range d.agents {
+		if ma.name == ref {
+			return ma, nil
+		}
+	}
+
+	for id, ma := range d.agents {
 		if strings.HasPrefix(id, ref) {
-			return ra, nil
+			return ma, nil
 		}
 	}
 
 	return nil, fmt.Errorf("agent %q not found", ref)
 }
 
-func parseModel(model string) (string, string) {
-	if idx := strings.Index(model, "/"); idx > 0 {
-		return model[:idx], model[idx+1:]
-	}
-
-	return "", model
+func (d *Daemon) localRef(tag string) spec.Reference {
+	return spec.ParseReference(d.registry.Addr() + "/" + tag)
 }
 
-func discoverContextFiles(contextDir string) ([]string, error) {
-	entries, err := os.ReadDir(contextDir)
+func (d *Daemon) pullImage(ctx context.Context, ref spec.Reference) (*orasmem.Store, error) {
+	var opts []agentoci.RemoteRepositoryOption
+	if d.registry != nil && strings.HasPrefix(ref.Name, d.registry.Addr()) {
+		opts = append(opts, agentoci.WithPlainHTTP)
+	}
+
+	repo, err := agentoci.NewRemoteRepository(ref, opts...)
 	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, nil
-		}
-
-		return nil, err
-	}
-
-	var files []string
-	for _, e := range entries {
-		if !e.IsDir() && strings.HasSuffix(e.Name(), ".md") {
-			files = append(files, e.Name())
-		}
-	}
-
-	return files, nil
-}
-
-func configStr(configs map[string]string, key, defaultVal string) string {
-	if v, ok := configs[key]; ok && v != "" {
-		return v
-	}
-
-	return defaultVal
-}
-
-func configInt(configs map[string]string, key string, defaultVal int) int {
-	if v, ok := configs[key]; ok && v != "" {
-		var n int
-		if _, scanErr := fmt.Sscanf(v, "%d", &n); scanErr == nil {
-			return n
-		}
-	}
-
-	return defaultVal
-}
-
-func (d *Daemon) pullImage(ctx context.Context, ref string) (*orasmem.Store, *spec.Agentfile, error) {
-	var opts []afoci.RemoteRepositoryOption
-	if d.registry != nil && strings.HasPrefix(ref, d.registry.Addr()) {
-		opts = append(opts, afoci.WithPlainHTTP)
-	}
-
-	repo, err := afoci.NewRemoteRepository(ref, opts...)
-	if err != nil {
-		return nil, nil, fmt.Errorf("creating repository for %s: %w", ref, err)
+		return nil, fmt.Errorf("creating repository for %s: %w", ref, err)
 	}
 
 	store := orasmem.New()
 
-	tag := afoci.ParseTag(ref)
+	tag := ref.Tag
 	if tag == "" {
 		tag = defaultTag
 	}
 
-	_, err = oras.Copy(ctx, repo, tag, store, defaultTag, oras.CopyOptions{})
+	// Tag in the store with the full reference so it's resolvable by spec.Reference.String().
+	dstTag := ref.String()
+
+	_, err = oras.Copy(ctx, repo, tag, store, dstTag, copyOptions())
 	if err != nil {
-		return nil, nil, fmt.Errorf("copying %s: %w", ref, err)
+		return nil, fmt.Errorf("copying %s: %w", ref, err)
 	}
 
-	af, err := afstore.LoadWithLayers(store, defaultTag)
-	if err != nil {
-		return nil, nil, fmt.Errorf("loading agentfile from %s: %w", ref, err)
-	}
-
-	return store, af, nil
+	return store, nil
 }
 
-func (d *Daemon) pushImage(ctx context.Context, store *orasmem.Store, ref string) (string, error) {
-	var opts []afoci.RemoteRepositoryOption
-	if d.registry != nil && strings.HasPrefix(ref, d.registry.Addr()) {
-		opts = append(opts, afoci.WithPlainHTTP)
+func (d *Daemon) pushImage(
+	ctx context.Context, store *orasmem.Store, srcRef string, ref spec.Reference,
+) (string, error) {
+	var opts []agentoci.RemoteRepositoryOption
+	if d.registry != nil && strings.HasPrefix(ref.Name, d.registry.Addr()) {
+		opts = append(opts, agentoci.WithPlainHTTP)
 	}
 
-	repo, err := afoci.NewRemoteRepository(ref, opts...)
+	repo, err := agentoci.NewRemoteRepository(ref, opts...)
 	if err != nil {
 		return "", fmt.Errorf("creating repository for %s: %w", ref, err)
 	}
 
-	tag := afoci.ParseTag(ref)
+	tag := ref.Tag
 	if tag == "" {
 		tag = defaultTag
 	}
 
-	desc, err := oras.Copy(ctx, store, defaultTag, repo, tag, oras.CopyOptions{})
+	desc, err := oras.Copy(ctx, store, srcRef, repo, tag, copyOptions())
 	if err != nil {
 		return "", err
 	}
 
 	return desc.Digest.String(), nil
+}
+
+func importArtifact(ctx context.Context, data []byte) (*orasmem.Store, string, error) {
+	return export.Import(ctx, data)
 }

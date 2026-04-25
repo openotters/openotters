@@ -7,9 +7,21 @@ includes:
     install: .tk/install/Taskfile.yaml
     license: .tk/license/Taskfile.yaml
     trufflehog: .tk/trufflehog/Taskfile.yaml
-    
+
 
 dotenv:
   - .env
   - PROJECT
   - .env.default
+
+tasks:
+  test:
+    desc: Run unit tests with the race detector.
+    cmds:
+      - go test -race ./...
+
+  clean:
+    desc: Remove build artifacts and clear the test cache.
+    cmds:
+      - rm -rf bin dist
+      - go clean -testcache

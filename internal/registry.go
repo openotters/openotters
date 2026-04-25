@@ -1,12 +1,12 @@
 package internal
 
 import (
-	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
-	"io"
+	"io/fs"
+	stdlog "log"
 	"net"
 	"net/http"
 	"os"
@@ -19,26 +19,59 @@ import (
 	"go.uber.org/zap"
 )
 
+// DefaultRegistryAddr is the loopback TCP endpoint the embedded registry
+// binds on by default. Fixed (not ephemeral) so the address surviving in
+// persisted agent refs stays valid across daemon restarts. Callers can
+// override with the OTTERS_REGISTRY_ADDR env var if the port clashes.
+const DefaultRegistryAddr = "127.0.0.1:5527"
+
 type EmbeddedRegistry struct {
-	addr    string
-	dataDir string
-	server  *http.Server
-	logger  *zap.Logger
+	addr     string
+	bindAddr string
+	dataDir  string
+	server   *http.Server
+	logger   *zap.Logger
 }
 
-func NewEmbeddedRegistry(logger *zap.Logger) *EmbeddedRegistry {
-	return &EmbeddedRegistry{
-		logger: logger.Named("registry"),
+// RegistryOption configures an EmbeddedRegistry at construction.
+type RegistryOption func(*EmbeddedRegistry)
+
+// WithRegistryAddr overrides the TCP bind address. Precedence is
+// option > OTTERS_REGISTRY_ADDR env var > DefaultRegistryAddr; pass an
+// empty string to fall through to the env/default.
+func WithRegistryAddr(addr string) RegistryOption {
+	return func(r *EmbeddedRegistry) {
+		if addr != "" {
+			r.bindAddr = addr
+		}
 	}
 }
 
-func (r *EmbeddedRegistry) Start() error {
+func NewEmbeddedRegistry(logger *zap.Logger, opts ...RegistryOption) *EmbeddedRegistry {
+	bind := os.Getenv("OTTERS_REGISTRY_ADDR")
+	if bind == "" {
+		bind = DefaultRegistryAddr
+	}
+
+	r := &EmbeddedRegistry{
+		logger:   logger.Named("registry"),
+		bindAddr: bind,
+	}
+
+	for _, opt := range opts {
+		opt(r)
+	}
+
+	return r
+}
+
+func (r *EmbeddedRegistry) Start(ctx context.Context) error {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return err
 	}
 
-	r.dataDir = filepath.Join(home, ".openotters", "registry")
+	r.dataDir = filepath.Join(home, ".otters", "registry")
 	blobDir := filepath.Join(r.dataDir, "blobs")
 
 	if err = os.MkdirAll(blobDir, 0o755); err != nil {
@@ -47,14 +80,17 @@ func (r *EmbeddedRegistry) Start() error {
 
 	manifests := newDiskManifestStore(filepath.Join(r.dataDir, "manifests"))
 
-	inner := registry.New(registry.WithBlobHandler(registry.NewDiskBlobHandler(blobDir)))
+	inner := registry.New(
+		registry.WithBlobHandler(registry.NewDiskBlobHandler(blobDir)),
+		registry.Logger(stdlog.New(&zapWriter{logger: r.logger}, "", 0)),
+	)
 	handler := &persistentHandler{inner: inner, manifests: manifests}
 
 	lc := net.ListenConfig{}
 
-	lis, err := lc.Listen(context.Background(), "tcp", "127.0.0.1:0")
+	lis, err := lc.Listen(ctx, "tcp", r.bindAddr)
 	if err != nil {
-		return fmt.Errorf("listening: %w", err)
+		return fmt.Errorf("listening on %s: %w", r.bindAddr, err)
 	}
 
 	r.addr = lis.Addr().String()
@@ -122,6 +158,15 @@ func (h *persistentHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	h.inner.ServeHTTP(w, r)
 }
 
+// handleManifestPut owns manifest writes end-to-end. Earlier we also
+// forwarded each PUT to the inner go-containerregistry registry for
+// validation, but that forked state: sub-manifests written straight to
+// disk (because oras saw them as already-present via HEAD and skipped
+// the PUT) never made it into the inner registry's in-memory map, and
+// a subsequent index PUT got rejected with MANIFEST_UNKNOWN because
+// the inner validator only looks at its own in-memory map. Handling
+// the write here keeps disk as the single source of truth for
+// manifests; blobs still flow through inner's disk-backed blob store.
 func (h *persistentHandler) handleManifestPut(w http.ResponseWriter, r *http.Request) {
 	repo, ref := parseManifestPath(r.URL.Path)
 
@@ -140,10 +185,9 @@ func (h *persistentHandler) handleManifestPut(w http.ResponseWriter, r *http.Req
 		h.manifests.put(repo, digest, body)
 	}
 
-	// Also forward to inner handler so blob existence checks work
-	r.Body = io.NopCloser(bytes.NewReader(body))
-	r.ContentLength = int64(len(body))
-	h.inner.ServeHTTP(w, r)
+	w.Header().Set("Docker-Content-Digest", digest)
+	w.Header().Set("Location", fmt.Sprintf("/v2/%s/manifests/%s", repo, digest))
+	w.WriteHeader(http.StatusCreated)
 }
 
 func (h *persistentHandler) handleManifestGet(w http.ResponseWriter, r *http.Request) bool {
@@ -156,7 +200,7 @@ func (h *persistentHandler) handleManifestGet(w http.ResponseWriter, r *http.Req
 
 	digest := fmt.Sprintf("sha256:%x", sha256.Sum256(data))
 	w.Header().Set("Docker-Content-Digest", digest)
-	w.Header().Set("Content-Type", "application/vnd.oci.image.manifest.v1+json")
+	w.Header().Set("Content-Type", manifestMediaType(data))
 
 	if r.Method == http.MethodHead {
 		w.Header().Set("Content-Length", fmt.Sprintf("%d", len(data)))
@@ -169,6 +213,35 @@ func (h *persistentHandler) handleManifestGet(w http.ResponseWriter, r *http.Req
 	w.Write(data) //nolint:errcheck // best-effort
 
 	return true
+}
+
+// manifestMediaType inspects the manifest JSON and returns the Content-Type
+// oras clients expect. We read `mediaType` when present; otherwise we
+// distinguish index vs manifest by the presence of `manifests` or
+// `layers`. Falls back to the single-arch manifest media type so that
+// images written by older oras clients (which omit mediaType) still work.
+func manifestMediaType(data []byte) string {
+	var probe struct {
+		MediaType string            `json:"mediaType"`
+		Manifests []json.RawMessage `json:"manifests"`
+		Layers    []json.RawMessage `json:"layers"`
+	}
+
+	if err := json.Unmarshal(data, &probe); err == nil {
+		if probe.MediaType != "" {
+			return probe.MediaType
+		}
+
+		if len(probe.Manifests) > 0 {
+			return "application/vnd.oci.image.index.v1+json"
+		}
+
+		if len(probe.Layers) > 0 {
+			return "application/vnd.oci.image.manifest.v1+json"
+		}
+	}
+
+	return "application/vnd.oci.image.manifest.v1+json"
 }
 
 func (h *persistentHandler) handleManifestDelete(w http.ResponseWriter, r *http.Request) {
@@ -235,20 +308,35 @@ func (s *diskManifestStore) delete(repo, ref string) {
 	_ = os.Remove(filepath.Join(s.dir, repo, safeRef(ref)))
 }
 
+// listRepos walks the manifest tree and returns every directory that
+// directly contains manifest files. A repo name is the directory's path
+// relative to the root — multi-component paths like
+// "ghcr.io/openotters/tools/jina" are preserved, so the bin cache
+// shows up correctly in /v2/_catalog.
 func (s *diskManifestStore) listRepos() []string {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	entries, err := os.ReadDir(s.dir)
-	if err != nil {
-		return nil
-	}
+	seen := make(map[string]struct{})
 
-	var repos []string
-	for _, e := range entries {
-		if e.IsDir() {
-			repos = append(repos, e.Name())
+	_ = filepath.WalkDir(s.dir, func(path string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return nil //nolint:nilerr // skip unreadable entries, keep walking
 		}
+
+		rel, relErr := filepath.Rel(s.dir, filepath.Dir(path))
+		if relErr != nil || rel == "." {
+			return nil //nolint:nilerr // skip top-level / unrelative paths
+		}
+
+		seen[rel] = struct{}{}
+
+		return nil
+	})
+
+	repos := make([]string, 0, len(seen))
+	for r := range seen {
+		repos = append(repos, r)
 	}
 
 	return repos
@@ -265,6 +353,10 @@ func (s *diskManifestStore) listTags(repo string) []string {
 
 	var tags []string
 	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+
 		name := e.Name()
 		if !strings.HasPrefix(name, "sha256_") {
 			tags = append(tags, name)
@@ -306,5 +398,23 @@ func parseTagsPath(path string) string {
 func readBody(r *http.Request) ([]byte, error) {
 	defer r.Body.Close()
 
-	return io.ReadAll(r.Body)
+	return readAllCapped(r.Body)
+}
+
+// zapWriter adapts go-containerregistry's *log.Logger output to a
+// zap.Logger so the embedded registry's per-request lines land in the
+// same structured stream as the rest of the daemon. Each Write
+// corresponds to one line from the stdlib logger; we strip the
+// trailing newline and forward it as a debug message.
+type zapWriter struct {
+	logger *zap.Logger
+}
+
+func (w *zapWriter) Write(p []byte) (int, error) {
+	msg := strings.TrimRight(string(p), "\n")
+	if msg != "" {
+		w.logger.Debug(msg)
+	}
+
+	return len(p), nil
 }

@@ -1,0 +1,65 @@
+name: Release
+
+# Fires on semver tag push. Creates a GitHub release with the two
+# binaries (otters, ottersd) built for darwin+linux / amd64+arm64, and
+# updates the openotters/homebrew-tap formula via goreleaser's brews
+# section.
+#
+# The tap write uses an **org-owned GitHub App** (not a personal PAT),
+# so the credential isn't tied to any human account. Prereqs:
+#   1. Create a GitHub App under the openotters org with
+#      `Contents: Read and write` repository permission.
+#   2. Install the App only on openotters/homebrew-tap.
+#   3. Add two secrets to openotters/openotters:
+#        - HOMEBREW_TAP_APP_ID         (the App's numeric ID)
+#        - HOMEBREW_TAP_APP_PRIVATE_KEY (the .pem file contents)
+# A short-lived installation token is minted at runtime by
+# actions/create-github-app-token@v1 and passed to goreleaser.
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  # goreleaser creates the GitHub release on this repo.
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # goreleaser needs full history for changelog generation.
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Mint tap App installation token
+        id: tap-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.HOMEBREW_TAP_APP_ID }}
+          private-key: ${{ secrets.HOMEBREW_TAP_APP_PRIVATE_KEY }}
+          # Restrict the minted token to the tap repo. Even if
+          # someone expands the App's install targets later, this
+          # workflow only ever sees a token scoped to homebrew-tap.
+          owner: openotters
+          repositories: homebrew-tap
+
+      - name: Run GoReleaser
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser
+          version: '~> v2'
+          args: release --clean
+        env:
+          # Default token for publishing the GitHub release on this repo.
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Short-lived org-App token, valid ~1h, scoped to openotters/homebrew-tap.
+          HOMEBREW_TAP_GITHUB_TOKEN: ${{ steps.tap-token.outputs.token }}

@@ -4,14 +4,15 @@ import (
 	"os"
 	"path/filepath"
 
-	daemonv1 "github.com/openotters/cli/api/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+
+	daemonv1 "github.com/openotters/openotters/api/v1"
 )
 
 func DefaultSocketPath() string {
 	home, _ := os.UserHomeDir()
-	return filepath.Join(home, ".openotters", "openotters.sock")
+	return filepath.Join(home, ".otters", "otters.sock")
 }
 
 func Connect(socketPath string) (daemonv1.RuntimeClient, *grpc.ClientConn, error) {

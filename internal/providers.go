@@ -30,7 +30,7 @@ func LoadProviders() (*ProviderRegistry, error) {
 		return nil, err
 	}
 
-	path := filepath.Join(home, ".openotters", "providers.yaml")
+	path := filepath.Join(home, ".otters", "providers.yaml")
 
 	return LoadProvidersFrom(path)
 }
@@ -66,6 +66,15 @@ func (r *ProviderRegistry) Count() int {
 	return len(r.providers)
 }
 
+// Each invokes fn for every registered provider in insertion-order-
+// independent fashion. Callers that need deterministic iteration
+// (e.g. for logging) should sort the result themselves.
+func (r *ProviderRegistry) Each(fn func(*ProviderConfig)) {
+	for _, p := range r.providers {
+		fn(p)
+	}
+}
+
 func (r *ProviderRegistry) ModelAvailable(model string) bool {
 	providerName, modelName := splitModel(model)
 
@@ -81,12 +90,16 @@ func (r *ProviderRegistry) ModelAvailable(model string) bool {
 	return contains(p.Models, modelName)
 }
 
+// Resolve returns (apiBase, apiKey, error) for the given fully-qualified
+// model ("anthropic/claude-sonnet-4-..."). Order matches agentfile's
+// model.Resolver contract (apiURL first), so daemon code can hand this
+// method directly to system.WithModelResolver.
 func (r *ProviderRegistry) Resolve(model string) (string, string, error) {
 	providerName, modelName := splitModel(model)
 
 	p, ok := r.providers[providerName]
 	if !ok {
-		return "", "", fmt.Errorf("provider %q not configured in ~/.openotters/providers.yaml", providerName)
+		return "", "", fmt.Errorf("provider %q not configured in ~/.otters/providers.yaml", providerName)
 	}
 
 	if len(p.Models) > 0 && !contains(p.Models, modelName) {
@@ -96,7 +109,7 @@ func (r *ProviderRegistry) Resolve(model string) (string, string, error) {
 		)
 	}
 
-	return p.APIKey, p.APIBase, nil
+	return p.APIBase, p.APIKey, nil
 }
 
 func splitModel(model string) (string, string) {
