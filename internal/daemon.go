@@ -870,12 +870,7 @@ func (d *Daemon) Pull(
 	var digest string
 
 	for _, t := range tags {
-		parsed := spec.ParseReference(t)
-
-		localRef := spec.Reference{
-			Name: d.registry.Addr() + "/" + parsed.Name,
-			Tag:  parsed.Tag,
-		}
+		localRef := d.localRef(t)
 
 		dig, pushErr := d.pushImage(ctx, store, ref.String(), localRef)
 		if pushErr != nil {
@@ -895,15 +890,12 @@ func (d *Daemon) Push(
 ) (*daemonv1.PushResponse, error) {
 	ref := spec.ParseReference(req.GetRef())
 
-	// Local and remote refs share the same repo path + tag. The local copy
-	// lives at <embeddedAddr>/<Name>:<Tag>; pushing copies it verbatim to
-	// <Name>:<Tag> on the remote registry. If the user built under a bare
-	// name that has no registry component (e.g. `jina:latest`), that image
-	// simply isn't pushable — no inference.
-	localRef := spec.Reference{
-		Name: d.registry.Addr() + "/" + ref.Name,
-		Tag:  ref.Tag,
-	}
+	// Local and remote refs share the same repo path + tag. The local
+	// copy lives at <embeddedAddr>/<Name>:<Tag>; pushing copies it
+	// verbatim to <Name>:<Tag> on the remote registry. localRef qualifies
+	// against the embedded registry only when ref isn't already qualified
+	// — otherwise we'd double-prefix and 404.
+	localRef := d.localRef(req.GetRef())
 
 	d.logger.Info("pulling from local registry", zap.String("local", localRef.String()))
 
@@ -927,13 +919,11 @@ func (d *Daemon) CreateAgent(
 	ctx context.Context,
 	req *daemonv1.CreateAgentRequest,
 ) (*daemonv1.CreateAgentResponse, error) {
-	refStr := req.GetRef()
-
-	if !strings.Contains(refStr, "/") {
-		refStr = d.registry.Addr() + "/" + refStr
-	}
-
-	ref := spec.ParseReference(refStr)
+	// localRef qualifies the user's ref against the embedded registry
+	// only when it isn't already qualified. Replaces the old
+	// "no slash → unqualified" heuristic, which mis-classified refs
+	// like `agents/foo:v1` (slash present, but still bare).
+	ref := d.localRef(req.GetRef())
 
 	// Load metadata straight from the embedded registry — no staging.
 	target, err := newRegistryTarget(ref)
@@ -1333,8 +1323,14 @@ func (d *Daemon) resolve(ref string) (*managedAgent, error) {
 	return nil, fmt.Errorf("agent %q not found", ref)
 }
 
+// localRef qualifies a user-provided tag against the daemon's
+// embedded registry: bare `name:tag` lands at `<embeddedAddr>/name:tag`,
+// while a fully-qualified ref (host:port/path or host.tld/path) is
+// returned untouched. Without the qualified-check, refs that already
+// targeted the embedded registry would get the address prepended a
+// second time.
 func (d *Daemon) localRef(tag string) spec.Reference {
-	return spec.ParseReference(d.registry.Addr() + "/" + tag)
+	return spec.QualifyWithDefault(spec.ParseReference(tag), d.registry.Addr())
 }
 
 func (d *Daemon) pullImage(ctx context.Context, ref spec.Reference) (*orasmem.Store, error) {
