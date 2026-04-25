@@ -1323,14 +1323,33 @@ func (d *Daemon) resolve(ref string) (*managedAgent, error) {
 	return nil, fmt.Errorf("agent %q not found", ref)
 }
 
-// localRef qualifies a user-provided tag against the daemon's
-// embedded registry: bare `name:tag` lands at `<embeddedAddr>/name:tag`,
-// while a fully-qualified ref (host:port/path or host.tld/path) is
-// returned untouched. Without the qualified-check, refs that already
-// targeted the embedded registry would get the address prepended a
-// second time.
+// localRef rewrites a user-provided tag so it points at the daemon's
+// embedded registry. Any ref not already prefixed with the embedded
+// address gets that address prepended verbatim — bare `name:tag`
+// lands at `<embeddedAddr>/name:tag`, and a remote ref like
+// `ghcr.io/openotters/agents/base:latest` lands at
+// `<embeddedAddr>/ghcr.io/openotters/agents/base:latest`, preserving
+// the source path as the local repo name (the layout
+// resolveStoredTag was designed for). Refs already targeting the
+// embedded registry are returned untouched, which is what keeps
+// `image build -t <embeddedAddr>/agents/foo:v1` from being
+// double-prefixed.
 func (d *Daemon) localRef(tag string) spec.Reference {
-	return spec.QualifyWithDefault(spec.ParseReference(tag), d.registry.Addr())
+	return qualifyForEmbeddedRegistry(tag, d.registry.Addr())
+}
+
+// qualifyForEmbeddedRegistry is the pure side of localRef, split out
+// so it can be tested without standing up an embedded registry.
+func qualifyForEmbeddedRegistry(tag, embeddedAddr string) spec.Reference {
+	ref := spec.ParseReference(tag)
+	if strings.HasPrefix(ref.Name, embeddedAddr+"/") {
+		return ref
+	}
+
+	return spec.Reference{
+		Name: embeddedAddr + "/" + ref.Name,
+		Tag:  ref.Tag,
+	}
 }
 
 func (d *Daemon) pullImage(ctx context.Context, ref spec.Reference) (*orasmem.Store, error) {
