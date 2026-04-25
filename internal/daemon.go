@@ -1334,12 +1334,7 @@ func (d *Daemon) localRef(tag string) spec.Reference {
 }
 
 func (d *Daemon) pullImage(ctx context.Context, ref spec.Reference) (*orasmem.Store, error) {
-	var opts []agentoci.RemoteRepositoryOption
-	if d.registry != nil && strings.HasPrefix(ref.Name, d.registry.Addr()) {
-		opts = append(opts, agentoci.WithPlainHTTP)
-	}
-
-	repo, err := agentoci.NewRemoteRepository(ref, opts...)
+	repo, err := agentoci.NewRemoteRepository(ref)
 	if err != nil {
 		return nil, fmt.Errorf("creating repository for %s: %w", ref, err)
 	}
@@ -1365,12 +1360,7 @@ func (d *Daemon) pullImage(ctx context.Context, ref spec.Reference) (*orasmem.St
 func (d *Daemon) pushImage(
 	ctx context.Context, store *orasmem.Store, srcRef string, ref spec.Reference,
 ) (string, error) {
-	var opts []agentoci.RemoteRepositoryOption
-	if d.registry != nil && strings.HasPrefix(ref.Name, d.registry.Addr()) {
-		opts = append(opts, agentoci.WithPlainHTTP)
-	}
-
-	repo, err := agentoci.NewRemoteRepository(ref, opts...)
+	repo, err := agentoci.NewRemoteRepository(ref)
 	if err != nil {
 		return "", fmt.Errorf("creating repository for %s: %w", ref, err)
 	}
