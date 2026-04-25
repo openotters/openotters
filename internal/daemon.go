@@ -981,7 +981,16 @@ func (d *Daemon) CreateAgent(
 		return nil, err
 	}
 
-	digestResolver := func(r string) string { return d.resolveLocalDigest(ctx, r) }
+	// digestResolver runs from inside the workspace materialiser, which
+	// happens in pool.Add's goroutine well after this gRPC handler
+	// returns. Capturing the request ctx would mean every call sees
+	// "context canceled". Detach with a fresh, time-bounded context.
+	digestResolver := func(r string) string {
+		bgctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+
+		return d.resolveLocalDigest(bgctx, r)
+	}
 
 	agentOpts := []system.AgentOption{
 		system.WithModelResolver(d.providers.Resolve),
