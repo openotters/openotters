@@ -153,7 +153,6 @@ type BinLs struct {
 	Quiet bool `short:"q" help:"Only display image refs (useful for piping)" default:"false"`
 }
 
-//nolint:dupl // mirrors ImageLs by design; the two commands evolve independently
 func (t *BinLs) Run(ctx context.Context, common *cmd.Commons, d *Daemon) error {
 	c, conn, err := d.Connect()
 	if err != nil {

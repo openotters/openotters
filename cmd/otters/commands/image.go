@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"text/tabwriter"
+	"time"
 
 	"github.com/merlindorin/go-shared/pkg/cmd"
 
@@ -200,7 +201,6 @@ type ImageLs struct {
 	Quiet bool `short:"q" help:"Only display image refs (useful for piping)" default:"false"`
 }
 
-//nolint:dupl // mirrors BinLs by design — see comment there.
 func (a *ImageLs) Run(ctx context.Context, common *cmd.Commons, d *Daemon) error {
 	c, conn, err := d.Connect()
 	if err != nil {
@@ -237,7 +237,7 @@ func (a *ImageLs) Run(ctx context.Context, common *cmd.Commons, d *Daemon) error
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
 
-	fmt.Fprintln(w, "REF\tDIGEST\tSIZE")
+	fmt.Fprintln(w, "REF\tDIGEST\tSIZE\tCREATED")
 
 	for _, img := range agents {
 		digest := img.GetDigest()
@@ -245,10 +245,33 @@ func (a *ImageLs) Run(ctx context.Context, common *cmd.Commons, d *Daemon) error
 			digest = digest[:19]
 		}
 
-		fmt.Fprintf(w, "%s\t%s\t%s\n", img.GetRef(), digest, humanSize(img.GetSize()))
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s\n",
+			img.GetRef(), digest, humanSize(img.GetSize()), formatCreated(img.GetCreatedAt()))
 	}
 
 	return w.Flush()
+}
+
+// formatCreated renders a unix-seconds timestamp as a human-readable
+// "5 minutes ago" / "2 days ago" string. Returns "-" for zero (which
+// the daemon emits when the manifest mtime can't be read).
+func formatCreated(unixSec int64) string {
+	if unixSec == 0 {
+		return "-"
+	}
+
+	d := time.Since(time.Unix(unixSec, 0))
+
+	switch {
+	case d < time.Minute:
+		return "just now"
+	case d < time.Hour:
+		return fmt.Sprintf("%d minutes ago", int(d.Minutes()))
+	case d < 24*time.Hour:
+		return fmt.Sprintf("%d hours ago", int(d.Hours()))
+	default:
+		return fmt.Sprintf("%d days ago", int(d.Hours()/24))
+	}
 }
 
 // ImageRm removes one or more agent images from the local registry.

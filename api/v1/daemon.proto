@@ -155,6 +155,19 @@ message ImageInfo {
   string digest = 2;
   string artifact_type = 3;
   int64 size = 4;
+  // Unix-seconds the manifest was first written to the local registry.
+  // Surfaces as the "CREATED" column in `otters image ls`.
+  int64 created_at = 5;
+}
+
+// AgentTool describes one BIN directive resolved against the local
+// registry. Surfaced through AgentInfo.tools so `otters agent inspect`
+// can show the exact image+digest each agent is bound to.
+message AgentTool {
+  string name = 1;
+  string ref = 2;
+  string digest = 3;
+  string description = 4;
 }
 
 message ListImagesResponse {
@@ -221,6 +234,18 @@ message AgentInfo {
   string addr = 7;
   string image = 8;
   repeated Mount mounts = 9;
+  // Resolved digest of the agent's image (sha256:...). Only populated
+  // for agents created since daemon startup; restored-from-state agents
+  // surface an empty digest until their image is re-resolved.
+  string image_digest = 10;
+  // RUNTIME directive from the agent's Agentfile, e.g.
+  // "ghcr.io/openotters/runtime:latest".
+  string runtime_ref = 11;
+  // Resolved digest of the runtime image. Same restored-state caveat
+  // as image_digest.
+  string runtime_digest = 12;
+  // BIN directives from the agent's Agentfile.
+  repeated AgentTool tools = 13;
 }
 
 message ListAgentsResponse {

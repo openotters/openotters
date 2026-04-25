@@ -42,6 +42,7 @@ func main() {
 		kong.Description(description),
 		kong.UsageOnError(),
 		kong.DefaultEnvars("OTTERS"),
+		kong.Vars{"version": cli.Version.String()},
 	)
 
 	// Signal-wired root context: SIGINT / SIGTERM cancel the tree so
@@ -57,6 +58,8 @@ type CMD struct {
 	*c.Commons
 	*c.SQLite `embed:""`
 	*c.Config `embed:""`
+
+	ShowVersion kong.VersionFlag `name:"version" help:"Show version information and exit."`
 
 	Serve *commands.Serve `cmd:"" default:"1" help:"Start the daemon"`
 }

@@ -75,6 +75,7 @@ func (d *Daemon) ListImages(
 				Digest:       manifest.digest,
 				ArtifactType: manifest.artifactType,
 				Size:         manifest.size,
+				CreatedAt:    d.registry.ManifestCreatedAt(repo, tag),
 			})
 		}
 	}

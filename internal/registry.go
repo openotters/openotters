@@ -114,6 +114,25 @@ func (r *EmbeddedRegistry) Addr() string {
 	return r.addr
 }
 
+// ManifestCreatedAt returns the unix-seconds when the manifest for
+// <repo>:<tag> was first written to local disk, or 0 if the manifest
+// file isn't present. Used by ListImages to surface a "CREATED"
+// column without adding a separate metadata layer.
+func (r *EmbeddedRegistry) ManifestCreatedAt(repo, tag string) int64 {
+	if r.dataDir == "" {
+		return 0
+	}
+
+	path := filepath.Join(r.dataDir, "manifests", repo, safeRef(tag))
+
+	info, err := os.Stat(path)
+	if err != nil {
+		return 0
+	}
+
+	return info.ModTime().Unix()
+}
+
 func (r *EmbeddedRegistry) Stop() {
 	if r.server != nil {
 		r.server.Close()

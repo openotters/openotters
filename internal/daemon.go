@@ -43,6 +43,25 @@ type managedAgent struct {
 	status    string
 	createdAt time.Time
 	mounts    []system.Mount
+
+	// Image / runtime / tools metadata captured at create time.
+	// Populated for agents created since the daemon started; left
+	// empty on restored agents (would require a state-store migration
+	// to persist).
+	imageDigest   string
+	runtimeRef    string
+	runtimeDigest string
+	tools         []agentTool
+}
+
+// agentTool mirrors daemonv1.AgentTool but stays internal so the
+// in-memory state doesn't pin a proto type. Translated to the wire
+// shape inside ListAgents.
+type agentTool struct {
+	Name        string
+	Ref         string
+	Digest      string
+	Description string
 }
 
 // mountsFromPersisted translates the SQLite JSON form back into the
@@ -973,14 +992,18 @@ func (d *Daemon) CreateAgent(
 	d.pool.Add(id, ref, agentOpts, overrides...)
 
 	ma := &managedAgent{
-		id:        id,
-		name:      name,
-		agentName: agentName,
-		model:     af.Agent.Model,
-		tag:       stripLoopbackPrefixes(ref.String()),
-		status:    statusCreated,
-		createdAt: time.Now(),
-		mounts:    mounts,
+		id:            id,
+		name:          name,
+		agentName:     agentName,
+		model:         af.Agent.Model,
+		tag:           stripLoopbackPrefixes(ref.String()),
+		status:        statusCreated,
+		createdAt:     time.Now(),
+		mounts:        mounts,
+		runtimeRef:    af.Agent.Runtime,
+		imageDigest:   d.resolveLocalDigest(ctx, ref.String()),
+		runtimeDigest: d.resolveLocalDigest(ctx, af.Agent.Runtime),
+		tools:         d.collectTools(ctx, af.Agent.Bins),
 	}
 
 	if req.GetModel() != "" {
@@ -1031,13 +1054,27 @@ func (d *Daemon) List() []*daemonv1.AgentInfo {
 			status = a.Status().String()
 		}
 
+		tools := make([]*daemonv1.AgentTool, 0, len(ma.tools))
+		for _, t := range ma.tools {
+			tools = append(tools, &daemonv1.AgentTool{
+				Name:        t.Name,
+				Ref:         t.Ref,
+				Digest:      t.Digest,
+				Description: t.Description,
+			})
+		}
+
 		infos = append(infos, &daemonv1.AgentInfo{
 			Id: ma.id.String(), Name: ma.name, Model: ma.model,
-			Status:    status,
-			CreatedAt: ma.createdAt.Unix(),
-			Addr:      addr,
-			Image:     ma.tag,
-			Mounts:    mountsToProto(ma.mounts),
+			Status:        status,
+			CreatedAt:     ma.createdAt.Unix(),
+			Addr:          addr,
+			Image:         ma.tag,
+			Mounts:        mountsToProto(ma.mounts),
+			ImageDigest:   ma.imageDigest,
+			RuntimeRef:    ma.runtimeRef,
+			RuntimeDigest: ma.runtimeDigest,
+			Tools:         tools,
 		})
 	}
 
@@ -1198,6 +1235,51 @@ func (d *Daemon) nameExists(name string) bool {
 	}
 
 	return false
+}
+
+// resolveLocalDigest looks up the embedded registry's manifest for ref
+// (host:port stripped) and returns its content-addressed digest. Empty
+// string on any failure — callers treat the digest as best-effort
+// metadata, not load-bearing for correctness.
+func (d *Daemon) resolveLocalDigest(ctx context.Context, ref string) string {
+	if ref == "" || d.registry == nil {
+		return ""
+	}
+
+	addr := d.registry.Addr()
+	repo, tag := splitRef(stripLoopbackPrefixes(ref))
+
+	if repo == "" || tag == "" {
+		return ""
+	}
+
+	info, err := fetchManifestInfo(ctx, addr, repo, tag)
+	if err != nil {
+		return ""
+	}
+
+	return info.digest
+}
+
+// collectTools turns the Agentfile's BIN directives into the in-memory
+// shape ListAgents serialises. Digests are resolved via the local
+// registry for the same best-effort reason as resolveLocalDigest.
+func (d *Daemon) collectTools(ctx context.Context, bins []*spec.Bin) []agentTool {
+	if len(bins) == 0 {
+		return nil
+	}
+
+	out := make([]agentTool, 0, len(bins))
+	for _, b := range bins {
+		out = append(out, agentTool{
+			Name:        b.Name,
+			Ref:         b.Image,
+			Digest:      d.resolveLocalDigest(ctx, b.Image),
+			Description: b.Description,
+		})
+	}
+
+	return out
 }
 
 func (d *Daemon) resolve(ref string) (*managedAgent, error) {

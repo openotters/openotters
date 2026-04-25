@@ -39,10 +39,37 @@ func (a *AgentInspect) Run(ctx context.Context, common *cmd.Commons, d *Daemon) 
 	_, _ = p.Printf("id:      %s\n", match.GetId())
 	_, _ = p.Printf("name:    %s\n", match.GetName())
 	_, _ = p.Printf("image:   %s\n", match.GetImage())
+	if dg := match.GetImageDigest(); dg != "" {
+		_, _ = p.Printf("  digest: %s\n", dg)
+	}
 	_, _ = p.Printf("model:   %s\n", match.GetModel())
 	_, _ = p.Printf("status:  %s\n", match.GetStatus())
 	_, _ = p.Printf("addr:    %s\n", match.GetAddr())
 	_, _ = p.Printf("created: %s\n", time.Unix(match.GetCreatedAt(), 0).Format(time.RFC3339))
+
+	if r := match.GetRuntimeRef(); r != "" {
+		_, _ = p.Printf("runtime: %s\n", r)
+		if dg := match.GetRuntimeDigest(); dg != "" {
+			_, _ = p.Printf("  digest: %s\n", dg)
+		}
+	}
+
+	if tools := match.GetTools(); len(tools) > 0 {
+		_, _ = p.Println("tools:")
+
+		for _, t := range tools {
+			desc := ""
+			if t.GetDescription() != "" {
+				desc = " — " + t.GetDescription()
+			}
+
+			_, _ = p.Printf("  %s\n", t.GetName())
+			_, _ = p.Printf("    ref:    %s%s\n", t.GetRef(), desc)
+			if dg := t.GetDigest(); dg != "" {
+				_, _ = p.Printf("    digest: %s\n", dg)
+			}
+		}
+	}
 
 	if len(match.GetMounts()) > 0 {
 		_, _ = p.Println("mounts:")
