@@ -26,12 +26,13 @@ import (
 )
 
 const (
-	statusCreated   = "created"
-	statusStopped   = "stopped"
-	statusPending   = "pending"
-	statusRunning   = "running"
-	statusInitError = "init_error"
-	defaultTag      = "latest"
+	statusCreated    = "created"
+	statusStopped    = "stopped"
+	statusPending    = "pending"
+	statusRunning    = "running"
+	statusInitError  = "init_error"
+	statusModelError = "model_error"
+	defaultTag       = "latest"
 )
 
 type managedAgent struct {
@@ -298,7 +299,11 @@ func NewDaemon(
 	daemonLogger := logger.Named("daemon")
 
 	return &Daemon{
-		pool:      NewPool(provider, WithMaxConcurrent(10), WithLogger(daemonLogger.Named("pool"))),
+		pool: NewPool(provider,
+			WithMaxConcurrent(10),
+			WithLogger(daemonLogger.Named("pool")),
+			WithLogDir(logDir),
+		),
 		providers: providers,
 		registry:  reg,
 		state:     state,

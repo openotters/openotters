@@ -104,7 +104,7 @@ func (r *Run) Run(ctx context.Context, common *cmd.Commons, d *Daemon) error {
 
 // waitForTerminalStatus polls ListAgents until the named agent
 // reaches a status that won't change on its own (running, stopped,
-// init_error, pull_error) or until the budget runs out. Returns the
+// init_error, pull_error, model_error) or until the budget runs out. Returns the
 // most recent snapshot; on any RPC failure or cancellation we fall
 // back to a synthetic AgentInfo so the caller can still surface the
 // initial create response.
@@ -151,7 +151,7 @@ func waitForTerminalStatus(
 
 func isTerminalStatus(s string) bool {
 	switch s {
-	case "running", "stopped", "init_error", "pull_error":
+	case "running", "stopped", "init_error", "pull_error", "model_error":
 		return true
 	}
 

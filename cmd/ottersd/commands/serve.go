@@ -42,7 +42,7 @@ func (d *Serve) Run(ctx context.Context, common *cmd.Commons, sqlite *cmd.SQLite
 
 	_ = os.Remove(socketPath)
 
-	providers, err := internal.LoadProviders()
+	providers, err := internal.LoadProviders(internal.WithProvidersLogger(logger.Named("providers")))
 	if err != nil {
 		return fmt.Errorf("loading providers: %w", err)
 	}

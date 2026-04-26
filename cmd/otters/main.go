@@ -41,7 +41,13 @@ func main() {
 		Logs:   &commands.Logs{},
 		Info:   &commands.Info{},
 
-		Models: ModelsCmd{Ls: &commands.ModelsLs{}},
+		Provider: ProviderCmd{
+			Add:    &commands.ProviderAdd{},
+			Edit:   &commands.ProviderEdit{},
+			Rm:     &commands.ProviderRm{},
+			Ls:     &commands.ProviderLs{},
+			Models: &commands.ModelsLs{},
+		},
 
 		// `otters agent …` — fully-qualified form, same commands.
 		Agent: AgentCmd{
@@ -96,10 +102,10 @@ type CMD struct {
 	Info   *commands.Info   `cmd:"" help:"Show daemon info (sockets, paths, version, agent counts)"`
 
 	// Management groups.
-	Agent  AgentCmd  `cmd:"" group:"management" help:"Manage running agents — run, ps, start, stop, rm, chat, prompt, logs, inspect."`
-	Image  ImageCmd  `cmd:"" group:"management" help:"Manage agent images — build, push, pull, list, remove, inspect."`
-	Bin    BinCmd    `cmd:"" group:"management" help:"Manage binary tools — build, push, pull, list, remove, inspect."`
-	Models ModelsCmd `cmd:"" group:"management" help:"List models available from configured providers."`
+	Agent    AgentCmd    `cmd:"" group:"management" help:"Manage running agents — run, ps, start, stop, rm, chat, prompt, logs, inspect."`
+	Image    ImageCmd    `cmd:"" group:"management" help:"Manage agent images — build, push, pull, list, remove, inspect."`
+	Bin      BinCmd      `cmd:"" group:"management" help:"Manage binary tools — build, push, pull, list, remove, inspect."`
+	Provider ProviderCmd `cmd:"" group:"management" help:"Manage AI provider configuration in ~/.otters/providers.yaml — add, rm, ls, and list available models."`
 }
 
 // AgentCmd is the fully-qualified form of the running-agent lifecycle
@@ -136,6 +142,14 @@ type BinCmd struct {
 	Inspect *commands.BinInspect `cmd:"" aliases:"desc,describe" help:"Show detailed information for a binary image"`
 }
 
-type ModelsCmd struct {
-	Ls *commands.ModelsLs `cmd:"" aliases:"list" help:"List models reachable via configured providers"`
+// ProviderCmd is the namespace for editing ~/.otters/providers.yaml
+// from the CLI. Edits take effect on the running daemon's next call
+// to the registry — the lazy-reload contract in
+// internal/providers.go means no daemon restart is needed.
+type ProviderCmd struct {
+	Add    *commands.ProviderAdd  `cmd:"" help:"Interactively or non-interactively add a provider (Anthropic, OpenAI, OpenRouter, Ollama, custom)"`
+	Edit   *commands.ProviderEdit `cmd:"" help:"Edit an existing provider (interactive picker + pre-filled form, or scriptable via --name)"`
+	Rm     *commands.ProviderRm   `cmd:"" aliases:"remove" help:"Remove one or more providers (interactive form, or scriptable via --name)"`
+	Ls     *commands.ProviderLs   `cmd:"" aliases:"list" help:"List configured providers (api keys are masked unless --reveal)"`
+	Models *commands.ModelsLs     `cmd:"" help:"List models reachable via configured providers"`
 }

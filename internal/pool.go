@@ -3,6 +3,9 @@ package internal
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -14,16 +17,31 @@ import (
 	"github.com/openotters/agentfile/spec"
 )
 
-const defaultMaxConcurrent = 4
+const (
+	defaultMaxConcurrent = 4
+	defaultBackoffBase   = time.Second
+	defaultBackoffCap    = 30 * time.Second
+)
 
 // Pool manages a set of agents bound to a Provider. Adds are fire-and-forget:
-// each Add spawns a goroutine that creates the agent via Provider and invokes
-// Run. A semaphore bounds the number of concurrently running agents; extra
-// adds block on the semaphore until a slot frees.
+// each Add spawns a supervisor goroutine that creates the agent via Provider
+// and invokes Run. A semaphore bounds the number of concurrently running
+// agents; extra adds block until a slot frees.
+//
+// The supervisor implements auto-restart with exponential backoff: when a
+// Run/Start attempt returns and the agent is in an error status
+// (init_error / pull_error / model_error), the supervisor sleeps for
+// backoffBase * 2^attempt (capped at backoffCap) and retries. Recovery
+// is automatic — fix providers.yaml or restore the registry, and the
+// next backoff window picks up the change. Manual Pool.Stop / Pool.Remove
+// cancel any pending backoff so a stop is honoured immediately.
 type Pool struct {
-	provider agentpkg.Provider
-	logger   *zap.Logger
-	sem      chan struct{}
+	provider    agentpkg.Provider
+	logger      *zap.Logger
+	logDir      string
+	sem         chan struct{}
+	backoffBase time.Duration
+	backoffCap  time.Duration
 
 	mu     sync.Mutex
 	agents map[uuid.UUID]*pooledAgent
@@ -34,8 +52,9 @@ type Pool struct {
 }
 
 type pooledAgent struct {
-	agent agentpkg.Agent
-	done  chan struct{}
+	agent       agentpkg.Agent
+	done        chan struct{}
+	retryCancel context.CancelFunc
 }
 
 // PoolOption configures a Pool at construction time.
@@ -59,13 +78,47 @@ func WithLogger(l *zap.Logger) PoolOption {
 	return func(p *Pool) { p.logger = l }
 }
 
+// WithLogDir directs the pool to append a one-line failure summary to
+// <dir>/<agent-id>.log whenever Run/Start returns with a non-nil error.
+// Surfaces init / pull / model_error causes via `otters logs` even
+// though the runtime subprocess never produced output of its own.
+// Unset disables the per-agent file write; the zap logger still gets
+// the entry.
+func WithLogDir(dir string) PoolOption {
+	return func(p *Pool) { p.logDir = dir }
+}
+
+// WithBackoffBase overrides the auto-restart base delay. The schedule
+// is base, base*2, base*4, … capped by WithBackoffCap. Production
+// keeps the 1s default; tests pass a sub-millisecond value to keep
+// retry-loop tests fast.
+func WithBackoffBase(d time.Duration) PoolOption {
+	return func(p *Pool) {
+		if d > 0 {
+			p.backoffBase = d
+		}
+	}
+}
+
+// WithBackoffCap caps the maximum backoff delay between auto-restart
+// attempts. Defaults to 30s.
+func WithBackoffCap(d time.Duration) PoolOption {
+	return func(p *Pool) {
+		if d > 0 {
+			p.backoffCap = d
+		}
+	}
+}
+
 // NewPool returns a Pool that creates agents via provider.
 func NewPool(provider agentpkg.Provider, opts ...PoolOption) *Pool {
 	p := &Pool{
-		provider: provider,
-		logger:   zap.NewNop(),
-		agents:   make(map[uuid.UUID]*pooledAgent),
-		sem:      make(chan struct{}, defaultMaxConcurrent),
+		provider:    provider,
+		logger:      zap.NewNop(),
+		agents:      make(map[uuid.UUID]*pooledAgent),
+		sem:         make(chan struct{}, defaultMaxConcurrent),
+		backoffBase: defaultBackoffBase,
+		backoffCap:  defaultBackoffCap,
 	}
 
 	for _, o := range opts {
@@ -130,10 +183,12 @@ func (p *Pool) Add(
 	go p.runNew(id, ref, agentOpts, overrides)
 }
 
-// Start re-runs an existing agent that was previously stopped. Non-blocking:
-// spawns a goroutine that re-acquires the semaphore and invokes the agent's
-// Start method. Errors during the restart surface through the pool logger
-// and the agent's observers.
+// Start re-runs an existing agent that was previously stopped or
+// drained out of its auto-restart backoff. Cancels any prior
+// supervisor for the same id, waits briefly for it to exit, then
+// spawns a fresh supervisor (whose attempt counter starts at zero —
+// manual restart resets the backoff schedule). Non-blocking once the
+// prior supervisor has drained.
 func (p *Pool) Start(id uuid.UUID) error {
 	p.mu.Lock()
 	pa, ok := p.agents[id]
@@ -143,8 +198,27 @@ func (p *Pool) Start(id uuid.UUID) error {
 		return fmt.Errorf("agent %s not in pool", id)
 	}
 
+	priorRetryCancel := pa.retryCancel
+	priorDone := pa.done
+	p.mu.Unlock()
+
+	if priorRetryCancel != nil {
+		priorRetryCancel()
+	}
+
+	if priorDone != nil {
+		select {
+		case <-priorDone:
+		case <-time.After(5 * time.Second):
+			return fmt.Errorf("previous supervisor for %s did not exit", id)
+		}
+	}
+
 	done := make(chan struct{})
+
+	p.mu.Lock()
 	pa.done = done
+	pa.retryCancel = nil // runExisting will install its own
 	p.mu.Unlock()
 
 	go p.runExisting(id, pa.agent, done)
@@ -165,7 +239,12 @@ func (p *Pool) Get(id uuid.UUID) (agentpkg.Agent, bool) {
 	return pa.agent, true
 }
 
-// Stop signals the agent to exit and waits for Run to return or ctx to cancel.
+// Stop cancels any pending auto-restart backoff and signals the
+// running agent to exit. Returns when the running attempt has
+// finished or ctx is cancelled. A no-op if the agent isn't in the
+// pool. After Stop the supervisor exits cleanly without spawning new
+// attempts; a subsequent Pool.Start re-arms the auto-restart logic
+// from scratch.
 func (p *Pool) Stop(ctx context.Context, id uuid.UUID) error {
 	p.mu.Lock()
 	pa, ok := p.agents[id]
@@ -175,10 +254,15 @@ func (p *Pool) Stop(ctx context.Context, id uuid.UUID) error {
 		return nil
 	}
 
+	if pa.retryCancel != nil {
+		pa.retryCancel()
+	}
+
 	return pa.agent.Stop(ctx)
 }
 
-// Remove stops the agent, waits for Run to return, removes its on-disk state,
+// Remove cancels any pending auto-restart, stops the running attempt,
+// waits for the supervisor to exit, removes the agent's on-disk state,
 // and drops it from the pool.
 func (p *Pool) Remove(ctx context.Context, id uuid.UUID) error {
 	p.mu.Lock()
@@ -190,6 +274,10 @@ func (p *Pool) Remove(ctx context.Context, id uuid.UUID) error {
 
 	if !ok {
 		return nil
+	}
+
+	if pa.retryCancel != nil {
+		pa.retryCancel()
 	}
 
 	_ = pa.agent.Stop(ctx)
@@ -222,17 +310,18 @@ func (p *Pool) createAgent(
 func (p *Pool) runNew(id uuid.UUID, ref spec.Reference, agentOpts []system.AgentOption, overrides []spec.Override) {
 	rootCtx := p.rootContext()
 
+	// createAgent is fast (no subprocess); take the sem only for the
+	// duration of the create so it doesn't block the supervisor's
+	// per-attempt sem acquisition below.
 	select {
 	case p.sem <- struct{}{}:
 	case <-rootCtx.Done():
 		return
 	}
-	defer func() { <-p.sem }()
 
-	ctx, cancel := context.WithCancel(rootCtx)
-	defer cancel()
+	a, err := p.createAgent(rootCtx, id, ref, agentOpts, overrides)
+	<-p.sem
 
-	a, err := p.createAgent(ctx, id, ref, agentOpts, overrides)
 	if err != nil {
 		p.logger.Error("pool: provider.Create failed",
 			zap.String("id", id.String()), zap.String("ref", ref.String()), zap.Error(err))
@@ -241,41 +330,170 @@ func (p *Pool) runNew(id uuid.UUID, ref spec.Reference, agentOpts []system.Agent
 	}
 
 	done := make(chan struct{})
+	retryCtx, retryCancel := context.WithCancel(rootCtx)
 
 	p.mu.Lock()
-	p.agents[id] = &pooledAgent{agent: a, done: done}
+	p.agents[id] = &pooledAgent{agent: a, done: done, retryCancel: retryCancel}
 	p.mu.Unlock()
 
 	defer close(done)
+	defer retryCancel()
 
-	if runErr := a.Run(ctx); runErr != nil {
-		p.logger.Warn("pool: agent.Run returned with error",
-			zap.String("id", id.String()), zap.String("ref", ref.String()),
-			zap.String("status", a.Status().String()), zap.Error(runErr))
-	}
+	p.runLoop(id, ref.String(), a, retryCtx, true)
 }
 
 func (p *Pool) runExisting(id uuid.UUID, a agentpkg.Agent, done chan struct{}) {
 	rootCtx := p.rootContext()
+	retryCtx, retryCancel := context.WithCancel(rootCtx)
 
-	select {
-	case p.sem <- struct{}{}:
-	case <-rootCtx.Done():
-		close(done)
+	p.mu.Lock()
+	if pa, ok := p.agents[id]; ok {
+		pa.retryCancel = retryCancel
+	}
+	p.mu.Unlock()
+
+	defer close(done)
+	defer retryCancel()
+
+	p.runLoop(id, "", a, retryCtx, false)
+}
+
+// runLoop drives the attempt-and-backoff loop for a single agent.
+// First attempt of a fresh-create supervisor calls Run (materialise +
+// serve); every subsequent attempt — and all attempts on a restart
+// supervisor — calls Start (re-resolve + serve on the existing
+// chroot). The loop exits when:
+//   - retryCtx is cancelled (Pool.Stop / Remove / daemon shutdown).
+//   - the attempt returns and status isn't an error: clean Stopped
+//     after manual stop, runtime crash, or successful exit.
+//
+// Auto-restart is scoped to init/pull/model errors — failures that
+// happened *before* the runtime subprocess started. A subprocess that
+// crashed mid-run lands in Stopped (via the deferred status set in
+// Agent.Run) and exits the supervisor; recovering from that needs a
+// separate health-check mechanism (out of scope).
+//
+// per-attempt call — placing it after id/ref/a keeps the (id, status,
+// agent, scope) ordering that reads naturally.
+//
+//nolint:revive // retryCtx scopes the supervisor lifetime, not the
+func (p *Pool) runLoop(
+	id uuid.UUID, ref string, a agentpkg.Agent,
+	retryCtx context.Context, freshRun bool,
+) {
+	for attempt := 0; ; attempt++ {
+		select {
+		case p.sem <- struct{}{}:
+		case <-retryCtx.Done():
+			return
+		}
+
+		attemptCtx, cancelAttempt := context.WithCancel(retryCtx)
+
+		var runErr error
+		if freshRun && attempt == 0 {
+			runErr = a.Run(attemptCtx)
+		} else {
+			runErr = a.Start(attemptCtx)
+		}
+
+		cancelAttempt()
+		<-p.sem
+
+		status := a.Status()
+
+		if runErr == nil || !isErrorStatus(status) {
+			return
+		}
+
+		delay := p.backoffDelay(attempt)
+
+		p.logger.Warn("pool: agent failed; scheduling restart",
+			zap.String("id", id.String()), zap.String("ref", ref),
+			zap.String("status", status.String()),
+			zap.Int("attempt", attempt+1),
+			zap.Duration("delay", delay),
+			zap.Error(runErr))
+
+		p.writeFailureLog(id, status.String(), runErr)
+
+		select {
+		case <-retryCtx.Done():
+			return
+		case <-time.After(delay):
+		}
+	}
+}
+
+// backoffDelay returns the sleep duration before the (attempt+1)th
+// retry. Schedule: base, 2*base, 4*base, …, capped. attempt is
+// zero-indexed: attempt=0 means "after the first failure, before the
+// second try".
+func (p *Pool) backoffDelay(attempt int) time.Duration {
+	if attempt < 0 {
+		attempt = 0
+	}
+
+	// Detect overflow: shifting past the bit-width of int64 wraps to
+	// zero or negative, which would mean "no delay" — exactly the
+	// opposite of what we want. Fall through to the cap instead.
+	if attempt >= 32 {
+		return p.backoffCap
+	}
+
+	d := p.backoffBase << attempt
+	if d <= 0 || d > p.backoffCap {
+		return p.backoffCap
+	}
+
+	return d
+}
+
+// isErrorStatus says whether the agent's lifecycle status reflects an
+// initialization-time failure that auto-restart should retry.
+// StatusStopped (graceful exit / manual stop / runtime crash) is
+// excluded — a crashed runtime needs different handling than re-running
+// materialize.
+func isErrorStatus(s agentpkg.Status) bool {
+	switch s {
+	case agentpkg.StatusInitError, agentpkg.StatusPullError, agentpkg.StatusModelError:
+		return true
+	case agentpkg.StatusCreated, agentpkg.StatusRunning, agentpkg.StatusStopped,
+		agentpkg.StatusRemoving, agentpkg.StatusRemoved:
+		return false
+	default:
+		return false
+	}
+}
+
+// writeFailureLog appends a single timestamped line summarising a
+// Run/Start failure to <logDir>/<id>.log so `otters logs` surfaces
+// the cause even when the runtime subprocess never started. No-op
+// when logDir is unset (production wires it; unit tests typically don't).
+// errors.Join introduces newlines between sentinel + cause; we collapse
+// them with "; " so each failure is one log line.
+func (p *Pool) writeFailureLog(id uuid.UUID, status string, runErr error) {
+	if p.logDir == "" || runErr == nil {
+		return
+	}
+
+	path := filepath.Join(p.logDir, id.String()+".log")
+
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	if err != nil {
+		p.logger.Warn("pool: writeFailureLog open failed",
+			zap.String("id", id.String()), zap.Error(err))
 
 		return
 	}
-	defer func() { <-p.sem }()
+	defer func() { _ = f.Close() }()
 
-	ctx, cancel := context.WithCancel(rootCtx)
-	defer cancel()
+	msg := strings.ReplaceAll(runErr.Error(), "\n", "; ")
+	ts := time.Now().UTC().Format(time.RFC3339)
 
-	defer close(done)
-
-	if runErr := a.Start(ctx); runErr != nil {
-		p.logger.Warn("pool: agent.Start returned with error",
-			zap.String("id", id.String()),
-			zap.String("status", a.Status().String()), zap.Error(runErr))
+	if _, werr := fmt.Fprintf(f, "[%s] %s: %s\n", ts, status, msg); werr != nil {
+		p.logger.Warn("pool: writeFailureLog write failed",
+			zap.String("id", id.String()), zap.Error(werr))
 	}
 }
 
