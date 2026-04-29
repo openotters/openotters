@@ -1,0 +1,15 @@
+version: v2
+plugins:
+  # Message types — TypeScript ES modules with full JSDoc, tree-shakeable.
+  - remote: buf.build/bufbuild/es
+    out: lib/proto
+    opt:
+      - target=ts
+
+  # connect-query auto-generates `useGetInfo()`, `useListAgents()`,
+  # `useMutationListProviders()`, etc. — one typed React hook per RPC.
+  # Keeps the page code thin: no manual `useQuery(['agents'], …)` glue.
+  - remote: buf.build/connectrpc/query-es
+    out: lib/proto
+    opt:
+      - target=ts

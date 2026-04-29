@@ -364,3 +364,8 @@ $RECYCLE.BIN/
 ### Local additions ###
 # Local dev provider config may hold API keys; load from ~/.otters/ instead.
 providers.yaml
+
+# Embedded UI build output (populated by `task ui:build`); keep the
+# placeholder so `go:embed all:dist` works on a fresh checkout.
+internal/webui/dist/*
+!internal/webui/dist/.gitkeep

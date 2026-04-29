@@ -1,0 +1,4 @@
+# Copy this file to terraform.tfvars and fill in values
+# Get your Zone ID from Cloudflare dashboard: Overview > Zone ID
+
+cloudflare_zone_id = "your-zone-id-here"

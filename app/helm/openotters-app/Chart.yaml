@@ -1,0 +1,6 @@
+apiVersion: v2
+name: openotters-app
+description: OpenOtters web frontend
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
