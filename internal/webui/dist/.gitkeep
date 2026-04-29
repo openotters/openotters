@@ -1,0 +1,3 @@
+Built UI files land here via `task ui:build`. The .gitkeep keeps the
+directory present so `go:embed all:dist` succeeds even on a fresh
+checkout that hasn't run the build yet.

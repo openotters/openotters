@@ -286,7 +286,9 @@ out
 
 # Nuxt.js build / generate output
 .nuxt
-dist
+# Anchored to repo root: goreleaser writes to /dist; we still want
+# internal/webui/dist/ (with its committed .gitkeep) to be tracked.
+/dist
 
 # Gatsby files
 .cache/
