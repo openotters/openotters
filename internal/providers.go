@@ -37,6 +37,11 @@ type ProviderRegistry struct {
 
 	mu    sync.RWMutex
 	state *providersState
+
+	// writeMu serialises Add/Update/Remove. Reads keep going through mu;
+	// keeping a separate write mutex avoids holding the read mutex across
+	// the (possibly slow) atomic file rename in WriteProvidersFile.
+	writeMu sync.Mutex
 }
 
 type providersState struct {

@@ -25,6 +25,10 @@ service Runtime {
   rpc ListSessionMessages(ListSessionMessagesRequest) returns (ListSessionMessagesResponse);
   rpc GetAgentLogs(GetAgentLogsRequest) returns (GetAgentLogsResponse);
   rpc ListModels(ListModelsRequest) returns (ListModelsResponse);
+  rpc ListProviders(ListProvidersRequest) returns (ListProvidersResponse);
+  rpc AddProvider(AddProviderRequest) returns (AddProviderResponse);
+  rpc UpdateProvider(UpdateProviderRequest) returns (UpdateProviderResponse);
+  rpc RemoveProvider(RemoveProviderRequest) returns (RemoveProviderResponse);
 }
 
 message ListModelsRequest {}
@@ -91,6 +95,15 @@ message BuildAgentRequest {
   // file's directory as usual.
   string agentfile_path = 1;
   repeated string tags = 2;
+  // Inline Agentfile content. When non-empty, the daemon writes it to
+  // a temp file in its data dir and builds from there — used by the
+  // web UI's "create agent on the fly" flow where the user has no
+  // path on the daemon host. ADD/CONTEXT file:// references won't
+  // resolve under inline mode (the temp dir has no siblings); pass an
+  // agentfile_path instead when local files are needed.
+  // Mutually exclusive with agentfile_path; if both are set, content
+  // wins.
+  bytes content = 3;
 }
 
 message BuildAgentResponse {
@@ -326,3 +339,44 @@ message SessionMessage {
 message ListSessionMessagesResponse {
   repeated SessionMessage messages = 1;
 }
+
+// Provider mirrors internal.ProviderConfig — the on-disk shape of an
+// entry in ~/.otters/providers.yaml. api_key may be a plain value or
+// a "${ENV_VAR}" reference; the daemon expands env at load. models
+// (when non-empty) is the allowlist of model names this provider
+// advertises; an empty list means "let the daemon advertise whatever
+// the provider's API discovers / Catwalk knows about".
+message Provider {
+  string name = 1;
+  string api_key = 2;
+  string api_base = 3;
+  repeated string models = 4;
+}
+
+message ListProvidersRequest {}
+
+message ListProvidersResponse {
+  repeated Provider providers = 1;
+}
+
+message AddProviderRequest {
+  Provider provider = 1;
+}
+
+message AddProviderResponse {
+  Provider provider = 1;
+}
+
+message UpdateProviderRequest {
+  Provider provider = 1;
+}
+
+message UpdateProviderResponse {
+  Provider provider = 1;
+}
+
+message RemoveProviderRequest {
+  string name = 1;
+}
+
+message RemoveProviderResponse {}
