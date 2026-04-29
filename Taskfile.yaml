@@ -40,6 +40,11 @@ tasks:
     cmds:
       - go test -race ./...
 
+  test:bdd:
+    desc: Run the Gherkin/godog functional suites under tests/bdd/. Each .feature documents a behaviour or captures a regression.
+    cmds:
+      - go test -v -count=1 ./tests/bdd/... {{.CLI_ARGS}}
+
   clean:
     desc: Remove build artifacts and clear the test cache.
     cmds:
