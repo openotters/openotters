@@ -1,25 +1,39 @@
-//nolint:cyclop // CLI bootstrap; complexity is in Serve.Run, justified there
 package commands
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
+	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
+	"time"
 
 	"github.com/merlindorin/go-shared/pkg/cmd"
-	daemonv1 "github.com/openotters/openotters/api/v1"
+	"github.com/openotters/openotters/api/v1/daemonv1connect"
 	"github.com/openotters/openotters/internal"
+	"github.com/openotters/openotters/internal/webui"
 	"go.uber.org/zap"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/reflection"
+	"golang.org/x/net/http2"
+	"golang.org/x/net/http2/h2c"
 )
 
 type Serve struct {
 	SocketPath   string `help:"Unix socket path" default:""`
 	Runtime      string `help:"Path to a local runtime binary (skips pulling the runtime image from OCI)" default:""`
 	RegistryAddr string `help:"TCP bind address for the embedded OCI registry (overrides OTTERS_REGISTRY_ADDR)" default:""`
+	// HTTPAddr defaults to a loopback bind so the embedded UI and
+	// browser-based clients work out of the box. Override with
+	// --http-addr to change port; pass --no-http to disable the TCP
+	// listener entirely (CLI-only mode).
+	HTTPAddr       string   `help:"TCP listener address for the Connect/gRPC-Web API and embedded web UI. Loopback-only by default; non-loopback requires --auth-token." default:"127.0.0.1:5000"`
+	NoHTTP         bool     `name:"no-http" help:"Disable the TCP listener; only the Unix socket (CLI) is exposed." default:"false"`
+	NoUI           bool     `name:"no-ui" help:"Don't serve the embedded web UI on the TCP listener; only the Connect/gRPC API is reachable." default:"false"`
+	UIPath         string   `name:"ui-path" help:"Serve the web UI from this directory instead of the binary's embedded build. Useful for running a local Next.js export." default:""`
+	AllowedOrigins []string `help:"CORS Access-Control-Allow-Origin values for the TCP listener (repeatable)." default:"http://localhost:3000,http://localhost:3030"`
+	AuthToken      string   `help:"Bearer token required on the TCP listener when binding to a non-loopback address." default:""`
 }
 
 //nolint:funlen // single-shot daemon bootstrap reads more clearly straight-through
@@ -109,23 +123,209 @@ func (d *Serve) Run(ctx context.Context, common *cmd.Commons, sqlite *cmd.SQLite
 		logger.Warn("failed to restore agents", zap.Error(restoreErr))
 	}
 
-	srv := grpc.NewServer()
-	daemonv1.RegisterRuntimeServer(srv, internal.NewGRPCServer(dm))
-	reflection.Register(srv)
+	// Single Connect-Go handler serves gRPC, gRPC-Web, and Connect from
+	// the same code path. The protocol is content-type-detected per
+	// request, so the CLI (gRPC over h2c) and the browser (Connect/JSON
+	// or gRPC-Web binary) hit the same handler implementation.
+	connectPath, connectHandler := daemonv1connect.NewRuntimeHandler(
+		internal.NewRuntimeHandler(dm, providers),
+	)
+
+	// Unix-socket mux: API only. The CLI never asks for `/`, so we
+	// keep the UI handler off this transport.
+	apiMux := http.NewServeMux()
+	apiMux.Handle(connectPath, connectHandler)
+
+	// h2c so gRPC clients (the CLI) can negotiate HTTP/2 cleartext over
+	// the Unix socket and (if enabled) the TCP listener without a TLS
+	// handshake.
+	unixRoot := h2c.NewHandler(apiMux, &http2.Server{})
 
 	lc := net.ListenConfig{}
-	lis, err := lc.Listen(ctx, "unix", socketPath)
+	unixL, err := lc.Listen(ctx, "unix", socketPath)
 	if err != nil {
 		return err
 	}
 
+	unixSrv := &http.Server{Handler: unixRoot, ReadHeaderTimeout: 30 * time.Second}
+
 	logger.Info("daemon listening", zap.String("socket", socketPath))
 
+	// TCP listener — exposed by default so the embedded web UI works
+	// out of the box. Pass --no-http to disable; loopback-only by
+	// default so the listener stays inside the box without --auth-token.
+	var tcpSrv *http.Server
+
+	if !d.NoHTTP && d.HTTPAddr != "" {
+		srv, startErr := d.startTCPListener(ctx, logger, connectPath, connectHandler)
+		if startErr != nil {
+			return startErr
+		}
+
+		tcpSrv = srv
+	}
+
+	// Shutdown goroutine: the parent ctx has fired, so we can't use it
+	// as the parent of the bounded shutdown deadline (it would be
+	// already cancelled). context.Background is intentional here.
+	//nolint:gosec // G118: ctx is the cancelled trigger; shutdown needs a fresh deadline.
 	go func() {
 		<-ctx.Done()
 		logger.Info("shutting down daemon")
-		srv.GracefulStop()
+
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		_ = unixSrv.Shutdown(shutdownCtx)
+
+		if tcpSrv != nil {
+			_ = tcpSrv.Shutdown(shutdownCtx)
+		}
 	}()
 
-	return srv.Serve(lis)
+	if serveErr := unixSrv.Serve(unixL); serveErr != nil && !errors.Is(serveErr, http.ErrServerClosed) {
+		return serveErr
+	}
+
+	return nil
+}
+
+// startTCPListener builds the TCP-side mux (Connect at its canonical
+// path, an `/api/...` alias for same-origin browser calls, and the
+// embedded UI on `/`), wraps it in h2c + auth + CORS, and begins
+// serving in a goroutine. Returns the *http.Server so the caller can
+// orchestrate shutdown alongside the Unix listener.
+func (d *Serve) startTCPListener(
+	ctx context.Context,
+	logger *zap.Logger,
+	connectPath string,
+	connectHandler http.Handler,
+) (*http.Server, error) {
+	if !isLoopback(d.HTTPAddr) && d.AuthToken == "" {
+		return nil, fmt.Errorf(
+			"--http-addr %s binds to a non-loopback address; pass --auth-token to opt in",
+			d.HTTPAddr,
+		)
+	}
+
+	// TCP mux: the API at its canonical Connect path, plus an
+	// `/api/...` alias so a same-origin browser can reach the daemon
+	// without a CORS preflight (the embedded UI is served from the
+	// same listener). The web UI catches everything else; concrete
+	// paths win in http.ServeMux's matching, so connectPath and
+	// `/api/<connectPath>` both beat `/`.
+	tcpMux := http.NewServeMux()
+	tcpMux.Handle(connectPath, connectHandler)
+	// StripPrefix lets the same Connect handler service requests
+	// arriving with the `/api` prefix — Connect routes by procedure
+	// name from the (stripped) URL path, identical to the canonical
+	// mount.
+	tcpMux.Handle("/api"+connectPath, http.StripPrefix("/api", connectHandler))
+
+	if !d.NoUI {
+		tcpMux.Handle("/", webui.Handler(d.UIPath))
+	}
+
+	wrapped := h2c.NewHandler(tcpMux, &http2.Server{})
+	if d.AuthToken != "" {
+		wrapped = withAuthToken(wrapped, d.AuthToken)
+	}
+
+	wrapped = withCORS(wrapped, d.AllowedOrigins)
+	srv := &http.Server{Handler: wrapped, ReadHeaderTimeout: 30 * time.Second}
+
+	lc := net.ListenConfig{}
+
+	tcpL, err := lc.Listen(ctx, "tcp", d.HTTPAddr)
+	if err != nil {
+		return nil, fmt.Errorf("listening on %s: %w", d.HTTPAddr, err)
+	}
+
+	go func() {
+		logger.Info("daemon TCP listener",
+			zap.String("addr", d.HTTPAddr),
+			zap.Bool("ui", !d.NoUI),
+		)
+
+		if serveErr := srv.Serve(tcpL); serveErr != nil && !errors.Is(serveErr, http.ErrServerClosed) {
+			logger.Error("TCP serve error", zap.Error(serveErr))
+		}
+	}()
+
+	return srv, nil
+}
+
+// isLoopback reports whether addr binds exclusively to a loopback
+// interface. "127.x", "::1", and "localhost" qualify; "0.0.0.0", an
+// empty host, or any external IP do not. Used as the safety check for
+// the --auth-token requirement.
+func isLoopback(addr string) bool {
+	host, _, err := net.SplitHostPort(addr)
+	if err != nil {
+		// No port means we can't parse — treat as non-loopback to fail
+		// safe.
+		return false
+	}
+
+	if host == "" || host == "0.0.0.0" || host == "::" {
+		return false
+	}
+
+	if host == "localhost" {
+		return true
+	}
+
+	if ip := net.ParseIP(host); ip != nil {
+		return ip.IsLoopback()
+	}
+
+	return false
+}
+
+// withAuthToken rejects any request without `Authorization: Bearer
+// <token>`. Connect's protocol detection runs after the request body
+// is examined, so we intercept at the HTTP layer.
+func withAuthToken(next http.Handler, token string) http.Handler {
+	expected := "Bearer " + token
+
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != expected {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+
+		next.ServeHTTP(w, r)
+	})
+}
+
+// withCORS adds the minimum CORS dance the browser needs to call
+// Connect endpoints from a different origin. We match exact origins
+// from the allowlist; "*" is intentionally not supported because
+// `Authorization` headers are involved on the auth-token path.
+func withCORS(next http.Handler, allowed []string) http.Handler {
+	allowSet := make(map[string]struct{}, len(allowed))
+	for _, o := range allowed {
+		allowSet[strings.TrimSpace(o)] = struct{}{}
+	}
+
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		origin := r.Header.Get("Origin")
+		if _, ok := allowSet[origin]; ok {
+			w.Header().Set("Access-Control-Allow-Origin", origin)
+			w.Header().Set("Access-Control-Allow-Credentials", "true")
+			w.Header().Set("Vary", "Origin")
+		}
+
+		if r.Method == http.MethodOptions {
+			w.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS")
+			w.Header().Set("Access-Control-Allow-Headers",
+				"Content-Type, Connect-Protocol-Version, Connect-Timeout-Ms, Authorization")
+			w.Header().Set("Access-Control-Max-Age", "86400")
+			w.WriteHeader(http.StatusNoContent)
+
+			return
+		}
+
+		next.ServeHTTP(w, r)
+	})
 }
