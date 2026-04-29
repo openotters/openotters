@@ -1,0 +1,54 @@
+name: UI
+
+# Lightweight check that the embedded web UI (app/) builds and lints
+# cleanly on every PR that touches it. The UI is shipped baked into
+# the ottersd binary via `go:embed all:dist`, so a UI build break ==
+# a release break — catching it here keeps the release path green.
+#
+# Intentionally separate from `test.yml` so the Go test matrix isn't
+# slowed by `npm ci` on every push, and from `release-check.yml` so
+# config validation stays a sub-second job.
+on:
+  pull_request:
+    paths:
+      - 'app/**'
+      - '.github/workflows/ui.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'app/**'
+      - '.github/workflows/ui.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: app/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Build static export
+        run: npm run build
+
+      # `app/out/` is the artefact that goreleaser's before-hook
+      # rsyncs into internal/webui/dist. Confirming index.html exists
+      # here means the release pipeline will have something to embed.
+      - name: Verify export shape
+        run: test -f out/index.html

@@ -12,6 +12,9 @@ on:
       - '.github/workflows/release-check.yml'
       - 'cmd/otters/**'
       - 'cmd/ottersd/**'
+      - 'internal/webui/**'
+      - 'app/package.json'
+      - 'app/package-lock.json'
       - 'go.mod'
       - 'go.sum'
   push:

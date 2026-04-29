@@ -40,6 +40,17 @@ jobs:
           go-version-file: go.mod
           cache: true
 
+      # The web UI is embedded into ottersd via `go:embed all:dist`.
+      # GoReleaser's before-hooks run `npm ci && npm run build` under
+      # ./app and rsync the export into internal/webui/dist before any
+      # Go binary is built — Node must be on the PATH for that to work.
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: app/package-lock.json
+
       - name: Mint tap App installation token
         id: tap-token
         uses: actions/create-github-app-token@v1

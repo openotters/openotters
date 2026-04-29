@@ -15,6 +15,26 @@ dotenv:
   - .env.default
 
 tasks:
+  ui:build:
+    desc: |
+      Build the web UI static export and copy it into the daemon's
+      embedded UI directory. The result is picked up by the next
+      `go build` via `go:embed all:dist`. Expects the Next.js project
+      at ./app (override with WEB_APP_DIR=...).
+    vars:
+      WEB_APP_DIR: '{{.WEB_APP_DIR | default "./app"}}'
+      DIST_DIR: internal/webui/dist
+    cmds:
+      - test -d "{{.WEB_APP_DIR}}" || (echo "Web app not found at {{.WEB_APP_DIR}}; set WEB_APP_DIR or restore the directory" && exit 1)
+      - cd "{{.WEB_APP_DIR}}" && npm run build
+      - rsync -a --delete --exclude='.gitkeep' "{{.WEB_APP_DIR}}/out/" "{{.DIST_DIR}}/"
+      - echo "embedded UI updated; run 'go build ./cmd/ottersd' to bake it into the binary"
+
+  ui:clean:
+    desc: Empty the embedded UI directory back to the .gitkeep placeholder.
+    cmds:
+      - find internal/webui/dist -mindepth 1 ! -name .gitkeep -delete
+
   test:
     desc: Run unit tests with the race detector.
     cmds:

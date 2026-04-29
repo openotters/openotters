@@ -5,6 +5,17 @@ project_name: otters
 before:
   hooks:
     - go mod tidy
+    # The Next.js static export is embedded into ottersd via
+    # `go:embed all:dist` (internal/webui/dist). The repo only commits
+    # `dist/.gitkeep`, so every release rebuilds the bundle from
+    # source under app/ to keep the binary in sync with the UI code.
+    # `npm ci` is hermetic; `npm run build` produces app/out which is
+    # then mirrored into internal/webui/dist before any Go build runs.
+    - cmd: npm ci
+      dir: app
+    - cmd: npm run build
+      dir: app
+    - rsync -a --delete --exclude=.gitkeep app/out/ internal/webui/dist/
 
 builds:
   - id: otters
@@ -86,14 +97,28 @@ brews:
       To run it in the foreground for debugging:
         ottersd serve
 
-      Default paths:
-        socket:      ~/.otters/otters.sock
-        agent data:  ~/.otters/agents
-        logs:        #{var}/log/ottersd.{log,err.log} (service mode only)
+      Default paths and endpoints:
+        socket:        ~/.otters/otters.sock
+        agent data:    ~/.otters/agents
+        logs:          #{var}/log/ottersd.{log,err.log} (service mode only)
+        web UI + API:  http://127.0.0.1:5000  (loopback by default)
+
+      The daemon ships with an embedded web UI baked into the binary —
+      no separate install. Once ottersd is running, open
+      http://127.0.0.1:5000 in your browser. The Connect/gRPC API is
+      reachable on the same listener under /api.
+
+      Customise the listener:
+        ottersd serve --http-addr 127.0.0.1:5050   # change the port
+        ottersd serve --no-ui                      # API only
+        ottersd serve --no-http                    # CLI only (Unix socket)
+
+      Non-loopback binds require --auth-token.
 
       Get started once the daemon is running:
         otters --help
         otters run <Agentfile>
+        open http://127.0.0.1:5000
 
       Stop the service:
         brew services stop otters
