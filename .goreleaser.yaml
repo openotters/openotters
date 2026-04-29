@@ -11,11 +11,13 @@ before:
     # source under app/ to keep the binary in sync with the UI code.
     # `npm ci` is hermetic; `npm run build` produces app/out which is
     # then mirrored into internal/webui/dist before any Go build runs.
-    - cmd: npm ci
-      dir: app
-    - cmd: npm run build
-      dir: app
-    - rsync -a --delete --exclude=.gitkeep app/out/ internal/webui/dist/
+    #
+    # `before.hooks` entries are strings split by shellwords, so each
+    # multi-step command goes through `sh -c "..."` to keep `cd` and
+    # `&&` working as expected.
+    - sh -c "cd app && npm ci"
+    - sh -c "cd app && npm run build"
+    - sh -c "rsync -a --delete --exclude=.gitkeep app/out/ internal/webui/dist/"
 
 builds:
   - id: otters
