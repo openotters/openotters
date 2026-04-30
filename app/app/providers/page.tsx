@@ -4,6 +4,8 @@ import { useMutation, useQuery } from "@connectrpc/connect-query"
 import { ExternalLink, Key, MoreVertical, Pencil, Plug, Plus, Trash2 } from "lucide-react"
 import Link from "next/link"
 import { useQueryClient } from "@tanstack/react-query"
+import { useMemo, useState } from "react"
+import { SortSelect, SORT_DEFAULT_ID, type SortOption } from "@/components/sort-select"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -14,7 +16,25 @@ import {
 	DropdownMenuSeparator,
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import type { Provider } from "@/lib/proto/v1/daemon_pb"
 import { listProviders, removeProvider } from "@/lib/proto/v1/daemon-Runtime_connectquery"
+import { useStableSort } from "@/lib/use-stable-sort"
+
+const SORT_OPTIONS: SortOption[] = [
+	{ id: "name-asc", label: "Name (A→Z)" },
+	{ id: "name-desc", label: "Name (Z→A)" },
+]
+
+function compareFor(sortId: string): ((a: Provider, b: Provider) => number) | null {
+	switch (sortId) {
+		case "name-asc":
+			return (a, b) => a.name.localeCompare(b.name)
+		case "name-desc":
+			return (a, b) => b.name.localeCompare(a.name)
+		default:
+			return null
+	}
+}
 
 export default function ProvidersPage() {
 	const queryClient = useQueryClient()
@@ -28,6 +48,13 @@ export default function ProvidersPage() {
 	})
 
 	const providers = data?.providers ?? []
+	const [sortId, setSortId] = useState<string>(SORT_DEFAULT_ID)
+
+	const sorted = useStableSort<Provider>(
+		providers,
+		(p) => p.name,
+		useMemo(() => ({ compare: compareFor(sortId) }), [sortId]),
+	)
 
 	return (
 		<div className="space-y-6">
@@ -52,11 +79,22 @@ export default function ProvidersPage() {
 				</div>
 			)}
 
+			{!error && providers.length > 0 && (
+				<div className="flex flex-wrap items-center gap-3">
+					<SortSelect
+						className="w-[220px]"
+						onValueChange={setSortId}
+						options={SORT_OPTIONS}
+						value={sortId}
+					/>
+				</div>
+			)}
+
 			{isLoading && <p className="text-muted-foreground">Loading providers…</p>}
 
-			{!isLoading && !error && providers.length > 0 && (
+			{!isLoading && !error && sorted.length > 0 && (
 				<div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-					{providers.map((provider) => (
+					{sorted.map((provider) => (
 						<Card className="group" key={provider.name}>
 							<CardHeader className="flex flex-row items-start justify-between space-y-0 pb-2">
 								<div className="flex items-start gap-3">

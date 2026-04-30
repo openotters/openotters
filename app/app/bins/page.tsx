@@ -3,7 +3,9 @@
 import { useMutation, useQuery } from "@connectrpc/connect-query"
 import { useQueryClient } from "@tanstack/react-query"
 import { Clock, HardDrive, MoreVertical, Terminal, Trash2 } from "lucide-react"
+import { useMemo, useState } from "react"
 import { AddBinButton } from "@/components/add-bin-button"
+import { SortSelect, SORT_DEFAULT_ID, type SortOption } from "@/components/sort-select"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import {
@@ -12,9 +14,39 @@ import {
 	DropdownMenuItem,
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import type { ImageInfo } from "@/lib/proto/v1/daemon_pb"
 import { listImages, removeImage } from "@/lib/proto/v1/daemon-Runtime_connectquery"
+import { useStableSort } from "@/lib/use-stable-sort"
 
 const BIN_ARTIFACT_TYPE = "application/vnd.openotters.bin.v1"
+
+const SORT_OPTIONS: SortOption[] = [
+	{ id: "ref-asc", label: "Ref (A→Z)" },
+	{ id: "ref-desc", label: "Ref (Z→A)" },
+	{ id: "size-desc", label: "Size (largest)" },
+	{ id: "size-asc", label: "Size (smallest)" },
+	{ id: "newest", label: "Newest first" },
+	{ id: "oldest", label: "Oldest first" },
+]
+
+function compareFor(sortId: string): ((a: ImageInfo, b: ImageInfo) => number) | null {
+	switch (sortId) {
+		case "ref-asc":
+			return (a, b) => a.ref.localeCompare(b.ref)
+		case "ref-desc":
+			return (a, b) => b.ref.localeCompare(a.ref)
+		case "size-desc":
+			return (a, b) => Number(b.size - a.size)
+		case "size-asc":
+			return (a, b) => Number(a.size - b.size)
+		case "newest":
+			return (a, b) => Number(b.createdAt - a.createdAt)
+		case "oldest":
+			return (a, b) => Number(a.createdAt - b.createdAt)
+		default:
+			return null
+	}
+}
 
 function formatSize(bytes: bigint): string {
 	const n = Number(bytes)
@@ -44,7 +76,15 @@ export default function BinsPage() {
 		},
 	})
 
+	const [sortId, setSortId] = useState<string>(SORT_DEFAULT_ID)
+
 	const bins = (data?.images ?? []).filter((i) => i.artifactType === BIN_ARTIFACT_TYPE)
+
+	const sorted = useStableSort<ImageInfo>(
+		bins,
+		(b) => b.digest,
+		useMemo(() => ({ compare: compareFor(sortId) }), [sortId]),
+	)
 
 	return (
 		<div className="space-y-6">
@@ -65,11 +105,22 @@ export default function BinsPage() {
 				</div>
 			)}
 
+			{!error && bins.length > 0 && (
+				<div className="flex flex-wrap items-center gap-3">
+					<SortSelect
+						className="w-[220px]"
+						onValueChange={setSortId}
+						options={SORT_OPTIONS}
+						value={sortId}
+					/>
+				</div>
+			)}
+
 			{isLoading && <p className="text-muted-foreground">Loading bins…</p>}
 
-			{!isLoading && !error && bins.length > 0 && (
+			{!isLoading && !error && sorted.length > 0 && (
 				<div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-					{bins.map((bin) => (
+					{sorted.map((bin) => (
 						<Card className="group" key={bin.digest}>
 							<CardHeader className="flex flex-row items-start justify-between space-y-0 pb-2">
 								<div className="flex items-start gap-3">
