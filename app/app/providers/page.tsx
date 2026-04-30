@@ -5,7 +5,7 @@ import { ExternalLink, Key, MoreVertical, Pencil, Plug, Plus, Trash2 } from "luc
 import Link from "next/link"
 import { useQueryClient } from "@tanstack/react-query"
 import { useMemo, useState } from "react"
-import { SortSelect, SORT_DEFAULT_ID, type SortOption } from "@/components/sort-select"
+import { SortSelect, type SortOption } from "@/components/sort-select"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -25,14 +25,14 @@ const SORT_OPTIONS: SortOption[] = [
 	{ id: "name-desc", label: "Name (Z→A)" },
 ]
 
-function compareFor(sortId: string): ((a: Provider, b: Provider) => number) | null {
+const NAME_ASC = (a: Provider, b: Provider) => a.name.localeCompare(b.name)
+
+function compareFor(sortId: string): (a: Provider, b: Provider) => number {
 	switch (sortId) {
-		case "name-asc":
-			return (a, b) => a.name.localeCompare(b.name)
 		case "name-desc":
 			return (a, b) => b.name.localeCompare(a.name)
 		default:
-			return null
+			return NAME_ASC
 	}
 }
 
@@ -48,13 +48,10 @@ export default function ProvidersPage() {
 	})
 
 	const providers = data?.providers ?? []
-	const [sortId, setSortId] = useState<string>(SORT_DEFAULT_ID)
+	const [sortId, setSortId] = useState<string>("name-asc")
 
-	const sorted = useStableSort<Provider>(
-		providers,
-		(p) => p.name,
-		useMemo(() => ({ compare: compareFor(sortId) }), [sortId]),
-	)
+	const compare = useMemo(() => compareFor(sortId), [sortId])
+	const sorted = useStableSort<Provider>(providers, (p) => p.name, compare)
 
 	return (
 		<div className="space-y-6">

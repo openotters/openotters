@@ -5,7 +5,7 @@ import { Plus, Search } from "lucide-react"
 import Link from "next/link"
 import { useMemo, useState } from "react"
 import { AgentCard } from "@/components/agent-card"
-import { SortSelect, SORT_DEFAULT_ID, type SortOption } from "@/components/sort-select"
+import { SortSelect, type SortOption } from "@/components/sort-select"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import type { AgentInfo } from "@/lib/proto/v1/daemon_pb"
@@ -33,10 +33,10 @@ const STATUS_RANK: Record<string, number> = {
 	stopped: 4,
 }
 
-function compareFor(sortId: string): ((a: AgentInfo, b: AgentInfo) => number) | null {
+const NAME_ASC = (a: AgentInfo, b: AgentInfo) => a.name.localeCompare(b.name)
+
+function compareFor(sortId: string): (a: AgentInfo, b: AgentInfo) => number {
 	switch (sortId) {
-		case "name-asc":
-			return (a, b) => a.name.localeCompare(b.name)
 		case "name-desc":
 			return (a, b) => b.name.localeCompare(a.name)
 		case "status":
@@ -48,7 +48,7 @@ function compareFor(sortId: string): ((a: AgentInfo, b: AgentInfo) => number) | 
 		case "oldest":
 			return (a, b) => Number(a.createdAt - b.createdAt)
 		default:
-			return null
+			return NAME_ASC
 	}
 }
 
@@ -56,14 +56,11 @@ export default function AgentsPage() {
 	const { data, isLoading, error } = useQuery(listAgents, {})
 	const agents = data?.agents ?? []
 
-	const [sortId, setSortId] = useState<string>(SORT_DEFAULT_ID)
+	const [sortId, setSortId] = useState<string>("name-asc")
 	const [search, setSearch] = useState<string>("")
 
-	const sorted = useStableSort<AgentInfo>(
-		agents,
-		(a) => a.id,
-		useMemo(() => ({ compare: compareFor(sortId) }), [sortId]),
-	)
+	const compare = useMemo(() => compareFor(sortId), [sortId])
+	const sorted = useStableSort<AgentInfo>(agents, (a) => a.id, compare)
 
 	const filtered = useMemo(() => {
 		const q = search.trim().toLowerCase()

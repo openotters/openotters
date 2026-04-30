@@ -3,7 +3,7 @@
 import { useQuery } from "@connectrpc/connect-query"
 import { Cpu, Plug } from "lucide-react"
 import { useMemo, useState } from "react"
-import { SortSelect, SORT_DEFAULT_ID, type SortOption } from "@/components/sort-select"
+import { SortSelect, type SortOption } from "@/components/sort-select"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import type { Model } from "@/lib/proto/v1/daemon_pb"
@@ -31,25 +31,25 @@ interface ProviderGroup {
 	models: Model[]
 }
 
-function compareProviders(sortId: string): ((a: ProviderGroup, b: ProviderGroup) => number) | null {
+const PROVIDER_NAME_ASC = (a: ProviderGroup, b: ProviderGroup) =>
+	a.name.localeCompare(b.name)
+
+function compareProviders(sortId: string): (a: ProviderGroup, b: ProviderGroup) => number {
 	switch (sortId) {
-		case "name-asc":
-			return (a, b) => a.name.localeCompare(b.name)
 		case "name-desc":
 			return (a, b) => b.name.localeCompare(a.name)
 		default:
-			return null
+			return PROVIDER_NAME_ASC
 	}
 }
 
-function compareModels(sortId: string): ((a: Model, b: Model) => number) | null {
+const MODEL_NAME_ASC = (a: Model, b: Model) =>
+	(a.displayName || a.name).localeCompare(b.displayName || b.name)
+
+function compareModels(sortId: string): (a: Model, b: Model) => number {
 	switch (sortId) {
-		case "name-asc":
-			return (a, b) =>
-				(a.displayName || a.name).localeCompare(b.displayName || b.name)
 		case "name-desc":
-			return (a, b) =>
-				(b.displayName || b.name).localeCompare(a.displayName || a.name)
+			return (a, b) => (b.displayName || b.name).localeCompare(a.displayName || a.name)
 		case "ctx-desc":
 			return (a, b) => Number(b.contextWindow - a.contextWindow)
 		case "ctx-asc":
@@ -59,7 +59,7 @@ function compareModels(sortId: string): ((a: Model, b: Model) => number) | null 
 		case "cost-desc":
 			return (a, b) => b.costInputPer1m - a.costInputPer1m
 		default:
-			return null
+			return MODEL_NAME_ASC
 	}
 }
 
@@ -68,11 +68,8 @@ function compareModels(sortId: string): ((a: Model, b: Model) => number) | null 
 // move each group into its own component to keep React's hook order
 // rules happy when the number of providers changes between renders.
 function SortedModelGroup({ provider, models, sortId }: { provider: string; models: Model[]; sortId: string }) {
-	const sorted = useStableSort<Model>(
-		models,
-		(m) => m.ref,
-		useMemo(() => ({ compare: compareModels(sortId) }), [sortId]),
-	)
+	const compare = useMemo(() => compareModels(sortId), [sortId])
+	const sorted = useStableSort<Model>(models, (m) => m.ref, compare)
 
 	return (
 		<div className="space-y-3">
@@ -134,8 +131,8 @@ export default function ModelsPage() {
 	const { data, isLoading, error } = useQuery(listModels, {})
 	const models = data?.models ?? []
 
-	const [providerSortId, setProviderSortId] = useState<string>(SORT_DEFAULT_ID)
-	const [modelSortId, setModelSortId] = useState<string>(SORT_DEFAULT_ID)
+	const [providerSortId, setProviderSortId] = useState<string>("name-asc")
+	const [modelSortId, setModelSortId] = useState<string>("name-asc")
 
 	// Group flattened models by provider; the proto returns one row per
 	// model, but the page renders per-provider sections.
@@ -149,11 +146,8 @@ export default function ModelsPage() {
 		return [...byProvider.entries()].map(([name, m]) => ({ name, models: m }))
 	}, [models])
 
-	const sortedGroups = useStableSort<ProviderGroup>(
-		groups,
-		(g) => g.name,
-		useMemo(() => ({ compare: compareProviders(providerSortId) }), [providerSortId]),
-	)
+	const compareGroups = useMemo(() => compareProviders(providerSortId), [providerSortId])
+	const sortedGroups = useStableSort<ProviderGroup>(groups, (g) => g.name, compareGroups)
 
 	return (
 		<div className="space-y-6">
@@ -175,14 +169,12 @@ export default function ModelsPage() {
 				<div className="flex flex-wrap items-center gap-3">
 					<SortSelect
 						className="w-[220px]"
-						defaultLabel="Providers: insertion order"
 						onValueChange={setProviderSortId}
 						options={PROVIDER_SORT_OPTIONS}
 						value={providerSortId}
 					/>
 					<SortSelect
 						className="w-[260px]"
-						defaultLabel="Models: insertion order"
 						onValueChange={setModelSortId}
 						options={MODEL_SORT_OPTIONS}
 						value={modelSortId}

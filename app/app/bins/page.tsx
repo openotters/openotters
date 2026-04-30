@@ -5,7 +5,7 @@ import { useQueryClient } from "@tanstack/react-query"
 import { Clock, HardDrive, MoreVertical, Terminal, Trash2 } from "lucide-react"
 import { useMemo, useState } from "react"
 import { AddBinButton } from "@/components/add-bin-button"
-import { SortSelect, SORT_DEFAULT_ID, type SortOption } from "@/components/sort-select"
+import { SortSelect, type SortOption } from "@/components/sort-select"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import {
@@ -29,10 +29,10 @@ const SORT_OPTIONS: SortOption[] = [
 	{ id: "oldest", label: "Oldest first" },
 ]
 
-function compareFor(sortId: string): ((a: ImageInfo, b: ImageInfo) => number) | null {
+const REF_ASC = (a: ImageInfo, b: ImageInfo) => a.ref.localeCompare(b.ref)
+
+function compareFor(sortId: string): (a: ImageInfo, b: ImageInfo) => number {
 	switch (sortId) {
-		case "ref-asc":
-			return (a, b) => a.ref.localeCompare(b.ref)
 		case "ref-desc":
 			return (a, b) => b.ref.localeCompare(a.ref)
 		case "size-desc":
@@ -44,7 +44,7 @@ function compareFor(sortId: string): ((a: ImageInfo, b: ImageInfo) => number) | 
 		case "oldest":
 			return (a, b) => Number(a.createdAt - b.createdAt)
 		default:
-			return null
+			return REF_ASC
 	}
 }
 
@@ -76,15 +76,12 @@ export default function BinsPage() {
 		},
 	})
 
-	const [sortId, setSortId] = useState<string>(SORT_DEFAULT_ID)
+	const [sortId, setSortId] = useState<string>("ref-asc")
 
 	const bins = (data?.images ?? []).filter((i) => i.artifactType === BIN_ARTIFACT_TYPE)
 
-	const sorted = useStableSort<ImageInfo>(
-		bins,
-		(b) => b.digest,
-		useMemo(() => ({ compare: compareFor(sortId) }), [sortId]),
-	)
+	const compare = useMemo(() => compareFor(sortId), [sortId])
+	const sorted = useStableSort<ImageInfo>(bins, (b) => b.digest, compare)
 
 	return (
 		<div className="space-y-6">
