@@ -210,8 +210,8 @@ func fetchManifestInfo(ctx context.Context, addr, repo, tag string) (*manifestIn
 			digest:       digest,
 			artifactType: index.ArtifactType,
 			size:         total,
-			description:  index.Annotations[v1.AnnotationDescription],
-			source:       index.Annotations[v1.AnnotationSource],
+			description:  pickLabel(index.Annotations, v1.AnnotationDescription, "description"),
+			source:       pickLabel(index.Annotations, v1.AnnotationSource, "source"),
 		}, nil
 	}
 
@@ -229,9 +229,25 @@ func fetchManifestInfo(ctx context.Context, addr, repo, tag string) (*manifestIn
 		digest:       digest,
 		artifactType: manifest.ArtifactType,
 		size:         total,
-		description:  manifest.Annotations[v1.AnnotationDescription],
-		source:       manifest.Annotations[v1.AnnotationSource],
+		description:  pickLabel(manifest.Annotations, v1.AnnotationDescription, "description"),
+		source:       pickLabel(manifest.Annotations, v1.AnnotationSource, "source"),
 	}, nil
+}
+
+// pickLabel returns the first non-empty value among the listed
+// annotation keys. Lets us prefer the OCI standard
+// `org.opencontainers.image.description` / `…image.source` labels
+// while still surfacing values stamped with the bare `description` /
+// `source` keys that hand-written Agentfiles (e.g. the meta-otter
+// and the example scripts) tend to use.
+func pickLabel(annotations map[string]string, keys ...string) string {
+	for _, k := range keys {
+		if v := annotations[k]; v != "" {
+			return v
+		}
+	}
+
+	return ""
 }
 
 func fetchManifestRaw(ctx context.Context, addr, repo, tag string) ([]byte, string, error) {

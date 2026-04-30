@@ -47,6 +47,10 @@ RUNTIME ghcr.io/openotters/runtime:latest
 MODEL anthropic/claude-haiku-4-5-20251001
 NAME hello
 
+# Optional but recommended — surfaces in the image listing + catalog tab.
+LABEL org.opencontainers.image.description="A friendly assistant. Keep replies short and direct."
+LABEL org.opencontainers.image.source="https://github.com/your-org/your-repo"
+
 CONTEXT SOUL <<EOF
 You are a friendly assistant. Keep replies short and direct.
 EOF
@@ -62,6 +66,8 @@ interface WizardState {
 	runtime: string
 	modelRef: string
 	agentName: string
+	description: string
+	source: string
 	soul: string
 	bins: SelectedBin[]
 }
@@ -71,6 +77,8 @@ const blank: WizardState = {
 	runtime: DEFAULT_RUNTIME,
 	modelRef: "",
 	agentName: "",
+	description: "",
+	source: "",
 	soul: SOUL_TEMPLATE,
 	bins: [],
 }
@@ -91,6 +99,13 @@ function shortBinName(ref: string): string {
 // state. Mirrors the directives accepted by `agentbuild.FromFile`;
 // keeping the formatting consistent (single blank line between
 // sections) so the preview reads like a hand-written file.
+// escapeLabelValue makes a string safe to embed in `LABEL key="value"`.
+// Newlines become `\n`, double-quotes get backslash-escaped. Keeps the
+// generated Agentfile parseable regardless of what the user typed.
+function escapeLabelValue(v: string): string {
+	return v.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\n/g, "\\n")
+}
+
 function buildAgentfile(state: WizardState): string {
 	const lines: string[] = ["# syntax=openotters/agentfile:1", "", `FROM ${state.from || "scratch"}`, ""]
 
@@ -102,6 +117,18 @@ function buildAgentfile(state: WizardState): string {
 	}
 	if (state.agentName) {
 		lines.push(`NAME ${state.agentName}`)
+	}
+
+	const description = state.description.trim()
+	const source = state.source.trim()
+	if (description || source) {
+		lines.push("")
+		if (description) {
+			lines.push(`LABEL org.opencontainers.image.description="${escapeLabelValue(description)}"`)
+		}
+		if (source) {
+			lines.push(`LABEL org.opencontainers.image.source="${escapeLabelValue(source)}"`)
+		}
 	}
 
 	const soul = state.soul.trim()
@@ -540,6 +567,36 @@ function BasicsStep({ state, onChange, baseImages, models, modelsLoading }: Basi
 					/>
 				</CardContent>
 			</Card>
+
+			<Card>
+				<CardHeader>
+					<CardTitle>Description &amp; source (optional)</CardTitle>
+					<CardDescription>
+						Stamped on the OCI manifest as{" "}
+						<code className="font-mono text-xs">org.opencontainers.image.description</code> and{" "}
+						<code className="font-mono text-xs">…source</code>. Surface in the image listing and
+						the catalog tab so other people can find this agent later.
+					</CardDescription>
+				</CardHeader>
+				<CardContent className="space-y-3">
+					<div className="space-y-1.5">
+						<Label className="text-xs">Description</Label>
+						<Input
+							onChange={(e) => onChange({ description: e.target.value })}
+							placeholder="Short blurb — what this agent does, in one sentence."
+							value={state.description}
+						/>
+					</div>
+					<div className="space-y-1.5">
+						<Label className="text-xs">Source URL</Label>
+						<Input
+							onChange={(e) => onChange({ source: e.target.value })}
+							placeholder="https://github.com/your-org/your-repo"
+							value={state.source}
+						/>
+					</div>
+				</CardContent>
+			</Card>
 		</>
 	)
 }
@@ -663,6 +720,10 @@ function ReviewStep({ state, agentfile }: ReviewStepProps) {
 					<Row label="MODEL" value={state.modelRef} />
 					<Separator />
 					<Row label="NAME" value={state.agentName} />
+					<Separator />
+					<Row label="Description" value={state.description} />
+					<Separator />
+					<Row label="Source" value={state.source} />
 					<Separator />
 					<Row label="Tools" value={state.bins.length === 0 ? "none" : `${state.bins.length} bin(s)`} />
 				</div>
