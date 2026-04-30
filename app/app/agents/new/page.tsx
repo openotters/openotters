@@ -7,7 +7,9 @@ import {
 	Check,
 	ChevronLeft,
 	ChevronRight,
+	ExternalLink,
 	FileCode,
+	Library,
 	Sparkles,
 	Terminal,
 } from "lucide-react"
@@ -165,9 +167,11 @@ function Stepper({ current }: { current: number }) {
 	)
 }
 
+type CreateTab = "wizard" | "editor" | "catalog"
+
 export default function NewAgentPage() {
 	const router = useRouter()
-	const [tab, setTab] = useState<"wizard" | "editor">("wizard")
+	const [tab, setTab] = useState<CreateTab>("wizard")
 
 	// Wizard state
 	const [state, setState] = useState<WizardState>(blank)
@@ -284,8 +288,8 @@ export default function NewAgentPage() {
 				</div>
 			</div>
 
-			<Tabs onValueChange={(v) => setTab(v as "wizard" | "editor")} value={tab}>
-				<TabsList className="grid w-full max-w-sm grid-cols-2">
+			<Tabs onValueChange={(v) => setTab(v as CreateTab)} value={tab}>
+				<TabsList className="grid w-full max-w-xl grid-cols-3">
 					<TabsTrigger value="wizard">
 						<Sparkles className="mr-2 h-4 w-4" />
 						Wizard
@@ -293,6 +297,10 @@ export default function NewAgentPage() {
 					<TabsTrigger value="editor">
 						<FileCode className="mr-2 h-4 w-4" />
 						Editor
+					</TabsTrigger>
+					<TabsTrigger value="catalog">
+						<Library className="mr-2 h-4 w-4" />
+						From catalog
 					</TabsTrigger>
 				</TabsList>
 
@@ -398,6 +406,26 @@ export default function NewAgentPage() {
 							</div>
 						</div>
 					</div>
+				</TabsContent>
+
+				<TabsContent className="space-y-6 pt-6" value="catalog">
+					<CatalogTab
+						error={error}
+						images={images.data?.images ?? []}
+						imagesLoading={images.isLoading}
+						isPending={create.isPending}
+						models={models.data?.models ?? []}
+						modelsLoading={models.isLoading}
+						onSubmit={async (req) => {
+							setError(null)
+							try {
+								await create.mutateAsync(req)
+								router.push("/agents")
+							} catch (err) {
+								setError(err instanceof Error ? err.message : String(err))
+							}
+						}}
+					/>
 				</TabsContent>
 			</Tabs>
 		</div>
@@ -622,8 +650,8 @@ function ReviewStep({ state, agentfile }: ReviewStepProps) {
 				<CardTitle>Review</CardTitle>
 				<CardDescription>
 					Confirm and build. The Agentfile content is sent inline to{" "}
-					<code className="font-mono text-xs">BuildAgent</code>; the daemon writes it to a temp file
-					and runs the OCI build pipeline.
+					<code className="font-mono text-xs">BuildAgent</code> and built in memory — no file
+					lands on the daemon's disk.
 				</CardDescription>
 			</CardHeader>
 			<CardContent className="space-y-4 text-sm">
@@ -697,5 +725,210 @@ function AgentfilePreviewPane({ text, error, mode }: PreviewPaneProps) {
 				{error && <p className="mt-2 text-destructive text-xs">{error}</p>}
 			</CardContent>
 		</Card>
+	)
+}
+
+interface CatalogImage {
+	ref: string
+	digest: string
+	artifactType: string
+	description: string
+	source: string
+	createdAt: bigint
+	size: bigint
+}
+
+interface CatalogModel {
+	ref: string
+	displayName: string
+	provider: string
+	name: string
+}
+
+interface CatalogTabProps {
+	images: CatalogImage[]
+	imagesLoading: boolean
+	models: CatalogModel[]
+	modelsLoading: boolean
+	error: string | null
+	isPending: boolean
+	onSubmit: (req: { ref: string; name?: string; model?: string }) => Promise<void>
+}
+
+function CatalogTab({
+	images,
+	imagesLoading,
+	models,
+	modelsLoading,
+	error,
+	isPending,
+	onSubmit,
+}: CatalogTabProps) {
+	const [selectedRef, setSelectedRef] = useState<string | null>(null)
+	const [name, setName] = useState("")
+	const [model, setModel] = useState("")
+	const [search, setSearch] = useState("")
+
+	// Bin artifacts aren't valid agent images — same filter as Images page.
+	const agentImages = useMemo(
+		() => images.filter((i) => i.artifactType !== BIN_ARTIFACT_TYPE),
+		[images],
+	)
+
+	const filtered = useMemo(() => {
+		const q = search.trim().toLowerCase()
+		if (!q) return agentImages
+		return agentImages.filter(
+			(i) =>
+				i.ref.toLowerCase().includes(q) ||
+				i.description.toLowerCase().includes(q),
+		)
+	}, [agentImages, search])
+
+	const selected = filtered.find((i) => i.ref === selectedRef) ?? null
+
+	const handleSubmit = async () => {
+		if (!selected) return
+		await onSubmit({
+			ref: selected.ref,
+			name: name.trim() || undefined,
+			model: model.trim() || undefined,
+		})
+	}
+
+	return (
+		<div className="grid gap-6 lg:grid-cols-[1fr_360px]">
+			<Card>
+				<CardHeader>
+					<CardTitle>Pick an existing image</CardTitle>
+					<CardDescription>
+						Skips the build step entirely — the daemon's{" "}
+						<code className="font-mono text-xs">CreateAgent</code> RPC creates an instance from a
+						pre-built image. Override the name and model below if you want to deviate from the
+						image's defaults.
+					</CardDescription>
+				</CardHeader>
+				<CardContent className="space-y-3">
+					<Input
+						onChange={(e) => setSearch(e.target.value)}
+						placeholder="Search by ref or description…"
+						value={search}
+					/>
+					{imagesLoading && <p className="text-muted-foreground text-sm">Loading images…</p>}
+					{!imagesLoading && filtered.length === 0 && (
+						<p className="rounded-lg border border-dashed p-6 text-center text-muted-foreground text-sm">
+							{search
+								? "No images match the search."
+								: "No agent images in the registry. Build one first via the Wizard or Editor tab."}
+						</p>
+					)}
+					<div className="space-y-2">
+						{filtered.map((image) => {
+							const isSel = image.ref === selectedRef
+							return (
+								<button
+									className={cn(
+										"w-full rounded-lg border p-3 text-left transition-colors hover:bg-muted/50",
+										isSel && "border-primary bg-primary/5",
+									)}
+									key={image.digest}
+									onClick={() => setSelectedRef(image.ref)}
+									type="button">
+									<div className="flex items-start justify-between gap-3">
+										<div className="min-w-0 flex-1">
+											<p className="truncate font-mono font-medium text-sm">{image.ref}</p>
+											{image.description && (
+												<p className="mt-1 line-clamp-2 text-muted-foreground text-sm">
+													{image.description}
+												</p>
+											)}
+											{image.source && (
+												<a
+													className="mt-1 inline-flex items-center gap-1 text-muted-foreground text-xs underline-offset-2 hover:text-foreground hover:underline"
+													href={image.source}
+													onClick={(e) => e.stopPropagation()}
+													rel="noreferrer"
+													target="_blank">
+													<ExternalLink className="h-3 w-3" />
+													<span className="max-w-[40ch] truncate">{image.source}</span>
+												</a>
+											)}
+										</div>
+										{isSel && (
+											<Check className="mt-1 h-4 w-4 shrink-0 text-primary" />
+										)}
+									</div>
+								</button>
+							)
+						})}
+					</div>
+				</CardContent>
+			</Card>
+
+			<div className="space-y-4">
+				<Card className="sticky top-6">
+					<CardHeader className="pb-2">
+						<CardTitle className="text-base">Run options</CardTitle>
+						<CardDescription className="text-xs">
+							Both fields are optional — leave blank to take the image's declared values.
+						</CardDescription>
+					</CardHeader>
+					<CardContent className="space-y-4">
+						<div className="space-y-2">
+							<Label className="text-xs">Selected image</Label>
+							<p className="break-all font-mono text-sm">
+								{selected ? selected.ref : <span className="text-muted-foreground">— none —</span>}
+							</p>
+						</div>
+						<div className="space-y-2">
+							<Label className="text-xs">Name override</Label>
+							<Input
+								disabled={!selected}
+								onChange={(e) =>
+									setName(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, "-"))
+								}
+								placeholder="auto-generated"
+								value={name}
+							/>
+						</div>
+						<div className="space-y-2">
+							<Label className="text-xs">Model override</Label>
+							<Select disabled={!selected || modelsLoading} onValueChange={setModel} value={model}>
+								<SelectTrigger>
+									<SelectValue
+										placeholder={
+											modelsLoading
+												? "Loading…"
+												: models.length === 0
+													? "No models configured"
+													: "use image default"
+										}
+									/>
+								</SelectTrigger>
+								<SelectContent>
+									{models.map((m) => (
+										<SelectItem key={m.ref} value={m.ref}>
+											<span className="font-mono">{m.ref}</span>
+										</SelectItem>
+									))}
+								</SelectContent>
+							</Select>
+						</div>
+						{error && <p className="text-destructive text-xs">{error}</p>}
+						<div className="flex gap-2 pt-2">
+							<Button asChild className="flex-1" variant="outline">
+								<Link href="/agents">Cancel</Link>
+							</Button>
+							<Button
+								className="flex-1"
+								disabled={!selected || isPending}
+								onClick={handleSubmit}>
+								{isPending ? "Working…" : "Run"}
+							</Button>
+						</div>
+					</CardContent>
+				</Card>
+			</div>
+		</div>
 	)
 }
