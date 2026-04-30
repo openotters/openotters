@@ -116,47 +116,49 @@ export default function BinsPage() {
 			{isLoading && <p className="text-muted-foreground">Loading bins…</p>}
 
 			{!isLoading && !error && sorted.length > 0 && (
-				<div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+				<div className="grid gap-4">
 					{sorted.map((bin) => (
 						<Card className="group" key={bin.digest}>
-							<CardHeader className="flex flex-row items-start justify-between space-y-0 pb-2">
-								<div className="flex items-start gap-3">
-									<div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
-										<Terminal className="h-5 w-5 text-primary" />
+							<CardHeader className="pb-3">
+								<div className="flex items-start justify-between">
+									<div className="flex items-center gap-3">
+										<div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+											<Terminal className="h-5 w-5 text-primary" />
+										</div>
+										<div>
+											<CardTitle className="font-mono text-base">{bin.ref}</CardTitle>
+											<CardDescription className="font-mono text-xs">
+												{bin.digest.substring(0, 19)}…
+											</CardDescription>
+										</div>
 									</div>
-									<div>
-										<CardTitle className="font-mono text-base">{bin.ref}</CardTitle>
-										<CardDescription className="font-mono text-xs">
-											{bin.digest.substring(0, 19)}…
-										</CardDescription>
-									</div>
+									<DropdownMenu>
+										<DropdownMenuTrigger asChild>
+											<Button className="h-8 w-8" size="icon" variant="ghost">
+												<MoreVertical className="h-4 w-4" />
+											</Button>
+										</DropdownMenuTrigger>
+										<DropdownMenuContent align="end">
+											<DropdownMenuItem
+												className="text-destructive"
+												disabled={remove.isPending}
+												onClick={() => remove.mutate({ ref: bin.ref })}>
+												<Trash2 className="mr-2 h-4 w-4" />
+												Remove
+											</DropdownMenuItem>
+										</DropdownMenuContent>
+									</DropdownMenu>
 								</div>
-								<DropdownMenu>
-									<DropdownMenuTrigger asChild>
-										<Button className="h-8 w-8" size="icon" variant="ghost">
-											<MoreVertical className="h-4 w-4" />
-										</Button>
-									</DropdownMenuTrigger>
-									<DropdownMenuContent align="end">
-										<DropdownMenuItem
-											className="text-destructive"
-											disabled={remove.isPending}
-											onClick={() => remove.mutate({ ref: bin.ref })}>
-											<Trash2 className="mr-2 h-4 w-4" />
-											Remove
-										</DropdownMenuItem>
-									</DropdownMenuContent>
-								</DropdownMenu>
 							</CardHeader>
 							<CardContent>
-								<div className="flex items-center gap-4 text-muted-foreground text-xs">
+								<div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-muted-foreground text-sm">
 									<div className="flex items-center gap-1.5">
-										<HardDrive className="h-3 w-3" />
+										<HardDrive className="h-4 w-4" />
 										<span>{formatSize(bin.size)}</span>
 									</div>
 									<div className="flex items-center gap-1.5">
-										<Clock className="h-3 w-3" />
-										<span>{formatDate(bin.createdAt)}</span>
+										<Clock className="h-4 w-4" />
+										<span>Built {formatDate(bin.createdAt)}</span>
 									</div>
 								</div>
 							</CardContent>

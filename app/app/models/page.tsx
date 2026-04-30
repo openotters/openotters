@@ -84,41 +84,47 @@ function SortedModelGroup({ provider, models, sortId }: { provider: string; mode
 					</p>
 				</div>
 			</div>
-			<div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+			<div className="grid gap-3">
 				{sorted.map((model) => (
 					<Card className="group transition-colors hover:bg-muted/50" key={model.ref}>
-						<CardHeader className="flex flex-row items-start justify-between space-y-0 pb-2">
-							<div className="flex items-start gap-2">
-								<Cpu className="mt-1 h-4 w-4 text-muted-foreground" />
-								<div>
-									<CardTitle className="text-base">
-										{model.displayName || model.name}
-									</CardTitle>
-									<CardDescription className="font-mono text-xs">{model.ref}</CardDescription>
+						<CardHeader className="pb-3">
+							<div className="flex items-start justify-between">
+								<div className="flex items-center gap-3">
+									<div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+										<Cpu className="h-5 w-5 text-primary" />
+									</div>
+									<div>
+										<CardTitle className="text-base">
+											{model.displayName || model.name}
+										</CardTitle>
+										<CardDescription className="font-mono text-xs">{model.ref}</CardDescription>
+									</div>
 								</div>
 							</div>
 						</CardHeader>
-						<CardContent className="flex flex-wrap gap-2">
-							{Number(model.contextWindow) > 0 && (
-								<Badge className="font-mono text-xs" variant="secondary">
-									{COMPACT_NUMBER.format(Number(model.contextWindow))} ctx
-								</Badge>
-							)}
-							{model.canReason && (
-								<Badge className="text-xs" variant="outline">
-									reasons
-								</Badge>
-							)}
-							{model.costInputPer1m > 0 && (
-								<Badge className="font-mono text-xs" variant="outline">
-									in ${model.costInputPer1m.toFixed(2)}/1M
-								</Badge>
-							)}
-							{model.costOutputPer1m > 0 && (
-								<Badge className="font-mono text-xs" variant="outline">
-									out ${model.costOutputPer1m.toFixed(2)}/1M
-								</Badge>
-							)}
+						<CardContent>
+							<div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-muted-foreground text-sm">
+								{Number(model.contextWindow) > 0 && (
+									<Badge className="font-mono text-xs" variant="secondary">
+										{COMPACT_NUMBER.format(Number(model.contextWindow))} ctx
+									</Badge>
+								)}
+								{model.canReason && (
+									<Badge className="text-xs" variant="outline">
+										reasons
+									</Badge>
+								)}
+								{model.costInputPer1m > 0 && (
+									<Badge className="font-mono text-xs" variant="outline">
+										in ${model.costInputPer1m.toFixed(2)}/1M
+									</Badge>
+								)}
+								{model.costOutputPer1m > 0 && (
+									<Badge className="font-mono text-xs" variant="outline">
+										out ${model.costOutputPer1m.toFixed(2)}/1M
+									</Badge>
+								)}
+							</div>
 						</CardContent>
 					</Card>
 				))}

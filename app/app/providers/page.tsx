@@ -90,73 +90,73 @@ export default function ProvidersPage() {
 			{isLoading && <p className="text-muted-foreground">Loading providers…</p>}
 
 			{!isLoading && !error && sorted.length > 0 && (
-				<div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+				<div className="grid gap-4">
 					{sorted.map((provider) => (
 						<Card className="group" key={provider.name}>
-							<CardHeader className="flex flex-row items-start justify-between space-y-0 pb-2">
-								<div className="flex items-start gap-3">
-									<div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
-										<Plug className="h-5 w-5 text-primary" />
+							<CardHeader className="pb-3">
+								<div className="flex items-start justify-between">
+									<div className="flex items-center gap-3">
+										<div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+											<Plug className="h-5 w-5 text-primary" />
+										</div>
+										<div>
+											<CardTitle className="text-base">{provider.name}</CardTitle>
+											{provider.apiBase && (
+												<CardDescription className="flex items-center gap-1 text-xs">
+													<ExternalLink className="h-3 w-3" />
+													{safeHost(provider.apiBase)}
+												</CardDescription>
+											)}
+										</div>
 									</div>
-									<div>
-										<CardTitle className="text-base">{provider.name}</CardTitle>
-										{provider.apiBase && (
-											<CardDescription className="flex items-center gap-1 text-xs">
-												<ExternalLink className="h-3 w-3" />
-												{safeHost(provider.apiBase)}
-											</CardDescription>
-										)}
-									</div>
+									<DropdownMenu>
+										<DropdownMenuTrigger asChild>
+											<Button className="h-8 w-8" size="icon" variant="ghost">
+												<MoreVertical className="h-4 w-4" />
+											</Button>
+										</DropdownMenuTrigger>
+										<DropdownMenuContent align="end">
+											<DropdownMenuItem asChild>
+												<Link href={`/providers/${provider.name}/edit`}>
+													<Pencil className="mr-2 h-4 w-4" />
+													Edit
+												</Link>
+											</DropdownMenuItem>
+											<DropdownMenuItem asChild>
+												<Link href={`/providers/${provider.name}/edit#auth`}>
+													<Key className="mr-2 h-4 w-4" />
+													Update API Key
+												</Link>
+											</DropdownMenuItem>
+											<DropdownMenuSeparator />
+											<DropdownMenuItem
+												className="text-destructive"
+												disabled={remove.isPending}
+												onClick={() => remove.mutate({ name: provider.name })}>
+												<Trash2 className="mr-2 h-4 w-4" />
+												Remove
+											</DropdownMenuItem>
+										</DropdownMenuContent>
+									</DropdownMenu>
 								</div>
-								<DropdownMenu>
-									<DropdownMenuTrigger asChild>
-										<Button className="h-8 w-8" size="icon" variant="ghost">
-											<MoreVertical className="h-4 w-4" />
-										</Button>
-									</DropdownMenuTrigger>
-									<DropdownMenuContent align="end">
-										<DropdownMenuItem asChild>
-											<Link href={`/providers/${provider.name}/edit`}>
-												<Pencil className="mr-2 h-4 w-4" />
-												Edit
-											</Link>
-										</DropdownMenuItem>
-										<DropdownMenuItem asChild>
-											<Link href={`/providers/${provider.name}/edit#auth`}>
-												<Key className="mr-2 h-4 w-4" />
-												Update API Key
-											</Link>
-										</DropdownMenuItem>
-										<DropdownMenuSeparator />
-										<DropdownMenuItem
-											className="text-destructive"
-											disabled={remove.isPending}
-											onClick={() => remove.mutate({ name: provider.name })}>
-											<Trash2 className="mr-2 h-4 w-4" />
-											Remove
-										</DropdownMenuItem>
-									</DropdownMenuContent>
-								</DropdownMenu>
 							</CardHeader>
-							<CardContent className="space-y-3">
-								<div className="space-y-2">
-									<span className="text-muted-foreground text-sm">
+							<CardContent>
+								<div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-muted-foreground text-sm">
+									<span>
 										{provider.models.length === 0
 											? "All models allowed"
 											: `Allow-list (${provider.models.length})`}
 									</span>
-									<div className="flex flex-wrap gap-1">
-										{provider.models.slice(0, 5).map((model) => (
-											<Badge className="font-mono text-xs" key={model} variant="secondary">
-												{model}
-											</Badge>
-										))}
-										{provider.models.length > 5 && (
-											<Badge className="text-xs" variant="outline">
-												+{provider.models.length - 5} more
-											</Badge>
-										)}
-									</div>
+									{provider.models.slice(0, 8).map((model) => (
+										<Badge className="font-mono text-xs" key={model} variant="secondary">
+											{model}
+										</Badge>
+									))}
+									{provider.models.length > 8 && (
+										<Badge className="text-xs" variant="outline">
+											+{provider.models.length - 8} more
+										</Badge>
+									)}
 								</div>
 							</CardContent>
 						</Card>
