@@ -2,7 +2,8 @@
 
 import { useMutation, useQuery } from "@connectrpc/connect-query"
 import { useQueryClient } from "@tanstack/react-query"
-import { Clock, HardDrive, MoreVertical, Terminal, Trash2 } from "lucide-react"
+import { Clock, ExternalLink, HardDrive, MoreVertical, Terminal, Trash2 } from "lucide-react"
+import Link from "next/link"
 import { useMemo } from "react"
 import { AddBinButton } from "@/components/add-bin-button"
 import { PageHeader } from "@/components/page-header"
@@ -78,10 +79,13 @@ export default function BinsPage() {
 			{!isLoading && !error && sorted.length > 0 && (
 				<div className="grid gap-4">
 					{sorted.map((bin) => (
-						<Card className="group" key={bin.digest}>
+						<Card className="group transition-colors hover:bg-muted/50" key={bin.digest}>
 							<CardHeader className="pb-3">
 								<div className="flex items-start justify-between">
-									<div className="flex items-center gap-3">
+									<Link
+										aria-label={`Open ${bin.ref} details`}
+										className="flex flex-1 items-center gap-3"
+										href={`/bins/${encodeURIComponent(bin.ref)}`}>
 										<div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
 											<Terminal className="h-5 w-5 text-primary" />
 										</div>
@@ -91,7 +95,7 @@ export default function BinsPage() {
 												{bin.digest.substring(0, 19)}…
 											</CardDescription>
 										</div>
-									</div>
+									</Link>
 									<DropdownMenu>
 										<DropdownMenuTrigger asChild>
 											<Button className="h-8 w-8" size="icon" variant="ghost">
@@ -99,6 +103,12 @@ export default function BinsPage() {
 											</Button>
 										</DropdownMenuTrigger>
 										<DropdownMenuContent align="end">
+											<DropdownMenuItem asChild>
+												<Link href={`/bins/${encodeURIComponent(bin.ref)}`}>
+													<ExternalLink className="mr-2 h-4 w-4" />
+													Details
+												</Link>
+											</DropdownMenuItem>
 											<DropdownMenuItem
 												className="text-destructive"
 												disabled={remove.isPending}

@@ -12,6 +12,7 @@ import {
 	Plus,
 	Trash2,
 } from "lucide-react"
+import Link from "next/link"
 import { useMemo, useState } from "react"
 import { CliInstructionsDialog } from "@/components/cli-instructions-dialog"
 import { PageHeader } from "@/components/page-header"
@@ -121,10 +122,13 @@ export default function ImagesPage() {
 			{!isLoading && !error && sorted.length > 0 && (
 				<div className="grid gap-4">
 					{sorted.map((image) => (
-						<Card className="group" key={image.digest}>
+						<Card className="group transition-colors hover:bg-muted/50" key={image.digest}>
 							<CardHeader className="pb-3">
 								<div className="flex items-start justify-between">
-									<div className="flex items-center gap-3">
+									<Link
+										aria-label={`Open ${image.ref} details`}
+										className="flex flex-1 items-center gap-3"
+										href={`/images/${encodeURIComponent(image.ref)}`}>
 										<div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
 											<Layers className="h-5 w-5 text-primary" />
 										</div>
@@ -134,7 +138,7 @@ export default function ImagesPage() {
 												{image.digest.substring(0, 19)}…
 											</CardDescription>
 										</div>
-									</div>
+									</Link>
 									<DropdownMenu>
 										<DropdownMenuTrigger asChild>
 											<Button className="h-8 w-8" size="icon" variant="ghost">
@@ -142,6 +146,12 @@ export default function ImagesPage() {
 											</Button>
 										</DropdownMenuTrigger>
 										<DropdownMenuContent align="end">
+											<DropdownMenuItem asChild>
+												<Link href={`/images/${encodeURIComponent(image.ref)}`}>
+													<ExternalLink className="mr-2 h-4 w-4" />
+													Details
+												</Link>
+											</DropdownMenuItem>
 											<DropdownMenuItem
 												disabled={pull.isPending}
 												onClick={() => pull.mutate({ ref: image.ref })}>
