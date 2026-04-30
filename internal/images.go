@@ -76,6 +76,8 @@ func (d *Daemon) ListImages(
 				ArtifactType: manifest.artifactType,
 				Size:         manifest.size,
 				CreatedAt:    d.registry.ManifestCreatedAt(repo, tag),
+				Description:  manifest.description,
+				Source:       manifest.source,
 			})
 		}
 	}
@@ -171,6 +173,12 @@ type manifestInfo struct {
 	digest       string
 	artifactType string
 	size         int64
+	// OCI standard annotations surfaced for the image listing UI:
+	// description (free-text) and source (URL of the upstream repo,
+	// rendered as a clickable link). Empty when the producer didn't
+	// stamp the standard labels.
+	description string
+	source      string
 }
 
 func fetchManifestInfo(ctx context.Context, addr, repo, tag string) (*manifestInfo, error) {
@@ -202,6 +210,8 @@ func fetchManifestInfo(ctx context.Context, addr, repo, tag string) (*manifestIn
 			digest:       digest,
 			artifactType: index.ArtifactType,
 			size:         total,
+			description:  index.Annotations[v1.AnnotationDescription],
+			source:       index.Annotations[v1.AnnotationSource],
 		}, nil
 	}
 
@@ -219,6 +229,8 @@ func fetchManifestInfo(ctx context.Context, addr, repo, tag string) (*manifestIn
 		digest:       digest,
 		artifactType: manifest.ArtifactType,
 		size:         total,
+		description:  manifest.Annotations[v1.AnnotationDescription],
+		source:       manifest.Annotations[v1.AnnotationSource],
 	}, nil
 }
 

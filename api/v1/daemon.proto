@@ -185,6 +185,17 @@ message ImageInfo {
   // Unix-seconds the manifest was first written to the local registry.
   // Surfaces as the "CREATED" column in `otters image ls`.
   int64 created_at = 5;
+
+  // Free-text description from the OCI standard annotation
+  // `org.opencontainers.image.description`. Producers (Agentfile
+  // builds, tool images) stamp this via LABEL directives. Empty
+  // when the producer didn't set the label.
+  string description = 6;
+
+  // URL of the upstream source repo from
+  // `org.opencontainers.image.source`. The image listing renders
+  // it as a clickable link when non-empty.
+  string source = 7;
 }
 
 // AgentTool describes one BIN directive resolved against the local

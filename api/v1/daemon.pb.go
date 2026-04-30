@@ -1222,7 +1222,16 @@ type ImageInfo struct {
 	Size         int64                  `protobuf:"varint,4,opt,name=size,proto3" json:"size,omitempty"`
 	// Unix-seconds the manifest was first written to the local registry.
 	// Surfaces as the "CREATED" column in `otters image ls`.
-	CreatedAt     int64 `protobuf:"varint,5,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	CreatedAt int64 `protobuf:"varint,5,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	// Free-text description from the OCI standard annotation
+	// `org.opencontainers.image.description`. Producers (Agentfile
+	// builds, tool images) stamp this via LABEL directives. Empty
+	// when the producer didn't set the label.
+	Description string `protobuf:"bytes,6,opt,name=description,proto3" json:"description,omitempty"`
+	// URL of the upstream source repo from
+	// `org.opencontainers.image.source`. The image listing renders
+	// it as a clickable link when non-empty.
+	Source        string `protobuf:"bytes,7,opt,name=source,proto3" json:"source,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1290,6 +1299,20 @@ func (x *ImageInfo) GetCreatedAt() int64 {
 		return x.CreatedAt
 	}
 	return 0
+}
+
+func (x *ImageInfo) GetDescription() string {
+	if x != nil {
+		return x.Description
+	}
+	return ""
+}
+
+func (x *ImageInfo) GetSource() string {
+	if x != nil {
+		return x.Source
+	}
+	return ""
 }
 
 // AgentTool describes one BIN directive resolved against the local
@@ -3319,14 +3342,16 @@ const file_v1_daemon_proto_rawDesc = "" +
 	"\fPushResponse\x12\x16\n" +
 	"\x06digest\x18\x01 \x01(\tR\x06digest\x12\x10\n" +
 	"\x03ref\x18\x02 \x01(\tR\x03ref\"\x13\n" +
-	"\x11ListImagesRequest\"\x8d\x01\n" +
+	"\x11ListImagesRequest\"\xc7\x01\n" +
 	"\tImageInfo\x12\x10\n" +
 	"\x03ref\x18\x01 \x01(\tR\x03ref\x12\x16\n" +
 	"\x06digest\x18\x02 \x01(\tR\x06digest\x12#\n" +
 	"\rartifact_type\x18\x03 \x01(\tR\fartifactType\x12\x12\n" +
 	"\x04size\x18\x04 \x01(\x03R\x04size\x12\x1d\n" +
 	"\n" +
-	"created_at\x18\x05 \x01(\x03R\tcreatedAt\"k\n" +
+	"created_at\x18\x05 \x01(\x03R\tcreatedAt\x12 \n" +
+	"\vdescription\x18\x06 \x01(\tR\vdescription\x12\x16\n" +
+	"\x06source\x18\a \x01(\tR\x06source\"k\n" +
 	"\tAgentTool\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x10\n" +
 	"\x03ref\x18\x02 \x01(\tR\x03ref\x12\x16\n" +

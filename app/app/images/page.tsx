@@ -5,6 +5,7 @@ import { useQueryClient } from "@tanstack/react-query"
 import {
 	Clock,
 	Download,
+	ExternalLink,
 	HardDrive,
 	Layers,
 	MoreHorizontal,
@@ -171,8 +172,11 @@ export default function ImagesPage() {
 									</DropdownMenu>
 								</div>
 							</CardHeader>
-							<CardContent>
-								<div className="flex items-center gap-6 text-muted-foreground text-sm">
+							<CardContent className="space-y-3">
+								{image.description && (
+									<p className="text-muted-foreground text-sm">{image.description}</p>
+								)}
+								<div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-muted-foreground text-sm">
 									<div className="flex items-center gap-1.5">
 										<HardDrive className="h-4 w-4" />
 										<span>{formatSize(image.size)}</span>
@@ -181,6 +185,16 @@ export default function ImagesPage() {
 										<Clock className="h-4 w-4" />
 										<span>Built {formatDate(image.createdAt)}</span>
 									</div>
+									{image.source && (
+										<a
+											className="inline-flex items-center gap-1 underline-offset-2 hover:text-foreground hover:underline"
+											href={image.source}
+											rel="noreferrer"
+											target="_blank">
+											<ExternalLink className="h-4 w-4" />
+											<span className="max-w-[40ch] truncate">{image.source}</span>
+										</a>
+									)}
 								</div>
 							</CardContent>
 						</Card>
