@@ -1,6 +1,7 @@
 package internal
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"os"
@@ -8,6 +9,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/go-git/go-billy/v6"
+	"github.com/go-git/go-billy/v6/memfs"
 	"github.com/go-git/go-billy/v6/osfs"
 	"github.com/google/uuid"
 	"go.uber.org/zap"
@@ -19,6 +22,7 @@ import (
 	agentbuild "github.com/openotters/agentfile/build"
 	"github.com/openotters/agentfile/export"
 	agentoci "github.com/openotters/agentfile/oci"
+	"github.com/openotters/agentfile/resolve"
 	"github.com/openotters/agentfile/spec"
 	afstore "github.com/openotters/agentfile/store"
 	"github.com/openotters/bin/pkg/bin"
@@ -770,14 +774,75 @@ func (d *Daemon) Build(
 		return nil, fmt.Errorf("agentfile %s: %w", abs, err)
 	}
 
-	store := orasmem.New()
-
-	built, err := agentbuild.FromFile(ctx, abs, store)
+	f, err := os.Open(abs)
 	if err != nil {
-		return nil, fmt.Errorf("building %s: %w", abs, err)
+		return nil, fmt.Errorf("opening %s: %w", abs, err)
 	}
 
-	tags := req.GetTags()
+	af, err := spec.Parse(f)
+	_ = f.Close()
+
+	if err != nil {
+		return nil, fmt.Errorf("parsing %s: %w", abs, err)
+	}
+
+	// CLI builds get an osfs rooted at the Agentfile's directory so
+	// `ADD ./local-file` and `CONTEXT FROM file://` directives resolve
+	// against the build context the user invoked us from.
+	src := osfs.New(filepath.Dir(abs))
+
+	return d.buildAgentfile(ctx, af, src, req.GetTags(), zap.String("path", abs))
+}
+
+// BuildFromBytes is the inline variant used by the web UI: the
+// Agentfile content arrives in the request body and is parsed in
+// memory — no temp file under ~/.otters/builds-tmp. The build context
+// is an empty memfs, so ADD / file:// directives won't resolve here;
+// agents that compose themselves from heredoc CONTEXT + registry BIN
+// (the path the UI form generates) work fine.
+func (d *Daemon) BuildFromBytes(
+	ctx context.Context, content []byte, tags []string,
+) (*daemonv1.BuildAgentResponse, error) {
+	if len(content) == 0 {
+		return nil, fmt.Errorf("agentfile content is empty")
+	}
+
+	af, err := spec.Parse(bytes.NewReader(content))
+	if err != nil {
+		return nil, fmt.Errorf("parsing inline agentfile: %w", err)
+	}
+
+	return d.buildAgentfile(ctx, af, memfs.New(), tags,
+		zap.Int("inline_bytes", len(content)),
+	)
+}
+
+// buildAgentfile is the shared resolve-build-push pipeline used by both
+// Build (CLI / path) and BuildFromBytes (inline / UI). The custom
+// parent fetcher rewrites bare refs to land in the embedded local
+// registry first, with the upstream remote fetcher as the fallback —
+// so an Agentfile with `FROM web-summarizer:latest` finds its parent
+// inside the daemon's own registry instead of failing with
+// "missing registry or repository".
+func (d *Daemon) buildAgentfile(
+	ctx context.Context,
+	af *spec.Agentfile,
+	src billy.Filesystem,
+	tags []string,
+	extraLogField zap.Field,
+) (*daemonv1.BuildAgentResponse, error) {
+	resolved, err := resolve.Resolve(ctx, af, d.parentFetcher())
+	if err != nil {
+		return nil, fmt.Errorf("resolving: %w", err)
+	}
+
+	store := orasmem.New()
+
+	built, err := agentbuild.Build(ctx, resolved, src, store)
+	if err != nil {
+		return nil, fmt.Errorf("building: %w", err)
+	}
+
 	if len(tags) == 0 {
 		name := built.Reference.Name
 		if name == "" {
@@ -800,7 +865,7 @@ func (d *Daemon) Build(
 	}
 
 	d.logger.Info("agent built",
-		zap.String("path", abs),
+		extraLogField,
 		zap.String("digest", built.Digest.String()),
 		zap.Strings("tags", pushed),
 	)
@@ -810,6 +875,25 @@ func (d *Daemon) Build(
 		Tags:   pushed,
 		Ref:    built.Reference.String(),
 	}, nil
+}
+
+// parentFetcher returns a resolve.Fetcher that prefers the daemon's
+// embedded registry for unqualified refs (e.g. `FROM hello:latest`),
+// falling back to the standard remote fetcher for fully-qualified
+// references like `ghcr.io/openotters/agents/foo:latest`. Without
+// this, FROM directives that name a locally-built parent fail at
+// agentfile/oci's NewRemoteRepository step with "missing registry or
+// repository".
+func (d *Daemon) parentFetcher() resolve.Fetcher {
+	upstream := agentoci.AgentFetcher()
+
+	return func(ctx context.Context, ref spec.Reference) (*spec.Agentfile, error) {
+		if !spec.IsQualified(ref.Name) && d.registry != nil {
+			return upstream(ctx, spec.QualifyWithDefault(ref, d.registry.Addr()))
+		}
+
+		return upstream(ctx, ref)
+	}
 }
 
 // BuildTool builds a multi-arch tool OCI image from the per-platform

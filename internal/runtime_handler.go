@@ -3,9 +3,6 @@ package internal
 import (
 	"context"
 	"errors"
-	"fmt"
-	"os"
-	"path/filepath"
 
 	"connectrpc.com/connect"
 	agentpkg "github.com/openotters/agentfile/agent"
@@ -77,23 +74,18 @@ func (h *runtimeHandler) BuildAgent(
 	msg := req.Msg
 
 	// Inline content path — the web UI sends Agentfile bytes directly
-	// rather than a daemon-host path. We materialise the content to a
-	// scratch dir under the user's data dir, point daemon.Build at it,
-	// then drop the dir on the way out. ADD/CONTEXT file:// refs won't
-	// resolve here (no siblings), but agents that compose themselves
-	// from heredoc CONTEXT + registry BIN work fine.
+	// rather than a daemon-host path. The daemon parses + builds in
+	// memory; no temp file lands on disk. ADD / CONTEXT file:// refs
+	// won't resolve under this path (the source FS is an empty
+	// memfs), but agents that compose themselves from heredoc CONTEXT
+	// + registry BIN — what the UI form generates — work fine.
 	if len(msg.GetContent()) > 0 {
-		tmpPath, cleanup, err := writeInlineAgentfile(msg.GetContent())
+		resp, err := h.daemon.BuildFromBytes(ctx, msg.GetContent(), msg.GetTags())
 		if err != nil {
-			return nil, connect.NewError(connect.CodeInternal,
-				fmt.Errorf("staging inline agentfile: %w", err))
+			return nil, err
 		}
-		defer cleanup()
 
-		msg = &daemonv1.BuildAgentRequest{
-			AgentfilePath: tmpPath,
-			Tags:          msg.GetTags(),
-		}
+		return connect.NewResponse(resp), nil
 	}
 
 	resp, err := h.daemon.Build(ctx, msg)
@@ -102,38 +94,6 @@ func (h *runtimeHandler) BuildAgent(
 	}
 
 	return connect.NewResponse(resp), nil
-}
-
-// writeInlineAgentfile materialises proto-supplied Agentfile bytes
-// into a daemon-resident temp file so daemon.Build's path-based
-// pipeline can consume it. Returns the absolute path and a cleanup
-// fn the caller must defer. The dir lives under ~/.otters/builds-tmp
-// so it stays inside the user's controlled tree (not /tmp).
-func writeInlineAgentfile(content []byte) (string, func(), error) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", func() {}, err
-	}
-
-	root := filepath.Join(home, ".otters", "builds-tmp")
-	if err = os.MkdirAll(root, 0o700); err != nil {
-		return "", func() {}, err
-	}
-
-	dir, err := os.MkdirTemp(root, "build-")
-	if err != nil {
-		return "", func() {}, err
-	}
-
-	cleanup := func() { _ = os.RemoveAll(dir) }
-
-	path := filepath.Join(dir, "Agentfile")
-	if err = os.WriteFile(path, content, 0o600); err != nil {
-		cleanup()
-		return "", func() {}, err
-	}
-
-	return path, cleanup, nil
 }
 
 func (h *runtimeHandler) BuildToolImage(
