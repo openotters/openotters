@@ -52,18 +52,22 @@ func (h *runtimeHandler) GetInfo(
 	info := h.daemon.Info()
 
 	return connect.NewResponse(&daemonv1.GetInfoResponse{
-		RegistryAddr:  info.RegistryAddr,
-		SocketPath:    info.SocketPath,
-		LogDir:        info.LogDir,
-		AgentsDir:     info.AgentsDir,
-		DataDir:       info.DataDir,
-		RuntimePath:   info.RuntimePath,
-		Version:       info.Version,
-		Commit:        info.Commit,
-		BuildDate:     info.BuildDate,
-		AgentsRunning: safeInt32(info.AgentsRunning),
-		AgentsTotal:   safeInt32(info.AgentsTotal),
-		Providers:     safeInt32(info.Providers),
+		RegistryAddr:    info.RegistryAddr,
+		SocketPath:      info.SocketPath,
+		LogDir:          info.LogDir,
+		AgentsDir:       info.AgentsDir,
+		DataDir:         info.DataDir,
+		RuntimePath:     info.RuntimePath,
+		Version:         info.Version,
+		Commit:          info.Commit,
+		BuildDate:       info.BuildDate,
+		AgentsRunning:   safeInt32(info.AgentsRunning),
+		AgentsTotal:     safeInt32(info.AgentsTotal),
+		Providers:       safeInt32(info.Providers),
+		MaxConcurrent:   safeInt32(info.MaxConcurrent),
+		BackoffBase:     info.BackoffBase.String(),
+		BackoffCap:      info.BackoffCap.String(),
+		ShutdownTimeout: info.ShutdownTimeout.String(),
 	}), nil
 }
 

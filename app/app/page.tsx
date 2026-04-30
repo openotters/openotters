@@ -1,7 +1,7 @@
 "use client"
 
 import { useQuery } from "@connectrpc/connect-query"
-import { Cpu, FolderOpen, Network } from "lucide-react"
+import { Cpu, FolderOpen, Network, Settings2 } from "lucide-react"
 import { ResourceStats } from "@/components/resource-stats"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -87,6 +87,24 @@ export default function HomePage() {
 						<Row label="Socket" value={data?.socketPath} />
 						<Separator />
 						<Row label="Registry" value={data?.registryAddr} />
+					</CardContent>
+				</Card>
+
+				<Card className="lg:col-span-2">
+					<CardHeader>
+						<CardTitle className="flex items-center gap-2 text-base">
+							<Settings2 className="h-4 w-4" />
+							Pool &amp; shutdown
+						</CardTitle>
+					</CardHeader>
+					<CardContent>
+						<Row label="Max concurrent" value={data?.maxConcurrent} />
+						<Separator />
+						<Row label="Backoff base" value={data?.backoffBase} />
+						<Separator />
+						<Row label="Backoff cap" value={data?.backoffCap} />
+						<Separator />
+						<Row label="Shutdown timeout" value={data?.shutdownTimeout} />
 					</CardContent>
 				</Card>
 

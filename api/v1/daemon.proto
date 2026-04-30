@@ -87,6 +87,20 @@ message GetInfoResponse {
   int32 agents_running = 10;
   int32 agents_total = 11;
   int32 providers = 12;
+
+  // Pool concurrency cap — maximum agents allowed to run at once.
+  int32 max_concurrent = 13;
+
+  // Auto-restart backoff schedule for failing agents (init / pull /
+  // model errors). Formatted via Go's time.Duration.String() — e.g.
+  // "1s", "500ms", "1m30s" — so the dashboard can render verbatim.
+  string backoff_base = 14;
+  string backoff_cap = 15;
+
+  // Graceful shutdown deadline applied to in-flight HTTP / Connect
+  // requests when the daemon receives SIGINT. Same string format as
+  // the backoff fields above.
+  string shutdown_timeout = 16;
 }
 
 message BuildAgentRequest {

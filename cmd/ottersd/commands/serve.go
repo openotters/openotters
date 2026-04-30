@@ -12,28 +12,29 @@ import (
 	"time"
 
 	"github.com/merlindorin/go-shared/pkg/cmd"
-	"github.com/openotters/openotters/api/v1/daemonv1connect"
-	"github.com/openotters/openotters/internal"
-	"github.com/openotters/openotters/internal/webui"
 	"go.uber.org/zap"
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/h2c"
+
+	"github.com/openotters/openotters/api/v1/daemonv1connect"
+	"github.com/openotters/openotters/internal"
+	"github.com/openotters/openotters/internal/webui"
 )
 
 type Serve struct {
-	SocketPath   string `help:"Unix socket path" default:""`
-	Runtime      string `help:"Path to a local runtime binary (skips pulling the runtime image from OCI)" default:""`
-	RegistryAddr string `help:"TCP bind address for the embedded OCI registry (overrides OTTERS_REGISTRY_ADDR)" default:""`
-	// HTTPAddr defaults to a loopback bind so the embedded UI and
-	// browser-based clients work out of the box. Override with
-	// --http-addr to change port; pass --no-http to disable the TCP
-	// listener entirely (CLI-only mode).
-	HTTPAddr       string   `help:"TCP listener address for the Connect/gRPC-Web API and embedded web UI. Loopback-only by default; non-loopback requires --auth-token." default:"127.0.0.1:5000"`
-	NoHTTP         bool     `name:"no-http" help:"Disable the TCP listener; only the Unix socket (CLI) is exposed." default:"false"`
-	NoUI           bool     `name:"no-ui" help:"Don't serve the embedded web UI on the TCP listener; only the Connect/gRPC API is reachable." default:"false"`
-	UIPath         string   `name:"ui-path" help:"Serve the web UI from this directory instead of the binary's embedded build. Useful for running a local Next.js export." default:""`
-	AllowedOrigins []string `help:"CORS Access-Control-Allow-Origin values for the TCP listener (repeatable)." default:"http://localhost:3000,http://localhost:3030"`
-	AuthToken      string   `help:"Bearer token required on the TCP listener when binding to a non-loopback address." default:""`
+	SocketPath      string        `help:"Unix socket path" default:""`
+	Runtime         string        `help:"Path to a local runtime binary (skips pulling the runtime image from OCI)" default:""`
+	RegistryAddr    string        `help:"TCP bind address for the embedded OCI registry (overrides OTTERS_REGISTRY_ADDR)" default:""`
+	HTTPAddr        string        `help:"TCP listener address for the Connect/gRPC-Web API and embedded web UI. Loopback-only by default; non-loopback requires --auth-token." default:"127.0.0.1:5000"`
+	NoHTTP          bool          `name:"no-http" help:"Disable the TCP listener; only the Unix socket (CLI) is exposed." default:"false"`
+	NoUI            bool          `name:"no-ui" help:"Don't serve the embedded web UI on the TCP listener; only the Connect/gRPC API is reachable." default:"false"`
+	UIPath          string        `name:"ui-path" help:"Serve the web UI from this directory instead of the binary's embedded build. Useful for running a local Next.js export." default:""`
+	AllowedOrigins  []string      `help:"CORS Access-Control-Allow-Origin values for the TCP listener (repeatable)." default:"http://localhost:3000,http://localhost:3030"`
+	AuthToken       string        `help:"Bearer token required on the TCP listener when binding to a non-loopback address." default:""`
+	MaxConcurrent   int           `help:"Maximum agents allowed to run concurrently in the pool." default:"10"`
+	BackoffBase     time.Duration `help:"Auto-restart backoff base delay for agents in init/pull/model_error. Schedule is base × 2^attempt, capped by --backoff-cap." default:"1s"`
+	BackoffCap      time.Duration `help:"Maximum delay between auto-restart attempts." default:"30s"`
+	ShutdownTimeout time.Duration `help:"Graceful shutdown deadline for in-flight HTTP/Connect requests when SIGINT fires." default:"5s"`
 }
 
 //nolint:funlen // single-shot daemon bootstrap reads more clearly straight-through
@@ -103,6 +104,10 @@ func (d *Serve) Run(ctx context.Context, common *cmd.Commons, sqlite *cmd.SQLite
 			common.Version.Commit(),
 			common.Version.Date(),
 		),
+		internal.WithPoolMaxConcurrent(d.MaxConcurrent),
+		internal.WithPoolBackoffBase(d.BackoffBase),
+		internal.WithPoolBackoffCap(d.BackoffCap),
+		internal.WithShutdownTimeout(d.ShutdownTimeout),
 	}
 
 	if d.Runtime != "" {
@@ -173,7 +178,7 @@ func (d *Serve) Run(ctx context.Context, common *cmd.Commons, sqlite *cmd.SQLite
 		<-ctx.Done()
 		logger.Info("shutting down daemon")
 
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), d.ShutdownTimeout)
 		defer cancel()
 
 		_ = unixSrv.Shutdown(shutdownCtx)

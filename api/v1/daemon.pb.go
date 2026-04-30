@@ -390,8 +390,19 @@ type GetInfoResponse struct {
 	AgentsRunning int32                  `protobuf:"varint,10,opt,name=agents_running,json=agentsRunning,proto3" json:"agents_running,omitempty"`
 	AgentsTotal   int32                  `protobuf:"varint,11,opt,name=agents_total,json=agentsTotal,proto3" json:"agents_total,omitempty"`
 	Providers     int32                  `protobuf:"varint,12,opt,name=providers,proto3" json:"providers,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	// Pool concurrency cap — maximum agents allowed to run at once.
+	MaxConcurrent int32 `protobuf:"varint,13,opt,name=max_concurrent,json=maxConcurrent,proto3" json:"max_concurrent,omitempty"`
+	// Auto-restart backoff schedule for failing agents (init / pull /
+	// model errors). Formatted via Go's time.Duration.String() — e.g.
+	// "1s", "500ms", "1m30s" — so the dashboard can render verbatim.
+	BackoffBase string `protobuf:"bytes,14,opt,name=backoff_base,json=backoffBase,proto3" json:"backoff_base,omitempty"`
+	BackoffCap  string `protobuf:"bytes,15,opt,name=backoff_cap,json=backoffCap,proto3" json:"backoff_cap,omitempty"`
+	// Graceful shutdown deadline applied to in-flight HTTP / Connect
+	// requests when the daemon receives SIGINT. Same string format as
+	// the backoff fields above.
+	ShutdownTimeout string `protobuf:"bytes,16,opt,name=shutdown_timeout,json=shutdownTimeout,proto3" json:"shutdown_timeout,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *GetInfoResponse) Reset() {
@@ -506,6 +517,34 @@ func (x *GetInfoResponse) GetProviders() int32 {
 		return x.Providers
 	}
 	return 0
+}
+
+func (x *GetInfoResponse) GetMaxConcurrent() int32 {
+	if x != nil {
+		return x.MaxConcurrent
+	}
+	return 0
+}
+
+func (x *GetInfoResponse) GetBackoffBase() string {
+	if x != nil {
+		return x.BackoffBase
+	}
+	return ""
+}
+
+func (x *GetInfoResponse) GetBackoffCap() string {
+	if x != nil {
+		return x.BackoffCap
+	}
+	return ""
+}
+
+func (x *GetInfoResponse) GetShutdownTimeout() string {
+	if x != nil {
+		return x.ShutdownTimeout
+	}
+	return ""
 }
 
 type BuildAgentRequest struct {
@@ -3218,7 +3257,7 @@ const file_v1_daemon_proto_rawDesc = "" +
 	"\x14GetAgentLogsResponse\x12\x18\n" +
 	"\acontent\x18\x01 \x01(\fR\acontent\x12\x12\n" +
 	"\x04path\x18\x02 \x01(\tR\x04path\"\x10\n" +
-	"\x0eGetInfoRequest\"\x86\x03\n" +
+	"\x0eGetInfoRequest\"\x9c\x04\n" +
 	"\x0fGetInfoResponse\x12#\n" +
 	"\rregistry_addr\x18\x01 \x01(\tR\fregistryAddr\x12\x1f\n" +
 	"\vsocket_path\x18\x02 \x01(\tR\n" +
@@ -3235,7 +3274,12 @@ const file_v1_daemon_proto_rawDesc = "" +
 	"\x0eagents_running\x18\n" +
 	" \x01(\x05R\ragentsRunning\x12!\n" +
 	"\fagents_total\x18\v \x01(\x05R\vagentsTotal\x12\x1c\n" +
-	"\tproviders\x18\f \x01(\x05R\tproviders\"h\n" +
+	"\tproviders\x18\f \x01(\x05R\tproviders\x12%\n" +
+	"\x0emax_concurrent\x18\r \x01(\x05R\rmaxConcurrent\x12!\n" +
+	"\fbackoff_base\x18\x0e \x01(\tR\vbackoffBase\x12\x1f\n" +
+	"\vbackoff_cap\x18\x0f \x01(\tR\n" +
+	"backoffCap\x12)\n" +
+	"\x10shutdown_timeout\x18\x10 \x01(\tR\x0fshutdownTimeout\"h\n" +
 	"\x11BuildAgentRequest\x12%\n" +
 	"\x0eagentfile_path\x18\x01 \x01(\tR\ragentfilePath\x12\x12\n" +
 	"\x04tags\x18\x02 \x03(\tR\x04tags\x12\x18\n" +

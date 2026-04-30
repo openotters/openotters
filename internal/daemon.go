@@ -209,6 +209,16 @@ type Daemon struct {
 	buildDate string
 	catwalk   *catwalkCatalogue
 
+	// Operator-tunable knobs surfaced by Info() for the dashboard.
+	// `shutdownTimeout` is informational here — serve.go owns the
+	// actual graceful-shutdown goroutine and reads its CLI flag
+	// directly; storing it on the daemon keeps GetInfo as the single
+	// source of truth for the UI.
+	maxConcurrent   int
+	backoffBase     time.Duration
+	backoffCap      time.Duration
+	shutdownTimeout time.Duration
+
 	agents map[string]*managedAgent
 }
 
@@ -216,11 +226,15 @@ type Daemon struct {
 type DaemonOption func(*daemonConfig)
 
 type daemonConfig struct {
-	localRuntime string
-	socket       string
-	version      string
-	commit       string
-	buildDate    string
+	localRuntime    string
+	socket          string
+	version         string
+	commit          string
+	buildDate       string
+	maxConcurrent   int
+	backoffBase     time.Duration
+	backoffCap      time.Duration
+	shutdownTimeout time.Duration
 }
 
 // WithLocalRuntime overrides the runtime binary with a local filesystem
@@ -245,6 +259,35 @@ func WithBuildInfo(version, commit, date string) DaemonOption {
 		c.commit = commit
 		c.buildDate = date
 	}
+}
+
+// WithPoolMaxConcurrent caps the number of agents the underlying Pool
+// will run simultaneously. Forwarded to pool.WithMaxConcurrent only
+// when n > 0; a zero leaves the pool's own default in place.
+func WithPoolMaxConcurrent(n int) DaemonOption {
+	return func(c *daemonConfig) { c.maxConcurrent = n }
+}
+
+// WithPoolBackoffBase overrides the auto-restart base delay used by
+// the Pool's supervisor loop. Forwarded only when d > 0.
+func WithPoolBackoffBase(d time.Duration) DaemonOption {
+	return func(c *daemonConfig) { c.backoffBase = d }
+}
+
+// WithPoolBackoffCap caps the maximum backoff between auto-restart
+// attempts in the Pool's supervisor loop. Forwarded only when d > 0.
+func WithPoolBackoffCap(d time.Duration) DaemonOption {
+	return func(c *daemonConfig) { c.backoffCap = d }
+}
+
+// WithShutdownTimeout records the graceful-shutdown deadline applied
+// to in-flight HTTP / Connect requests when the daemon receives
+// SIGINT. Display-only on the daemon itself — serve.go owns the
+// actual shutdown goroutine and reads its own flag — but keeping it
+// here lets GetInfo render it on the dashboard alongside the other
+// pool knobs.
+func WithShutdownTimeout(d time.Duration) DaemonOption {
+	return func(c *daemonConfig) { c.shutdownTimeout = d }
 }
 
 func NewDaemon(
@@ -298,26 +341,43 @@ func NewDaemon(
 
 	daemonLogger := logger.Named("daemon")
 
+	poolOpts := []PoolOption{
+		WithLogger(daemonLogger.Named("pool")),
+		WithLogDir(logDir),
+	}
+
+	if cfg.maxConcurrent > 0 {
+		poolOpts = append(poolOpts, WithMaxConcurrent(cfg.maxConcurrent))
+	}
+
+	if cfg.backoffBase > 0 {
+		poolOpts = append(poolOpts, WithBackoffBase(cfg.backoffBase))
+	}
+
+	if cfg.backoffCap > 0 {
+		poolOpts = append(poolOpts, WithBackoffCap(cfg.backoffCap))
+	}
+
 	return &Daemon{
-		pool: NewPool(provider,
-			WithMaxConcurrent(10),
-			WithLogger(daemonLogger.Named("pool")),
-			WithLogDir(logDir),
-		),
-		providers: providers,
-		registry:  reg,
-		state:     state,
-		logger:    daemonLogger,
-		logDir:    logDir,
-		agentsDir: agentsDir,
-		dataDir:   dataDir,
-		runtime:   cfg.localRuntime,
-		socket:    cfg.socket,
-		version:   cfg.version,
-		commit:    cfg.commit,
-		buildDate: cfg.buildDate,
-		catwalk:   newCatwalkCatalogue(),
-		agents:    make(map[string]*managedAgent),
+		pool:            NewPool(provider, poolOpts...),
+		providers:       providers,
+		registry:        reg,
+		state:           state,
+		logger:          daemonLogger,
+		logDir:          logDir,
+		agentsDir:       agentsDir,
+		dataDir:         dataDir,
+		runtime:         cfg.localRuntime,
+		socket:          cfg.socket,
+		version:         cfg.version,
+		commit:          cfg.commit,
+		buildDate:       cfg.buildDate,
+		maxConcurrent:   cfg.maxConcurrent,
+		backoffBase:     cfg.backoffBase,
+		backoffCap:      cfg.backoffCap,
+		shutdownTimeout: cfg.shutdownTimeout,
+		catwalk:         newCatwalkCatalogue(),
+		agents:          make(map[string]*managedAgent),
 	}
 }
 
@@ -343,18 +403,22 @@ func (d *Daemon) Info() DaemonInfo {
 	}
 
 	return DaemonInfo{
-		RegistryAddr:  registryAddr,
-		SocketPath:    d.socket,
-		LogDir:        d.logDir,
-		AgentsDir:     d.agentsDir,
-		DataDir:       d.dataDir,
-		RuntimePath:   d.runtime,
-		Version:       d.version,
-		Commit:        d.commit,
-		BuildDate:     d.buildDate,
-		AgentsRunning: running,
-		AgentsTotal:   len(d.agents),
-		Providers:     providerCount,
+		RegistryAddr:    registryAddr,
+		SocketPath:      d.socket,
+		LogDir:          d.logDir,
+		AgentsDir:       d.agentsDir,
+		DataDir:         d.dataDir,
+		RuntimePath:     d.runtime,
+		Version:         d.version,
+		Commit:          d.commit,
+		BuildDate:       d.buildDate,
+		AgentsRunning:   running,
+		AgentsTotal:     len(d.agents),
+		Providers:       providerCount,
+		MaxConcurrent:   d.maxConcurrent,
+		BackoffBase:     d.backoffBase,
+		BackoffCap:      d.backoffCap,
+		ShutdownTimeout: d.shutdownTimeout,
 	}
 }
 
@@ -363,18 +427,22 @@ func (d *Daemon) Info() DaemonInfo {
 // the gRPC handler; kept as its own type so non-gRPC callers (tests,
 // future local APIs) don't need to import the generated package.
 type DaemonInfo struct {
-	RegistryAddr  string
-	SocketPath    string
-	LogDir        string
-	AgentsDir     string
-	DataDir       string
-	RuntimePath   string
-	Version       string
-	Commit        string
-	BuildDate     string
-	AgentsRunning int
-	AgentsTotal   int
-	Providers     int
+	RegistryAddr    string
+	SocketPath      string
+	LogDir          string
+	AgentsDir       string
+	DataDir         string
+	RuntimePath     string
+	Version         string
+	Commit          string
+	BuildDate       string
+	AgentsRunning   int
+	AgentsTotal     int
+	Providers       int
+	MaxConcurrent   int
+	BackoffBase     time.Duration
+	BackoffCap      time.Duration
+	ShutdownTimeout time.Duration
 }
 
 // ModelInfo is one row of the daemon's provider catalogue — the
