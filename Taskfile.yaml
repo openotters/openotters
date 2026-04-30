@@ -35,6 +35,55 @@ tasks:
     cmds:
       - find internal/webui/dist -mindepth 1 ! -name .gitkeep -delete
 
+  ui:dev:
+    desc: |
+      Start the Next.js dev server (hot reload, source maps) pointed
+      at a local daemon. Defaults assume `task daemon:dev` is running
+      in a sibling terminal on 127.0.0.1:5050 — safe to run alongside
+      a brew-installed daemon on the default :5000.
+
+      Open http://localhost:3000 once webpack reports "Ready in …".
+
+      Override the daemon URL with OTTERSD_URL=... on the command line
+      (e.g. `OTTERSD_URL=http://127.0.0.1:5000 task ui:dev` to point
+      at the brew daemon instead).
+    vars:
+      WEB_APP_DIR: '{{.WEB_APP_DIR | default "./app"}}'
+      OTTERSD_URL: '{{.OTTERSD_URL | default "http://127.0.0.1:5050"}}'
+    cmds:
+      - test -d "{{.WEB_APP_DIR}}" || (echo "Web app not found at {{.WEB_APP_DIR}}; set WEB_APP_DIR or restore the directory" && exit 1)
+      - cd "{{.WEB_APP_DIR}}" && NEXT_PUBLIC_OTTERSD_URL={{.OTTERSD_URL}} npm run dev
+
+  daemon:dev:
+    desc: |
+      Run ottersd from source via `go run`, isolated from the
+      brew-installed daemon: dev socket / db / TCP port / registry,
+      with --no-ui so the embedded build isn't served (pair with
+      `task ui:dev` for hot reload).
+
+      Defaults (override via env on the command line):
+        OTTERS_DEV_HTTP_ADDR  127.0.0.1:5050
+        OTTERS_DEV_SOCKET     /tmp/otters-dev.sock
+        OTTERS_DEV_DB         /tmp/otters-dev.db
+        OTTERS_DEV_REGISTRY   127.0.0.1:5051
+
+      Picks up source changes on restart (Ctrl-C, re-run). Logs at
+      debug level via -D.
+    vars:
+      HTTP_ADDR: '{{.HTTP_ADDR | default "127.0.0.1:5050"}}'
+      SOCKET:    '{{.SOCKET   | default "/tmp/otters-dev.sock"}}'
+      DB:        '{{.DB       | default "/tmp/otters-dev.db"}}'
+      REGISTRY:  '{{.REGISTRY | default "127.0.0.1:5051"}}'
+    cmds:
+      - rm -f {{.SOCKET}}
+      - >-
+        go run ./cmd/ottersd -D serve
+        --http-addr {{.HTTP_ADDR}}
+        --socket-path {{.SOCKET}}
+        --sqlite-path {{.DB}}
+        --registry-addr {{.REGISTRY}}
+        --no-ui
+
   test:
     desc: Run unit tests with the race detector.
     cmds:
