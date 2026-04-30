@@ -10,13 +10,11 @@ import {
 	Layers,
 	MoreHorizontal,
 	Plus,
-	Search,
 	Trash2,
 } from "lucide-react"
 import { useMemo, useState } from "react"
 import { CliInstructionsDialog } from "@/components/cli-instructions-dialog"
 import { PageHeader } from "@/components/page-header"
-import { SortSelect, type SortOption } from "@/components/sort-select"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import {
@@ -26,42 +24,11 @@ import {
 	DropdownMenuSeparator,
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { Input } from "@/components/ui/input"
-import type { ImageInfo } from "@/lib/proto/v1/daemon_pb"
 import { listImages, pullAgentImage, removeImage } from "@/lib/proto/v1/daemon-Runtime_connectquery"
-import { useStableSort } from "@/lib/use-stable-sort"
 
 // Bin artifacts share the registry; the Bins page is responsible for
 // them, so the Images page filters them out by media type.
 const BIN_ARTIFACT_TYPE = "application/vnd.openotters.bin.v1"
-
-const SORT_OPTIONS: SortOption[] = [
-	{ id: "ref-asc", label: "Ref (A→Z)" },
-	{ id: "ref-desc", label: "Ref (Z→A)" },
-	{ id: "size-desc", label: "Size (largest)" },
-	{ id: "size-asc", label: "Size (smallest)" },
-	{ id: "newest", label: "Newest first" },
-	{ id: "oldest", label: "Oldest first" },
-]
-
-const REF_ASC = (a: ImageInfo, b: ImageInfo) => a.ref.localeCompare(b.ref)
-
-function compareFor(sortId: string): (a: ImageInfo, b: ImageInfo) => number {
-	switch (sortId) {
-		case "ref-desc":
-			return (a, b) => b.ref.localeCompare(a.ref)
-		case "size-desc":
-			return (a, b) => Number(b.size - a.size)
-		case "size-asc":
-			return (a, b) => Number(a.size - b.size)
-		case "newest":
-			return (a, b) => Number(b.createdAt - a.createdAt)
-		case "oldest":
-			return (a, b) => Number(a.createdAt - b.createdAt)
-		default:
-			return REF_ASC
-	}
-}
 
 function formatSize(bytes: bigint): string {
 	const n = Number(bytes)
@@ -83,8 +50,6 @@ function formatDate(unixSec: bigint): string {
 
 export default function ImagesPage() {
 	const queryClient = useQueryClient()
-	const [search, setSearch] = useState("")
-	const [sortId, setSortId] = useState<string>("ref-asc")
 	const [buildOpen, setBuildOpen] = useState(false)
 
 	const { data, isLoading, error } = useQuery(listImages, {})
@@ -97,13 +62,12 @@ export default function ImagesPage() {
 
 	const pull = useMutation(pullAgentImage)
 
-	const all = data?.images ?? []
-	const agentImages = all.filter((i) => i.artifactType !== BIN_ARTIFACT_TYPE)
-
-	const compare = useMemo(() => compareFor(sortId), [sortId])
-	const sorted = useStableSort<ImageInfo>(agentImages, (i) => i.digest, compare)
-
-	const filtered = sorted.filter((image) => image.ref.toLowerCase().includes(search.toLowerCase()))
+	const sorted = useMemo(() => {
+		const all = data?.images ?? []
+		return all
+			.filter((i) => i.artifactType !== BIN_ARTIFACT_TYPE)
+			.sort((a, b) => a.ref.localeCompare(b.ref))
+	}, [data])
 
 	return (
 		<div className="space-y-6">
@@ -152,31 +116,11 @@ export default function ImagesPage() {
 				</div>
 			)}
 
-			{!error && (
-				<div className="flex flex-wrap items-center gap-3">
-					<div className="relative max-w-sm flex-1">
-						<Search className="-translate-y-1/2 absolute top-1/2 left-3 h-4 w-4 text-muted-foreground" />
-						<Input
-							className="pl-9"
-							onChange={(e) => setSearch(e.target.value)}
-							placeholder="Search images..."
-							value={search}
-						/>
-					</div>
-					<SortSelect
-						className="w-[220px]"
-						onValueChange={setSortId}
-						options={SORT_OPTIONS}
-						value={sortId}
-					/>
-				</div>
-			)}
-
 			{isLoading && <p className="text-muted-foreground">Loading images…</p>}
 
-			{!isLoading && !error && (
+			{!isLoading && !error && sorted.length > 0 && (
 				<div className="grid gap-4">
-					{filtered.map((image) => (
+					{sorted.map((image) => (
 						<Card className="group" key={image.digest}>
 							<CardHeader className="pb-3">
 								<div className="flex items-start justify-between">
@@ -246,13 +190,13 @@ export default function ImagesPage() {
 				</div>
 			)}
 
-			{!isLoading && !error && filtered.length === 0 && (
+			{!isLoading && !error && sorted.length === 0 && (
 				<Card className="py-12">
 					<CardContent className="flex flex-col items-center justify-center text-center">
 						<Layers className="mb-4 h-12 w-12 text-muted-foreground/50" />
 						<h3 className="font-medium">No images found</h3>
 						<p className="mt-1 text-muted-foreground text-sm">
-							{search ? "Try adjusting your search" : "Build your first Agentfile image to get started"}
+							Build your first Agentfile image to get started
 						</p>
 					</CardContent>
 				</Card>

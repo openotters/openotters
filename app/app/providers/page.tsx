@@ -4,9 +4,8 @@ import { useMutation, useQuery } from "@connectrpc/connect-query"
 import { ExternalLink, Key, MoreVertical, Pencil, Plug, Plus, Trash2 } from "lucide-react"
 import Link from "next/link"
 import { useQueryClient } from "@tanstack/react-query"
-import { useMemo, useState } from "react"
+import { useMemo } from "react"
 import { PageHeader } from "@/components/page-header"
-import { SortSelect, type SortOption } from "@/components/sort-select"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -17,25 +16,7 @@ import {
 	DropdownMenuSeparator,
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import type { Provider } from "@/lib/proto/v1/daemon_pb"
 import { listProviders, removeProvider } from "@/lib/proto/v1/daemon-Runtime_connectquery"
-import { useStableSort } from "@/lib/use-stable-sort"
-
-const SORT_OPTIONS: SortOption[] = [
-	{ id: "name-asc", label: "Name (A→Z)" },
-	{ id: "name-desc", label: "Name (Z→A)" },
-]
-
-const NAME_ASC = (a: Provider, b: Provider) => a.name.localeCompare(b.name)
-
-function compareFor(sortId: string): (a: Provider, b: Provider) => number {
-	switch (sortId) {
-		case "name-desc":
-			return (a, b) => b.name.localeCompare(a.name)
-		default:
-			return NAME_ASC
-	}
-}
 
 export default function ProvidersPage() {
 	const queryClient = useQueryClient()
@@ -48,11 +29,10 @@ export default function ProvidersPage() {
 		},
 	})
 
-	const providers = data?.providers ?? []
-	const [sortId, setSortId] = useState<string>("name-asc")
-
-	const compare = useMemo(() => compareFor(sortId), [sortId])
-	const sorted = useStableSort<Provider>(providers, (p) => p.name, compare)
+	const sorted = useMemo(
+		() => [...(data?.providers ?? [])].sort((a, b) => a.name.localeCompare(b.name)),
+		[data],
+	)
 
 	return (
 		<div className="space-y-6">
@@ -78,17 +58,6 @@ export default function ProvidersPage() {
 			{error && (
 				<div className="rounded-lg border border-destructive/40 bg-destructive/10 p-4 text-sm">
 					Failed to reach daemon: {error.message}
-				</div>
-			)}
-
-			{!error && providers.length > 0 && (
-				<div className="flex flex-wrap items-center gap-3">
-					<SortSelect
-						className="w-[220px]"
-						onValueChange={setSortId}
-						options={SORT_OPTIONS}
-						value={sortId}
-					/>
 				</div>
 			)}
 
@@ -183,7 +152,7 @@ export default function ProvidersPage() {
 				</div>
 			)}
 
-			{!isLoading && !error && providers.length === 0 && (
+			{!isLoading && !error && sorted.length === 0 && (
 				<Card className="border-dashed">
 					<CardContent className="flex flex-col items-center justify-center py-12">
 						<Plug className="mb-4 h-12 w-12 text-muted-foreground" />

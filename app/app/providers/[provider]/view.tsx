@@ -5,51 +5,19 @@ import { useQueryClient } from "@tanstack/react-query"
 import { ArrowLeft, Cpu, ExternalLink, Key, Pencil, Plug, Trash2 } from "lucide-react"
 import Link from "next/link"
 import { notFound, useRouter } from "next/navigation"
-import { useMemo, useState } from "react"
-import { SortSelect, type SortOption } from "@/components/sort-select"
+import { useMemo } from "react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
-import type { Model } from "@/lib/proto/v1/daemon_pb"
 import {
 	listModels,
 	listProviders,
 	removeProvider,
 } from "@/lib/proto/v1/daemon-Runtime_connectquery"
 import { useRouteParams } from "@/lib/use-route-params"
-import { useStableSort } from "@/lib/use-stable-sort"
 
 const COMPACT_NUMBER = new Intl.NumberFormat("en", { notation: "compact" })
-
-const SORT_OPTIONS: SortOption[] = [
-	{ id: "name-asc", label: "Name (A→Z)" },
-	{ id: "name-desc", label: "Name (Z→A)" },
-	{ id: "ctx-desc", label: "Context window (largest)" },
-	{ id: "ctx-asc", label: "Context window (smallest)" },
-	{ id: "cost-asc", label: "Cost (cheapest input)" },
-	{ id: "cost-desc", label: "Cost (priciest input)" },
-]
-
-const NAME_ASC = (a: Model, b: Model) =>
-	(a.displayName || a.name).localeCompare(b.displayName || b.name)
-
-function compareFor(sortId: string): (a: Model, b: Model) => number {
-	switch (sortId) {
-		case "name-desc":
-			return (a, b) => (b.displayName || b.name).localeCompare(a.displayName || a.name)
-		case "ctx-desc":
-			return (a, b) => Number(b.contextWindow - a.contextWindow)
-		case "ctx-asc":
-			return (a, b) => Number(a.contextWindow - b.contextWindow)
-		case "cost-asc":
-			return (a, b) => a.costInputPer1m - b.costInputPer1m
-		case "cost-desc":
-			return (a, b) => b.costInputPer1m - a.costInputPer1m
-		default:
-			return NAME_ASC
-	}
-}
 
 // safeHost returns the hostname portion of url if parseable; otherwise
 // echoes the input. `${ENV_VAR}` and other placeholders won't parse.
@@ -77,16 +45,16 @@ export default function ProviderDetailPage() {
 		},
 	})
 
-	const [sortId, setSortId] = useState<string>("name-asc")
-
 	const provider = providers.data?.providers.find((p) => p.name === name)
-	const providerModels = useMemo(
-		() => (models.data?.models ?? []).filter((m) => m.provider === name),
+	const sortedModels = useMemo(
+		() =>
+			(models.data?.models ?? [])
+				.filter((m) => m.provider === name)
+				.sort((a, b) =>
+					(a.displayName || a.name).localeCompare(b.displayName || b.name),
+				),
 		[models.data, name],
 	)
-
-	const compare = useMemo(() => compareFor(sortId), [sortId])
-	const sortedModels = useStableSort<Model>(providerModels, (m) => m.ref, compare)
 
 	if (name === "" || providers.isLoading) {
 		return <p className="text-muted-foreground">Loading provider…</p>
@@ -191,23 +159,13 @@ export default function ProviderDetailPage() {
 			</Card>
 
 			<div>
-				<div className="mb-4 flex items-center justify-between gap-3">
-					<div>
-						<h2 className="font-semibold text-lg tracking-tight">Models</h2>
-						<p className="text-muted-foreground text-sm">
-							{models.isLoading
-								? "Loading models…"
-								: `${providerModels.length} advertised by ${provider.name}`}
-						</p>
-					</div>
-					{providerModels.length > 0 && (
-						<SortSelect
-							className="w-[260px]"
-							onValueChange={setSortId}
-							options={SORT_OPTIONS}
-							value={sortId}
-						/>
-					)}
+				<div className="mb-4">
+					<h2 className="font-semibold text-lg tracking-tight">Models</h2>
+					<p className="text-muted-foreground text-sm">
+						{models.isLoading
+							? "Loading models…"
+							: `${sortedModels.length} advertised by ${provider.name}`}
+					</p>
 				</div>
 
 				{models.error && (
@@ -216,7 +174,7 @@ export default function ProviderDetailPage() {
 					</div>
 				)}
 
-				{!models.isLoading && !models.error && providerModels.length === 0 && (
+				{!models.isLoading && !models.error && sortedModels.length === 0 && (
 					<Card className="border-dashed">
 						<CardContent className="py-12 text-center text-muted-foreground">
 							No models advertised. Either the provider's catalog is empty, or the API key /
