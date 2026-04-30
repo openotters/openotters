@@ -92,10 +92,18 @@ export default function ProvidersPage() {
 			{!isLoading && !error && sorted.length > 0 && (
 				<div className="grid gap-4">
 					{sorted.map((provider) => (
-						<Card className="group" key={provider.name}>
+						<Card className="group transition-colors hover:bg-muted/50" key={provider.name}>
 							<CardHeader className="pb-3">
 								<div className="flex items-start justify-between">
-									<div className="flex items-center gap-3">
+									{/*
+										Whole row is a click target into the detail page.
+										The dropdown sits OUTSIDE the link so its trigger
+										and items don't navigate away when clicked.
+									*/}
+									<Link
+										aria-label={`Open ${provider.name} details`}
+										className="flex flex-1 items-center gap-3"
+										href={`/providers/${provider.name}`}>
 										<div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
 											<Plug className="h-5 w-5 text-primary" />
 										</div>
@@ -108,7 +116,7 @@ export default function ProvidersPage() {
 												</CardDescription>
 											)}
 										</div>
-									</div>
+									</Link>
 									<DropdownMenu>
 										<DropdownMenuTrigger asChild>
 											<Button className="h-8 w-8" size="icon" variant="ghost">
@@ -116,6 +124,12 @@ export default function ProvidersPage() {
 											</Button>
 										</DropdownMenuTrigger>
 										<DropdownMenuContent align="end">
+											<DropdownMenuItem asChild>
+												<Link href={`/providers/${provider.name}`}>
+													<ExternalLink className="mr-2 h-4 w-4" />
+													Details
+												</Link>
+											</DropdownMenuItem>
 											<DropdownMenuItem asChild>
 												<Link href={`/providers/${provider.name}/edit`}>
 													<Pencil className="mr-2 h-4 w-4" />

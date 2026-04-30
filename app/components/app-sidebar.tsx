@@ -1,6 +1,6 @@
 "use client"
 
-import { Bot, Cpu, LayoutDashboard, Layers, Plug, Terminal } from "lucide-react"
+import { Bot, LayoutDashboard, Layers, Plug, Terminal } from "lucide-react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import type * as React from "react"
@@ -40,7 +40,6 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
 				{ title: "Images", url: "/images", icon: Layers },
 				{ title: "Bins", url: "/bins", icon: Terminal },
 				{ title: "Providers", url: "/providers", icon: Plug },
-				{ title: "Models", url: "/models", icon: Cpu },
 			],
 		},
 	]
