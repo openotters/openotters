@@ -217,27 +217,34 @@ export default function ChatPage() {
 	}
 
 	return (
-		<div className="flex h-[calc(100vh-8rem)] flex-col">
-			<div className="flex items-center gap-4 border-b pb-4">
+		// Chat takes the full main-pane height. The outer min-h-0 +
+		// overflow-hidden combo is what stops a long conversation from
+		// pushing the layout's <main> into a page-level scroll — the
+		// internal <Conversation> handles vertical scroll on its own.
+		// `100dvh - 12rem` accounts for the layout's header + footer +
+		// main padding (p-6 top/bottom = 3rem) so the calc matches what
+		// the SidebarInset actually allocates.
+		<div className="flex h-[calc(100dvh-12rem)] min-h-0 w-full max-w-full flex-col overflow-hidden">
+			<div className="flex shrink-0 items-center gap-4 border-b pb-4">
 				<Button asChild size="icon" variant="ghost">
 					<Link href={`/agents/${agentName}`}>
 						<ArrowLeft className="h-4 w-4" />
 					</Link>
 				</Button>
-				<div className="flex items-center gap-3">
-					<div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+				<div className="flex min-w-0 flex-1 items-center gap-3">
+					<div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10">
 						<Bot className="h-5 w-5 text-primary" />
 					</div>
-					<div>
-						<h1 className="font-semibold">{agentName || "—"}</h1>
-						<p className="font-mono text-muted-foreground text-xs">
+					<div className="min-w-0 flex-1">
+						<h1 className="truncate font-semibold">{agentName || "—"}</h1>
+						<p className="truncate font-mono text-muted-foreground text-xs">
 							session {sessionId.slice(-8)}
 						</p>
 					</div>
 				</div>
 			</div>
 
-			<Conversation className="flex-1">
+			<Conversation className="min-h-0 flex-1">
 				<ConversationContent>
 					{messages.length === 0 && (
 						<ConversationEmptyState
@@ -248,7 +255,16 @@ export default function ChatPage() {
 					)}
 					{messages.map((message) => (
 						<Message from={message.role} key={message.id}>
-							<MessageContent>
+							{/*
+								`min-w-0` lets the flex column shrink past its
+								intrinsic content width so long markdown lines
+								and code-block contents wrap / scroll inside the
+								message instead of pushing the page wider. The
+								descendant selectors keep streamdown's <pre>
+								blocks scrollable horizontally on overflow rather
+								than hijacking the document scroll.
+							*/}
+							<MessageContent className="min-w-0 max-w-full overflow-hidden break-words [&_pre]:max-w-full [&_pre]:overflow-x-auto">
 								{message.parts.map((part, idx) => {
 									if (part.kind === "text") {
 										return (
@@ -281,7 +297,7 @@ export default function ChatPage() {
 				<ConversationScrollButton />
 			</Conversation>
 
-			<div className="border-t pt-4">
+			<div className="shrink-0 border-t pt-4">
 				<PromptInput onSubmit={handleSubmit}>
 					<PromptInputBody>
 						<PromptInputTextarea
