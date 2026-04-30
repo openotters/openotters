@@ -15,6 +15,7 @@ import {
 } from "lucide-react"
 import { useMemo, useState } from "react"
 import { CliInstructionsDialog } from "@/components/cli-instructions-dialog"
+import { PageHeader } from "@/components/page-header"
 import { SortSelect, type SortOption } from "@/components/sort-select"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -106,16 +107,17 @@ export default function ImagesPage() {
 
 	return (
 		<div className="space-y-6">
-			<div className="flex items-center justify-between">
-				<div>
-					<h1 className="font-semibold text-2xl tracking-tight">Images</h1>
-					<p className="text-muted-foreground text-sm">Built Agent images in the embedded registry</p>
-				</div>
-				<Button onClick={() => setBuildOpen(true)}>
-					<Plus className="mr-2 h-4 w-4" />
-					Build Image
-				</Button>
-			</div>
+			<PageHeader
+				actions={
+					<Button onClick={() => setBuildOpen(true)}>
+						<Plus className="mr-2 h-4 w-4" />
+						Build Image
+					</Button>
+				}
+				command="otters image ls"
+				description="Built agent images in the embedded registry."
+				title="Images"
+			/>
 
 			<CliInstructionsDialog
 				description="Image building runs on the daemon. Use the otters CLI from a directory containing an Agentfile."

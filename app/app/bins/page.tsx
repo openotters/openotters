@@ -5,6 +5,7 @@ import { useQueryClient } from "@tanstack/react-query"
 import { Clock, HardDrive, MoreVertical, Terminal, Trash2 } from "lucide-react"
 import { useMemo, useState } from "react"
 import { AddBinButton } from "@/components/add-bin-button"
+import { PageHeader } from "@/components/page-header"
 import { SortSelect, type SortOption } from "@/components/sort-select"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -85,16 +86,17 @@ export default function BinsPage() {
 
 	return (
 		<div className="space-y-6">
-			<div className="flex items-center justify-between">
-				<div>
-					<h1 className="font-semibold text-2xl tracking-tight">Bins</h1>
-					<p className="text-muted-foreground">
+			<PageHeader
+				actions={<AddBinButton />}
+				command="otters bin ls"
+				description={
+					<>
 						Binary tool images. Reference these in an Agentfile via the{" "}
 						<code className="font-mono text-xs">BIN</code> directive.
-					</p>
-				</div>
-				<AddBinButton />
-			</div>
+					</>
+				}
+				title="Bins"
+			/>
 
 			{error && (
 				<div className="rounded-lg border border-destructive/40 bg-destructive/10 p-4 text-sm">

@@ -5,6 +5,7 @@ import { Plus, Search } from "lucide-react"
 import Link from "next/link"
 import { useMemo, useState } from "react"
 import { AgentCard } from "@/components/agent-card"
+import { PageHeader } from "@/components/page-header"
 import { SortSelect, type SortOption } from "@/components/sort-select"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -75,18 +76,19 @@ export default function AgentsPage() {
 
 	return (
 		<div className="space-y-6">
-			<div className="flex items-center justify-between">
-				<div>
-					<h1 className="font-semibold text-2xl tracking-tight">Agents</h1>
-					<p className="text-muted-foreground">Running and stopped agents managed by ottersd</p>
-				</div>
-				<Button asChild>
-					<Link href="/agents/new">
-						<Plus className="mr-2 h-4 w-4" />
-						Create Agent
-					</Link>
-				</Button>
-			</div>
+			<PageHeader
+				actions={
+					<Button asChild>
+						<Link href="/agents/new">
+							<Plus className="mr-2 h-4 w-4" />
+							Create Agent
+						</Link>
+					</Button>
+				}
+				command="otters ps"
+				description="Running and stopped agents managed by ottersd."
+				title="Agents"
+			/>
 
 			{error && (
 				<div className="rounded-lg border border-destructive/40 bg-destructive/10 p-4 text-sm">

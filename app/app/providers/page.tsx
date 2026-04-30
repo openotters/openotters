@@ -5,6 +5,7 @@ import { ExternalLink, Key, MoreVertical, Pencil, Plug, Plus, Trash2 } from "luc
 import Link from "next/link"
 import { useQueryClient } from "@tanstack/react-query"
 import { useMemo, useState } from "react"
+import { PageHeader } from "@/components/page-header"
 import { SortSelect, type SortOption } from "@/components/sort-select"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -55,20 +56,24 @@ export default function ProvidersPage() {
 
 	return (
 		<div className="space-y-6">
-			<div className="flex items-center justify-between">
-				<div>
-					<h1 className="font-semibold text-2xl tracking-tight">Providers</h1>
-					<p className="text-muted-foreground">
-						LLM providers configured in <code className="font-mono text-xs">~/.otters/providers.yaml</code>
-					</p>
-				</div>
-				<Button asChild>
-					<Link href="/providers/new">
-						<Plus className="mr-2 h-4 w-4" />
-						Add Provider
-					</Link>
-				</Button>
-			</div>
+			<PageHeader
+				actions={
+					<Button asChild>
+						<Link href="/providers/new">
+							<Plus className="mr-2 h-4 w-4" />
+							Add Provider
+						</Link>
+					</Button>
+				}
+				command="otters provider ls"
+				description={
+					<>
+						LLM providers configured in{" "}
+						<code className="font-mono text-xs">~/.otters/providers.yaml</code>.
+					</>
+				}
+				title="Providers"
+			/>
 
 			{error && (
 				<div className="rounded-lg border border-destructive/40 bg-destructive/10 p-4 text-sm">
