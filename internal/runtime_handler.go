@@ -5,7 +5,7 @@ import (
 	"errors"
 
 	"connectrpc.com/connect"
-	agentpkg "github.com/openotters/agentfile/agent"
+	agentpkg "github.com/openotters/agentfile/executor"
 	daemonv1 "github.com/openotters/openotters/api/v1"
 	"github.com/openotters/openotters/api/v1/daemonv1connect"
 )

@@ -17,9 +17,9 @@ import (
 	"oras.land/oras-go/v2"
 	orasmem "oras.land/oras-go/v2/content/memory"
 
-	agentpkg "github.com/openotters/agentfile/agent"
-	"github.com/openotters/agentfile/agent/system"
 	agentbuild "github.com/openotters/agentfile/build"
+	agentpkg "github.com/openotters/agentfile/executor"
+	"github.com/openotters/agentfile/executor/system"
 	"github.com/openotters/agentfile/export"
 	agentoci "github.com/openotters/agentfile/oci"
 	"github.com/openotters/agentfile/resolve"

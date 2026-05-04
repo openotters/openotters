@@ -20,7 +20,7 @@ import (
 	"github.com/google/uuid"
 	"go.uber.org/zap"
 
-	agentpkg "github.com/openotters/agentfile/agent"
+	agentpkg "github.com/openotters/agentfile/executor"
 )
 
 func TestWriteFailureLog_AppendsOneLineFromJoinedError(t *testing.T) {
@@ -101,7 +101,7 @@ func newFakeAgent(outcomes ...fakeOutcome) *fakeAgent {
 }
 
 func (f *fakeAgent) UUID() uuid.UUID                                   { return f.id }
-func (f *fakeAgent) Runtime() *agentpkg.AgentRuntime                   { return nil }
+func (f *fakeAgent) Runtime() *agentpkg.Runtime                        { return nil }
 func (f *fakeAgent) Prepare(_ context.Context) error                   { return nil }
 func (f *fakeAgent) Stop(_ context.Context) error                      { return nil }
 func (f *fakeAgent) Remove(_ context.Context) error                    { return nil }

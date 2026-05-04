@@ -12,8 +12,8 @@ import (
 	"github.com/google/uuid"
 	"go.uber.org/zap"
 
-	agentpkg "github.com/openotters/agentfile/agent"
-	"github.com/openotters/agentfile/agent/system"
+	agentpkg "github.com/openotters/agentfile/executor"
+	"github.com/openotters/agentfile/executor/system"
 	"github.com/openotters/agentfile/spec"
 )
 
@@ -294,8 +294,8 @@ func (p *Pool) Remove(ctx context.Context, id uuid.UUID) error {
 // createAgent routes through the system provider's CreateWithOptions
 // when available (so bind-mounts + log files + other per-instance
 // AgentOption values take effect), and falls back to the stock
-// agent.Provider.Create for any other provider type — keeping the
-// abstract agent.Provider interface untouched.
+// executor.Provider.Create for any other provider type — keeping the
+// abstract executor.Provider interface untouched.
 func (p *Pool) createAgent(
 	ctx context.Context, id uuid.UUID, ref spec.Reference,
 	agentOpts []system.AgentOption, overrides []spec.Override,
