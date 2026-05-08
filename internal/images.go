@@ -45,41 +45,29 @@ func readAllCapped(r io.Reader) ([]byte, error) {
 func (d *Daemon) ListImages(
 	ctx context.Context, _ *daemonv1.ListImagesRequest,
 ) (*daemonv1.ListImagesResponse, error) {
-	addr := d.registry.Addr()
+	reg := d.pool.provider.Registry()
 
-	catalog, err := fetchJSON[catalogResponse](ctx, fmt.Sprintf("http://%s/v2/_catalog", addr))
+	refs, err := reg.List(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("listing repositories: %w", err)
+		return nil, fmt.Errorf("listing images: %w", err)
 	}
 
-	var images []*daemonv1.ImageInfo
-
-	for _, repo := range catalog.Repositories {
-		tags, tagsErr := fetchJSON[tagsResponse](ctx,
-			fmt.Sprintf("http://%s/v2/%s/tags/list", addr, repo),
-		)
-		if tagsErr != nil {
+	images := make([]*daemonv1.ImageInfo, 0, len(refs))
+	for _, ref := range refs {
+		info, infoErr := reg.Inspect(ctx, ref)
+		if infoErr != nil {
+			d.logger.Debug("inspect failed; skipping", zap.String("ref", ref), zap.Error(infoErr))
 			continue
 		}
-
-		for _, tag := range tags.Tags {
-			ref := repo + ":" + tag
-
-			manifest, manifestErr := fetchManifestInfo(ctx, addr, repo, tag)
-			if manifestErr != nil {
-				continue
-			}
-
-			images = append(images, &daemonv1.ImageInfo{
-				Ref:          ref,
-				Digest:       manifest.digest,
-				ArtifactType: manifest.artifactType,
-				Size:         manifest.size,
-				CreatedAt:    d.registry.ManifestCreatedAt(repo, tag),
-				Description:  manifest.description,
-				Source:       manifest.source,
-			})
-		}
+		images = append(images, &daemonv1.ImageInfo{
+			Ref:          info.Ref,
+			Digest:       info.Digest,
+			ArtifactType: info.MediaType,
+			Size:         info.Size,
+			CreatedAt:    info.CreatedUnix,
+			Description:  info.Description,
+			Source:       info.Source,
+		})
 	}
 
 	return &daemonv1.ListImagesResponse{Images: images}, nil
@@ -88,29 +76,10 @@ func (d *Daemon) ListImages(
 func (d *Daemon) RemoveImage(
 	ctx context.Context, req *daemonv1.RemoveImageRequest,
 ) (*daemonv1.RemoveImageResponse, error) {
-	addr := d.registry.Addr()
 	ref := req.GetRef()
 
-	repo, tag := splitRef(ref)
-
-	manifest, err := fetchManifestInfo(ctx, addr, repo, tag)
-	if err != nil {
-		return nil, fmt.Errorf("resolving %s: %w", ref, err)
-	}
-
-	for _, deleteRef := range []string{tag, manifest.digest} {
-		deleteURL := fmt.Sprintf("http://%s/v2/%s/manifests/%s", addr, repo, deleteRef)
-
-		httpReq, reqErr := http.NewRequestWithContext(ctx, http.MethodDelete, deleteURL, nil)
-		if reqErr != nil {
-			return nil, reqErr
-		}
-
-		resp, doErr := http.DefaultClient.Do(httpReq)
-		if doErr != nil {
-			return nil, fmt.Errorf("deleting %s: %w", ref, doErr)
-		}
-		resp.Body.Close()
+	if err := d.pool.provider.Registry().Remove(ctx, ref); err != nil {
+		return nil, fmt.Errorf("removing %s: %w", ref, err)
 	}
 
 	d.logger.Info("image removed", zap.String("ref", ref))
@@ -159,14 +128,6 @@ func (d *Daemon) DescribeImage(
 		Layers:       layers,
 		Labels:       manifest.Annotations,
 	}, nil
-}
-
-type catalogResponse struct {
-	Repositories []string `json:"repositories"`
-}
-
-type tagsResponse struct {
-	Tags []string `json:"tags"`
 }
 
 type manifestInfo struct {
@@ -293,26 +254,6 @@ func fetchBlob(ctx context.Context, addr, repo, digest string) ([]byte, error) {
 	defer resp.Body.Close()
 
 	return readAllCapped(resp.Body)
-}
-
-func fetchJSON[T any](ctx context.Context, url string) (*T, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-	if err != nil {
-		return nil, err
-	}
-
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	var result T
-	if err = json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return nil, err
-	}
-
-	return &result, nil
 }
 
 func splitRef(ref string) (string, string) {

@@ -31,6 +31,7 @@ type BinBuild struct {
 	Name        string   `short:"n" help:"Tool name (required)" required:""`
 	Description string   `short:"d" help:"One-line description" default:""`
 	Usage       string   `short:"u" help:"Usage guidelines (markdown) baked into the image as USAGE.md" default:""`
+	Source      string   `short:"s" help:"Upstream repo URL — stamped as org.opencontainers.image.source so ghcr.io auto-links the package and inherits its visibility" default:""`
 	Tags        []string `short:"t" help:"Local tags (default: <name>:latest)" optional:""`
 	Platforms   []string `arg:"" name:"platform" help:"One or more <os>/<arch>:<bin-path> entries (e.g. linux/amd64:/tmp/jq-linux-amd64)"`
 }
@@ -75,6 +76,7 @@ func (b *BinBuild) Run(ctx context.Context, common *cmd.Commons, d *Daemon) erro
 		Name:        b.Name,
 		Description: b.Description,
 		Usage:       b.Usage,
+		Source:      b.Source,
 		Tags:        b.Tags,
 		Platforms:   platforms,
 	})

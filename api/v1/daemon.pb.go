@@ -401,8 +401,13 @@ type GetInfoResponse struct {
 	// requests when the daemon receives SIGINT. Same string format as
 	// the backoff fields above.
 	ShutdownTimeout string `protobuf:"bytes,16,opt,name=shutdown_timeout,json=shutdownTimeout,proto3" json:"shutdown_timeout,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	// Executor backend currently active: "system" (host subprocess
+	// per agent) or "docker" (container per agent). Lets `otters info`
+	// and the dashboard report which backend the daemon was started
+	// with.
+	Executor      string `protobuf:"bytes,17,opt,name=executor,proto3" json:"executor,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *GetInfoResponse) Reset() {
@@ -543,6 +548,13 @@ func (x *GetInfoResponse) GetBackoffCap() string {
 func (x *GetInfoResponse) GetShutdownTimeout() string {
 	if x != nil {
 		return x.ShutdownTimeout
+	}
+	return ""
+}
+
+func (x *GetInfoResponse) GetExecutor() string {
+	if x != nil {
+		return x.Executor
 	}
 	return ""
 }
@@ -739,12 +751,18 @@ func (x *ToolPlatform) GetBinPath() string {
 }
 
 type BuildToolImageRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	Description   string                 `protobuf:"bytes,2,opt,name=description,proto3" json:"description,omitempty"`
-	Usage         string                 `protobuf:"bytes,3,opt,name=usage,proto3" json:"usage,omitempty"`
-	Tags          []string               `protobuf:"bytes,4,rep,name=tags,proto3" json:"tags,omitempty"`
-	Platforms     []*ToolPlatform        `protobuf:"bytes,5,rep,name=platforms,proto3" json:"platforms,omitempty"`
+	state       protoimpl.MessageState `protogen:"open.v1"`
+	Name        string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Description string                 `protobuf:"bytes,2,opt,name=description,proto3" json:"description,omitempty"`
+	Usage       string                 `protobuf:"bytes,3,opt,name=usage,proto3" json:"usage,omitempty"`
+	Tags        []string               `protobuf:"bytes,4,rep,name=tags,proto3" json:"tags,omitempty"`
+	Platforms   []*ToolPlatform        `protobuf:"bytes,5,rep,name=platforms,proto3" json:"platforms,omitempty"`
+	// Upstream repo URL. When set, the daemon stamps the OCI
+	// standard `org.opencontainers.image.source` annotation on
+	// the produced manifest + index. ghcr.io reads this and
+	// auto-links the package to the named GitHub repository,
+	// inheriting its visibility (public repo → public package).
+	Source        string `protobuf:"bytes,6,opt,name=source,proto3" json:"source,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -812,6 +830,13 @@ func (x *BuildToolImageRequest) GetPlatforms() []*ToolPlatform {
 		return x.Platforms
 	}
 	return nil
+}
+
+func (x *BuildToolImageRequest) GetSource() string {
+	if x != nil {
+		return x.Source
+	}
+	return ""
 }
 
 type BuildToolImageResponse struct {
@@ -3280,7 +3305,7 @@ const file_v1_daemon_proto_rawDesc = "" +
 	"\x14GetAgentLogsResponse\x12\x18\n" +
 	"\acontent\x18\x01 \x01(\fR\acontent\x12\x12\n" +
 	"\x04path\x18\x02 \x01(\tR\x04path\"\x10\n" +
-	"\x0eGetInfoRequest\"\x9c\x04\n" +
+	"\x0eGetInfoRequest\"\xb8\x04\n" +
 	"\x0fGetInfoResponse\x12#\n" +
 	"\rregistry_addr\x18\x01 \x01(\tR\fregistryAddr\x12\x1f\n" +
 	"\vsocket_path\x18\x02 \x01(\tR\n" +
@@ -3302,7 +3327,8 @@ const file_v1_daemon_proto_rawDesc = "" +
 	"\fbackoff_base\x18\x0e \x01(\tR\vbackoffBase\x12\x1f\n" +
 	"\vbackoff_cap\x18\x0f \x01(\tR\n" +
 	"backoffCap\x12)\n" +
-	"\x10shutdown_timeout\x18\x10 \x01(\tR\x0fshutdownTimeout\"h\n" +
+	"\x10shutdown_timeout\x18\x10 \x01(\tR\x0fshutdownTimeout\x12\x1a\n" +
+	"\bexecutor\x18\x11 \x01(\tR\bexecutor\"h\n" +
 	"\x11BuildAgentRequest\x12%\n" +
 	"\x0eagentfile_path\x18\x01 \x01(\tR\ragentfilePath\x12\x12\n" +
 	"\x04tags\x18\x02 \x03(\tR\x04tags\x12\x18\n" +
@@ -3314,13 +3340,14 @@ const file_v1_daemon_proto_rawDesc = "" +
 	"\fToolPlatform\x12\x0e\n" +
 	"\x02os\x18\x01 \x01(\tR\x02os\x12\x12\n" +
 	"\x04arch\x18\x02 \x01(\tR\x04arch\x12\x19\n" +
-	"\bbin_path\x18\x03 \x01(\tR\abinPath\"\xb9\x01\n" +
+	"\bbin_path\x18\x03 \x01(\tR\abinPath\"\xd1\x01\n" +
 	"\x15BuildToolImageRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\x12\x14\n" +
 	"\x05usage\x18\x03 \x01(\tR\x05usage\x12\x12\n" +
 	"\x04tags\x18\x04 \x03(\tR\x04tags\x12@\n" +
-	"\tplatforms\x18\x05 \x03(\v2\".openotters.daemon.v1.ToolPlatformR\tplatforms\"V\n" +
+	"\tplatforms\x18\x05 \x03(\v2\".openotters.daemon.v1.ToolPlatformR\tplatforms\x12\x16\n" +
+	"\x06source\x18\x06 \x01(\tR\x06source\"V\n" +
 	"\x16BuildToolImageResponse\x12\x16\n" +
 	"\x06digest\x18\x01 \x01(\tR\x06digest\x12\x12\n" +
 	"\x04tags\x18\x02 \x03(\tR\x04tags\x12\x10\n" +

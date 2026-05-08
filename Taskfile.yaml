@@ -61,19 +61,25 @@ tasks:
       with --no-ui so the embedded build isn't served (pair with
       `task ui:dev` for hot reload).
 
-      Defaults (override via env on the command line):
-        OTTERS_DEV_HTTP_ADDR  127.0.0.1:5050
-        OTTERS_DEV_SOCKET     /tmp/otters-dev.sock
-        OTTERS_DEV_DB         /tmp/otters-dev.db
-        OTTERS_DEV_REGISTRY   127.0.0.1:5051
+      Defaults (override via env-style task vars):
+        HTTP_ADDR  127.0.0.1:5050
+        SOCKET     /tmp/otters-dev.sock
+        DB         /tmp/otters-dev.db
+        REGISTRY   127.0.0.1:5051
+
+      Pass extra `ottersd serve` flags after `--`. Two ways to
+      switch backends:
+
+        task daemon:dev -- --executor docker
+        OTTERSD_EXECUTOR=docker task daemon:dev      (Kong env fallback)
 
       Picks up source changes on restart (Ctrl-C, re-run). Logs at
       debug level via -D.
     vars:
       HTTP_ADDR: '{{.HTTP_ADDR | default "127.0.0.1:5050"}}'
-      SOCKET:    '{{.SOCKET   | default "/tmp/otters-dev.sock"}}'
-      DB:        '{{.DB       | default "/tmp/otters-dev.db"}}'
-      REGISTRY:  '{{.REGISTRY | default "127.0.0.1:5051"}}'
+      SOCKET:    '{{.SOCKET    | default "/tmp/otters-dev.sock"}}'
+      DB:        '{{.DB        | default "/tmp/otters-dev.db"}}'
+      REGISTRY:  '{{.REGISTRY  | default "127.0.0.1:5051"}}'
     cmds:
       - rm -f {{.SOCKET}}
       - >-
@@ -83,6 +89,27 @@ tasks:
         --sqlite-path {{.DB}}
         --registry-addr {{.REGISTRY}}
         --no-ui
+        {{.CLI_ARGS}}
+
+  client:dev:
+    desc: |
+      Run the otters CLI from source against the dev daemon. Wraps
+      `go run ./cmd/otters` with the dev socket so you don't need to
+      install the binary or remember --socket on every invocation.
+
+      Pair with `task daemon:dev` running in a sibling terminal.
+      Override the socket via SOCKET=...; pass CLI args after `--`:
+
+        task client:dev -- ls
+        task client:dev -- run ghcr.io/openotters/agents/pinger:latest --name pinger
+        task client:dev -- chat pinger
+        task client:dev -- info
+
+      `task client:dev` with no extra args prints `otters --help`.
+    vars:
+      SOCKET: '{{.SOCKET | default "/tmp/otters-dev.sock"}}'
+    cmds:
+      - go run ./cmd/otters --socket {{.SOCKET}} {{.CLI_ARGS}}
 
   test:
     desc: Run unit tests with the race detector.

@@ -7,18 +7,23 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/go-git/go-billy/v6"
 	"github.com/go-git/go-billy/v6/memfs"
 	"github.com/go-git/go-billy/v6/osfs"
 	"github.com/google/uuid"
+	mobyclient "github.com/moby/moby/client"
+	"github.com/opencontainers/go-digest"
+	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"go.uber.org/zap"
 	"oras.land/oras-go/v2"
 	orasmem "oras.land/oras-go/v2/content/memory"
 
 	agentbuild "github.com/openotters/agentfile/build"
 	agentpkg "github.com/openotters/agentfile/executor"
+	"github.com/openotters/agentfile/executor/docker"
 	"github.com/openotters/agentfile/executor/system"
 	"github.com/openotters/agentfile/export"
 	agentoci "github.com/openotters/agentfile/oci"
@@ -37,6 +42,12 @@ const (
 	statusInitError  = "init_error"
 	statusModelError = "model_error"
 	defaultTag       = "latest"
+
+	// executorDocker is the cfg/daemon `executor` value that
+	// switches the storage + runtime backend to Docker. The
+	// default ("system") leaves things as host-subprocess +
+	// embedded oras registry.
+	executorDocker = "docker"
 )
 
 type managedAgent struct {
@@ -47,7 +58,7 @@ type managedAgent struct {
 	tag       string
 	status    string
 	createdAt time.Time
-	mounts    []system.Mount
+	mounts    []agentpkg.Mount
 
 	// Image / runtime / tools metadata captured at create time.
 	// Populated for agents created since the daemon started; left
@@ -70,16 +81,16 @@ type agentTool struct {
 }
 
 // mountsFromPersisted translates the SQLite JSON form back into the
-// system.Mount struct the provider consumes. Inverse of the
+// agentpkg.Mount struct the provider consumes. Inverse of the
 // conversion inside CreateAgent.
-func mountsFromPersisted(pms []persistedMount) []system.Mount {
+func mountsFromPersisted(pms []persistedMount) []agentpkg.Mount {
 	if len(pms) == 0 {
 		return nil
 	}
 
-	out := make([]system.Mount, 0, len(pms))
+	out := make([]agentpkg.Mount, 0, len(pms))
 	for _, pm := range pms {
-		out = append(out, system.Mount{
+		out = append(out, agentpkg.Mount{
 			Host:        pm.Host,
 			Target:      pm.Target,
 			Description: pm.Description,
@@ -91,7 +102,7 @@ func mountsFromPersisted(pms []persistedMount) []system.Mount {
 
 // mountsToPersisted is the write-side counterpart used when
 // persisting a freshly-created agent's mounts to the state store.
-func mountsToPersisted(ms []system.Mount) []persistedMount {
+func mountsToPersisted(ms []agentpkg.Mount) []persistedMount {
 	if len(ms) == 0 {
 		return nil
 	}
@@ -124,16 +135,16 @@ var reservedMountPrefixes = []string{
 }
 
 // validateMounts translates an incoming slice of daemonv1.Mount into
-// the internal system.Mount form, rejecting anything that would leave
+// the internal agentpkg.Mount form, rejecting anything that would leave
 // the daemon in a bad state: relative/empty paths, missing host
 // files, reserved target prefixes, duplicate targets. The client is
 // expected to have resolved `~`/`$PWD`/relative host paths already.
-func validateMounts(in []*daemonv1.Mount) ([]system.Mount, error) {
+func validateMounts(in []*daemonv1.Mount) ([]agentpkg.Mount, error) {
 	if len(in) == 0 {
 		return nil, nil
 	}
 
-	out := make([]system.Mount, 0, len(in))
+	out := make([]agentpkg.Mount, 0, len(in))
 	seen := make(map[string]struct{}, len(in))
 
 	for _, m := range in {
@@ -167,7 +178,7 @@ func validateMounts(in []*daemonv1.Mount) ([]system.Mount, error) {
 
 		seen[target] = struct{}{}
 
-		out = append(out, system.Mount{
+		out = append(out, agentpkg.Mount{
 			Host:        host,
 			Target:      target,
 			Description: m.GetDescription(),
@@ -177,10 +188,10 @@ func validateMounts(in []*daemonv1.Mount) ([]system.Mount, error) {
 	return out, nil
 }
 
-// mountsToProto converts system.Mount slices to the protobuf form
+// mountsToProto converts agentpkg.Mount slices to the protobuf form
 // returned by ListAgents so the CLI `otters agent inspect` / `ps -v`
 // can surface them.
-func mountsToProto(ms []system.Mount) []*daemonv1.Mount {
+func mountsToProto(ms []agentpkg.Mount) []*daemonv1.Mount {
 	if len(ms) == 0 {
 		return nil
 	}
@@ -203,6 +214,7 @@ type Daemon struct {
 	registry  *EmbeddedRegistry
 	state     *StateStore
 	logger    *zap.Logger
+	executor  string // "system" or "docker"; surfaced by Info().
 	logDir    string
 	agentsDir string
 	dataDir   string
@@ -239,6 +251,7 @@ type daemonConfig struct {
 	backoffBase     time.Duration
 	backoffCap      time.Duration
 	shutdownTimeout time.Duration
+	executor        string // "system" (default) or "docker"
 }
 
 // WithLocalRuntime overrides the runtime binary with a local filesystem
@@ -294,6 +307,128 @@ func WithShutdownTimeout(d time.Duration) DaemonOption {
 	return func(c *daemonConfig) { c.shutdownTimeout = d }
 }
 
+// WithExecutor selects the agent runtime backend: "system" (default,
+// host subprocess) or "docker" (each agent in a container). Empty
+// string keeps the default. The docker backend requires Docker
+// Engine ≥ 25 with the containerd snapshotter enabled; failures
+// surface at NewDaemon time with a clear error.
+func WithExecutor(name string) DaemonOption {
+	return func(c *daemonConfig) {
+		if name != "" {
+			c.executor = name
+		}
+	}
+}
+
+// buildStoreFor returns the per-ref oras.ReadOnlyTarget closure
+// the executor uses to load agent OCI artifacts. The docker
+// executor returns a docker.Store backed by the Docker daemon (so
+// builds and reads share the same image store); the system
+// executor — and any future backend — falls back to the embedded
+// registry's per-ref HTTP target.
+//
+// docker.Store is stateful: a fresh one per ref ensures the load
+// path's hydrate cache only carries that agent's blobs. The
+// closure wraps a single shared docker client (lazily created on
+// first call) so we don't pay the connection negotiation cost per
+// ref.
+func buildStoreFor(
+	cfg *daemonConfig, _ *EmbeddedRegistry, logger *zap.Logger,
+) func(spec.Reference) oras.ReadOnlyTarget {
+	if cfg.executor == executorDocker {
+		var (
+			cliMu sync.Mutex
+			cli   *mobyclient.Client
+		)
+
+		return func(ref spec.Reference) oras.ReadOnlyTarget {
+			cliMu.Lock()
+			if cli == nil {
+				c, err := docker.NewClient()
+				if err != nil {
+					cliMu.Unlock()
+					logger.Error("docker store: open client", zap.String("ref", ref.String()), zap.Error(err))
+					return erroringTarget{err: err}
+				}
+				cli = c
+			}
+			cliMu.Unlock()
+
+			return docker.NewStore(cli)
+		}
+	}
+
+	return func(ref spec.Reference) oras.ReadOnlyTarget {
+		t, err := newRegistryTarget(ref)
+		if err != nil {
+			logger.Error("registry target", zap.String("ref", ref.String()), zap.Error(err))
+
+			return erroringTarget{err: err}
+		}
+
+		return t
+	}
+}
+
+// buildExecutorProvider returns the executor.Provider implementation
+// selected by cfg.executor. Defaulting "" or "system" gives the
+// host-subprocess backend; "docker" gives the container backend.
+// Pulled out of NewDaemon so the latter stays under funlen's
+// 100-line limit while we add backend choices.
+func buildExecutorProvider(
+	cfg *daemonConfig,
+	root billy.Filesystem,
+	storeFor func(spec.Reference) oras.ReadOnlyTarget,
+	reg *EmbeddedRegistry,
+	logDir string,
+	providers *ProviderRegistry,
+) agentpkg.Provider {
+	if cfg.executor == executorDocker {
+		// No newCachingBinPuller here on purpose: the docker
+		// executor pulls BIN images via cli.ImagePull straight
+		// into Docker's image cache, and Docker's own content
+		// store dedupes layers across agents. Mirroring through
+		// the embedded oras-go registry would just be a second
+		// copy with no benefit.
+		dockerOpts := []docker.ProviderOption{docker.WithLogDir(logDir)}
+
+		if providers != nil {
+			dockerOpts = append(dockerOpts, docker.WithModelResolver(providers.Resolve))
+		}
+
+		dp, err := docker.NewProvider(
+			root,
+			docker.StoreFor(storeFor),
+			dockerOpts...,
+		)
+		if err != nil {
+			// Surface to operator at startup. Common cases:
+			// daemon unreachable, engine < 25, snapshotter
+			// disabled. Panic is appropriate here — daemon can't
+			// usefully run with the requested executor down.
+			panic(fmt.Sprintf("docker executor: %v", err))
+		}
+
+		return dp
+	}
+
+	opts := []system.ProviderOption{system.WithLogDir(logDir)}
+
+	if cfg.localRuntime != "" {
+		opts = append(opts, system.WithLocalRuntime(cfg.localRuntime))
+	}
+
+	if reg != nil {
+		opts = append(opts,
+			system.WithPuller(newCachingBinPuller(reg.Addr())),
+			system.WithRegistryAddr(reg.Addr()),
+			system.WithRegistryCreatedAt(reg.ManifestCreatedAt),
+		)
+	}
+
+	return system.NewProvider(root, storeFor, opts...)
+}
+
 func NewDaemon(
 	providers *ProviderRegistry, reg *EmbeddedRegistry, state *StateStore,
 	logger *zap.Logger, opts ...DaemonOption,
@@ -313,37 +448,24 @@ func NewDaemon(
 
 	root := osfs.New(agentsDir)
 
-	providerOpts := []system.ProviderOption{
-		system.WithLogDir(logDir),
-	}
+	// storeFor is the per-ref oras.ReadOnlyTarget the executor uses
+	// to load an agent's OCI artifact. The system executor reads
+	// from the daemon's embedded oras registry; the docker executor
+	// reads from the Docker daemon's image store via docker.Store.
+	// Building the closure here so each branch picks the right
+	// backend without leaking that detail into pool / executor
+	// code.
+	storeFor := buildStoreFor(&cfg, reg, logger)
 
-	if cfg.localRuntime != "" {
-		providerOpts = append(providerOpts, system.WithLocalRuntime(cfg.localRuntime))
-	}
-
-	if reg != nil {
-		providerOpts = append(providerOpts, system.WithPuller(newCachingBinPuller(reg.Addr())))
-	}
-
-	// Each agent gets a target bound to its own ref, resolving against the
-	// embedded registry directly — no in-memory staging. On construction
-	// failure we hand back a stub that returns the underlying error on
-	// every call so the agent surfaces it cleanly instead of nil-derefing
-	// in afstore.Load.
-	storeFor := func(ref spec.Reference) oras.ReadOnlyTarget {
-		t, err := newRegistryTarget(ref)
-		if err != nil {
-			logger.Error("registry target", zap.String("ref", ref.String()), zap.Error(err))
-
-			return erroringTarget{err: err}
-		}
-
-		return t
-	}
-
-	provider := system.NewProvider(root, storeFor, providerOpts...)
+	provider := buildExecutorProvider(&cfg, root, storeFor, reg, logDir, providers)
 
 	daemonLogger := logger.Named("daemon")
+
+	executorName := cfg.executor
+	if executorName == "" {
+		executorName = "system"
+	}
+	daemonLogger.Info("executor selected", zap.String("backend", executorName))
 
 	poolOpts := []PoolOption{
 		WithLogger(daemonLogger.Named("pool")),
@@ -368,6 +490,7 @@ func NewDaemon(
 		registry:        reg,
 		state:           state,
 		logger:          daemonLogger,
+		executor:        executorName,
 		logDir:          logDir,
 		agentsDir:       agentsDir,
 		dataDir:         dataDir,
@@ -407,6 +530,7 @@ func (d *Daemon) Info() DaemonInfo {
 	}
 
 	return DaemonInfo{
+		Executor:        d.executor,
 		RegistryAddr:    registryAddr,
 		SocketPath:      d.socket,
 		LogDir:          d.logDir,
@@ -431,6 +555,10 @@ func (d *Daemon) Info() DaemonInfo {
 // the gRPC handler; kept as its own type so non-gRPC callers (tests,
 // future local APIs) don't need to import the generated package.
 type DaemonInfo struct {
+	// Executor is the active agent backend ("system" / "docker").
+	// Surfaced by Info so `otters info` and the dashboard can show
+	// which backend is running.
+	Executor        string
 	RegistryAddr    string
 	SocketPath      string
 	LogDir          string
@@ -836,7 +964,7 @@ func (d *Daemon) buildAgentfile(
 		return nil, fmt.Errorf("resolving: %w", err)
 	}
 
-	store := orasmem.New()
+	store := d.openBuildStore()
 
 	built, err := agentbuild.Build(ctx, resolved, src, store)
 	if err != nil {
@@ -856,8 +984,8 @@ func (d *Daemon) buildAgentfile(
 
 	pushed := make([]string, 0, len(tags))
 	for _, tag := range tags {
-		ref := d.localRef(tag)
-		if _, pushErr := d.pushImage(ctx, store, srcRef, ref); pushErr != nil {
+		ref := d.refFor(tag)
+		if pushErr := d.commitBuilt(ctx, store, srcRef, ref); pushErr != nil {
 			return nil, fmt.Errorf("pushing %s: %w", tag, pushErr)
 		}
 
@@ -932,13 +1060,14 @@ func (d *Daemon) BuildTool(
 		})
 	}
 
-	store := orasmem.New()
+	store := d.openBuildStore()
 
 	dig, err := bin.BuildIndex(ctx, bin.BuildOptions{
 		Name:        name,
 		BinPath:     platforms[0].BinPath,
 		Description: req.GetDescription(),
 		Usage:       req.GetUsage(),
+		Source:      req.GetSource(),
 	}, platforms, store)
 	if err != nil {
 		return nil, fmt.Errorf("building: %w", err)
@@ -949,11 +1078,18 @@ func (d *Daemon) BuildTool(
 		tags = []string{name + ":" + spec.DefaultTag}
 	}
 
-	// bin.BuildIndex tags the index as "latest" in the store.
+	// bin.BuildIndex tags the index as "latest" in the store —
+	// the system executor's pushImage resolves srcRef by tag, so
+	// we hand it "latest". The docker executor resolves by digest
+	// out of the staged blob map; commitBuilt special-cases that.
 	pushed := make([]string, 0, len(tags))
 	for _, tag := range tags {
-		ref := d.localRef(tag)
-		if _, pushErr := d.pushImage(ctx, store, "latest", ref); pushErr != nil {
+		ref := d.refFor(tag)
+		srcRef := "latest"
+		if d.executor == executorDocker {
+			srcRef = dig.String()
+		}
+		if pushErr := d.commitBuilt(ctx, store, srcRef, ref); pushErr != nil {
 			return nil, fmt.Errorf("pushing %s: %w", tag, pushErr)
 		}
 
@@ -987,7 +1123,7 @@ func (d *Daemon) Save(
 	for _, tag := range tags {
 		ref := d.localRef(tag)
 
-		if _, pushErr := d.pushImage(ctx, store, digest, ref); pushErr != nil {
+		if pushErr := d.pushImage(ctx, store, digest, ref); pushErr != nil {
 			return nil, fmt.Errorf("saving %s to local registry: %w", tag, pushErr)
 		}
 	}
@@ -1006,14 +1142,12 @@ func (d *Daemon) Pull(
 		return nil, fmt.Errorf("cannot pull a local reference %s", ref)
 	}
 
-	store, err := d.pullImage(ctx, ref)
-	if err != nil {
+	reg := d.pool.provider.Registry()
+
+	if err := reg.PullRemote(ctx, req.GetRef()); err != nil {
 		return nil, fmt.Errorf("pulling %s: %w", ref, err)
 	}
 
-	// Local ref preserves the remote path verbatim under the embedded
-	// registry. Additional `tags` on the request are treated as full
-	// paths to mirror under as well (same shape as the remote ref).
 	tag := ref.Tag
 	if tag == "" {
 		tag = defaultTag
@@ -1024,17 +1158,12 @@ func (d *Daemon) Pull(
 		tags = []string{ref.Name + ":" + tag}
 	}
 
+	// Best-effort digest lookup via Inspect on the first tag — purely
+	// informational on the response. Skip if Inspect isn't supported.
 	var digest string
 
-	for _, t := range tags {
-		localRef := d.localRef(t)
-
-		dig, pushErr := d.pushImage(ctx, store, ref.String(), localRef)
-		if pushErr != nil {
-			return nil, fmt.Errorf("saving %s to local registry: %w", t, pushErr)
-		}
-
-		digest = dig
+	if info, err := reg.Inspect(ctx, tags[0]); err == nil {
+		digest = info.Digest
 	}
 
 	d.logger.Info("image pulled", zap.String("ref", req.GetRef()), zap.Strings("tags", tags))
@@ -1045,30 +1174,24 @@ func (d *Daemon) Pull(
 func (d *Daemon) Push(
 	ctx context.Context, req *daemonv1.PushRequest,
 ) (*daemonv1.PushResponse, error) {
-	ref := spec.ParseReference(req.GetRef())
+	ref := req.GetRef()
 
-	// Local and remote refs share the same repo path + tag. The local
-	// copy lives at <embeddedAddr>/<Name>:<Tag>; pushing copies it
-	// verbatim to <Name>:<Tag> on the remote registry. localRef qualifies
-	// against the embedded registry only when ref isn't already qualified
-	// — otherwise we'd double-prefix and 404.
-	localRef := d.localRef(req.GetRef())
+	d.logger.Info("pushing to remote", zap.String("ref", ref))
 
-	d.logger.Info("pulling from local registry", zap.String("local", localRef.String()))
+	reg := d.pool.provider.Registry()
 
-	store, err := d.pullImage(ctx, localRef)
-	if err != nil {
-		return nil, fmt.Errorf("pulling from local registry: %w", err)
-	}
-
-	d.logger.Info("pushing to remote", zap.String("ref", ref.String()))
-
-	digest, err := d.pushImage(ctx, store, localRef.String(), ref)
-	if err != nil {
+	if err := reg.PushRemote(ctx, ref, ref); err != nil {
 		return nil, fmt.Errorf("pushing to %s: %w", ref, err)
 	}
 
-	return &daemonv1.PushResponse{Digest: digest, Ref: req.GetRef()}, nil
+	// Best-effort digest lookup via Inspect.
+	var digest string
+
+	if info, err := reg.Inspect(ctx, ref); err == nil {
+		digest = info.Digest
+	}
+
+	return &daemonv1.PushResponse{Digest: digest, Ref: ref}, nil
 }
 
 //nolint:funlen // sequential agent-creation flow reads more clearly straight-through
@@ -1076,14 +1199,14 @@ func (d *Daemon) CreateAgent(
 	ctx context.Context,
 	req *daemonv1.CreateAgentRequest,
 ) (*daemonv1.CreateAgentResponse, error) {
-	// localRef qualifies the user's ref against the embedded registry
-	// only when it isn't already qualified. Replaces the old
-	// "no slash → unqualified" heuristic, which mis-classified refs
-	// like `agents/foo:v1` (slash present, but still bare).
-	ref := d.localRef(req.GetRef())
+	// refFor qualifies the user's ref against the active executor
+	// backend: the embedded registry for system, Docker's image
+	// store (refs stay verbatim) for docker. Replaces the old
+	// "no slash → unqualified" heuristic, which mis-classified
+	// refs like `agents/foo:v1` (slash present, but still bare).
+	ref := d.refFor(req.GetRef())
 
-	// Load metadata straight from the embedded registry — no staging.
-	target, err := newRegistryTarget(ref)
+	target, err := d.openReadTarget(ref)
 	if err != nil {
 		return nil, fmt.Errorf("opening %s: %w", ref, err)
 	}
@@ -1246,8 +1369,11 @@ func (d *Daemon) List() []*daemonv1.AgentInfo {
 
 		var addr string
 		if a, ok := d.pool.Get(ma.id); ok {
-			if sa, isSystem := a.(*system.Agent); isSystem {
-				addr = sa.Addr()
+			switch agt := a.(type) {
+			case *system.Agent:
+				addr = agt.Addr()
+			case *docker.Agent:
+				addr = agt.Addr()
 			}
 
 			status = a.Status().String()
@@ -1480,6 +1606,114 @@ func (d *Daemon) resolve(ref string) (*managedAgent, error) {
 	return nil, fmt.Errorf("agent %q not found", ref)
 }
 
+// refFor resolves a user-supplied tag to the right shape for the
+// active executor backend. The system executor stores everything in
+// the embedded oras registry, which requires the embedded address
+// as a name prefix; the docker executor uses Docker's image store
+// where refs stay as the user wrote them.
+func (d *Daemon) refFor(tag string) spec.Reference {
+	if d.executor == executorDocker {
+		return spec.ParseReference(tag)
+	}
+
+	return d.localRef(tag)
+}
+
+// openReadTarget returns an oras.ReadOnlyTarget that resolves ref
+// against the active executor's storage backend. The docker
+// executor uses a docker.Store (which hydrates via cli.ImageSave);
+// the system executor uses the embedded registry's HTTP target.
+//
+// Used by CreateAgent's metadata-load path; the pool's storeFor
+// closure does the same thing on the per-agent build/run path.
+// They're separate calls because CreateAgent runs synchronously
+// against the daemon while storeFor lazily wraps the per-ref
+// Provider hand-off.
+func (d *Daemon) openReadTarget(ref spec.Reference) (oras.ReadOnlyTarget, error) {
+	if d.executor == executorDocker {
+		cli, err := docker.NewClient()
+		if err != nil {
+			return nil, fmt.Errorf("docker store: open client: %w", err)
+		}
+
+		return docker.NewStore(cli), nil
+	}
+
+	t, err := newRegistryTarget(ref)
+	if err != nil {
+		return nil, err
+	}
+
+	return t, nil
+}
+
+// openBuildStore returns the oras.Target every build pipeline
+// pushes blobs into. The docker backend writes through to the
+// Docker daemon's image store via OCI image layout + ImageLoad;
+// the system backend uses an in-memory store that pushImage later
+// copies into the embedded HTTP registry.
+//
+// Returned closure: nil-safe — falls back to orasmem when the
+// docker client can't be opened so callers don't have to special-
+// case startup ordering. The error path logs once and the caller
+// gets a working in-memory store.
+func (d *Daemon) openBuildStore() oras.Target {
+	if d.executor == executorDocker {
+		cli, err := docker.NewClient()
+		if err != nil {
+			d.logger.Error("docker store: open client", zap.Error(err))
+			return orasmem.New()
+		}
+
+		return docker.NewStore(cli)
+	}
+
+	return orasmem.New()
+}
+
+// commitBuilt makes the freshly built manifest visible at ref. For
+// the docker backend this calls store.Tag — the underlying
+// docker.Store flushes the staged blobs into Docker via ImageLoad
+// the first time a ref is tagged, and idempotently re-tags on
+// subsequent calls. For the system backend it copies from the
+// in-memory build store into the embedded HTTP registry.
+//
+// digestStr is the manifest digest the build pipeline returned;
+// every store keeps a staged-descriptor map so a digest is enough
+// to resolve back to MediaType + Size.
+func (d *Daemon) commitBuilt(
+	ctx context.Context, store oras.Target, digestStr string, ref spec.Reference,
+) error {
+	if d.executor == executorDocker {
+		dockerStore, ok := store.(*docker.Store)
+		if !ok {
+			return fmt.Errorf("commit: expected *docker.Store, got %T", store)
+		}
+
+		dgst, err := digest.Parse(digestStr)
+		if err != nil {
+			return fmt.Errorf("commit: parse digest %s: %w", digestStr, err)
+		}
+
+		desc := ocispec.Descriptor{Digest: dgst}
+		if err = dockerStore.Tag(ctx, desc, ref.String()); err != nil {
+			return err
+		}
+
+		return nil
+	}
+
+	// System path: the in-memory build store needs to be copied
+	// into the embedded HTTP registry under the embedded-prefixed
+	// ref. pushImage does that via oras.Copy + a remote.Repository.
+	memStore, ok := store.(*orasmem.Store)
+	if !ok {
+		return fmt.Errorf("commit: expected *orasmem.Store, got %T", store)
+	}
+
+	return d.pushImage(ctx, memStore, digestStr, ref)
+}
+
 // localRef rewrites a user-provided tag so it points at the daemon's
 // embedded registry. Any ref not already prefixed with the embedded
 // address gets that address prepended verbatim — bare `name:tag`
@@ -1492,6 +1726,15 @@ func (d *Daemon) resolve(ref string) (*managedAgent, error) {
 // `image build -t <embeddedAddr>/agents/foo:v1` from being
 // double-prefixed.
 func (d *Daemon) localRef(tag string) spec.Reference {
+	if d.registry == nil {
+		// Docker executor path doesn't run an embedded registry —
+		// refFor short-circuits there, but localRef may still be
+		// called by code paths that aren't yet executor-aware
+		// (e.g. agent restore). Fall back to the user's tag
+		// verbatim, which lands in Docker's image store as-is.
+		return spec.ParseReference(tag)
+	}
+
 	return qualifyForEmbeddedRegistry(tag, d.registry.Addr())
 }
 
@@ -1509,36 +1752,16 @@ func qualifyForEmbeddedRegistry(tag, embeddedAddr string) spec.Reference {
 	}
 }
 
-func (d *Daemon) pullImage(ctx context.Context, ref spec.Reference) (*orasmem.Store, error) {
-	repo, err := agentoci.NewRemoteRepository(ref)
-	if err != nil {
-		return nil, fmt.Errorf("creating repository for %s: %w", ref, err)
-	}
-
-	store := orasmem.New()
-
-	tag := ref.Tag
-	if tag == "" {
-		tag = defaultTag
-	}
-
-	// Tag in the store with the full reference so it's resolvable by spec.Reference.String().
-	dstTag := ref.String()
-
-	_, err = oras.Copy(ctx, repo, tag, store, dstTag, copyOptions())
-	if err != nil {
-		return nil, fmt.Errorf("copying %s: %w", ref, err)
-	}
-
-	return store, nil
-}
-
+// pushImage copies srcRef from store into the embedded registry at
+// ref. Used by the system executor's commitBuilt — the docker
+// executor writes through docker.Store directly and never enters
+// this path.
 func (d *Daemon) pushImage(
 	ctx context.Context, store *orasmem.Store, srcRef string, ref spec.Reference,
-) (string, error) {
+) error {
 	repo, err := agentoci.NewRemoteRepository(ref)
 	if err != nil {
-		return "", fmt.Errorf("creating repository for %s: %w", ref, err)
+		return fmt.Errorf("creating repository for %s: %w", ref, err)
 	}
 
 	tag := ref.Tag
@@ -1546,12 +1769,11 @@ func (d *Daemon) pushImage(
 		tag = defaultTag
 	}
 
-	desc, err := oras.Copy(ctx, store, srcRef, repo, tag, copyOptions())
-	if err != nil {
-		return "", err
+	if _, err = oras.Copy(ctx, store, srcRef, repo, tag, copyOptions()); err != nil {
+		return err
 	}
 
-	return desc.Digest.String(), nil
+	return nil
 }
 
 func importArtifact(ctx context.Context, data []byte) (*orasmem.Store, string, error) {

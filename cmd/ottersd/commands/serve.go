@@ -35,6 +35,15 @@ type Serve struct {
 	BackoffBase     time.Duration `help:"Auto-restart backoff base delay for agents in init/pull/model_error. Schedule is base × 2^attempt, capped by --backoff-cap." default:"1s"`
 	BackoffCap      time.Duration `help:"Maximum delay between auto-restart attempts." default:"30s"`
 	ShutdownTimeout time.Duration `help:"Graceful shutdown deadline for in-flight HTTP/Connect requests when SIGINT fires." default:"5s"`
+
+	// Executor selects the backend agents run on. system spawns the
+	// runtime as a host subprocess (current default; works on any
+	// platform). docker runs each agent as a Docker container with
+	// the runtime + BIN tools mounted as OCI image-mounts (requires
+	// Docker Engine ≥ 25 with the containerd snapshotter). Honours
+	// the OTTERSD_EXECUTOR env var so users can pin a default in
+	// their shell profile without remembering the flag.
+	Executor string `enum:"system,docker" default:"system" env:"OTTERSD_EXECUTOR" help:"Agent runtime backend: 'system' (host subprocess) or 'docker' (container). Honours OTTERSD_EXECUTOR."`
 }
 
 //nolint:funlen // single-shot daemon bootstrap reads more clearly straight-through
@@ -70,12 +79,21 @@ func (d *Serve) Run(ctx context.Context, common *cmd.Commons, sqlite *cmd.SQLite
 		)
 	})
 
-	reg := internal.NewEmbeddedRegistry(logger, internal.WithRegistryAddr(d.RegistryAddr))
-	if err = reg.Start(ctx); err != nil {
-		return fmt.Errorf("starting embedded registry: %w", err)
-	}
+	// The embedded oras registry is the system executor's storage
+	// backend. The docker executor uses Docker's image store
+	// directly (via docker.Store + cli.ImageLoad / ImageSave), so
+	// the HTTP server has no callers — skip starting it to avoid
+	// the bind-port footprint and the surprise of stale state
+	// surviving an executor switch.
+	var reg *internal.EmbeddedRegistry
+	if d.Executor != "docker" {
+		reg = internal.NewEmbeddedRegistry(logger, internal.WithRegistryAddr(d.RegistryAddr))
+		if err = reg.Start(ctx); err != nil {
+			return fmt.Errorf("starting embedded registry: %w", err)
+		}
 
-	defer reg.Stop()
+		defer reg.Stop()
+	}
 
 	if sqlite.Path == ":memory:" {
 		home, homeErr := os.UserHomeDir()
@@ -108,6 +126,7 @@ func (d *Serve) Run(ctx context.Context, common *cmd.Commons, sqlite *cmd.SQLite
 		internal.WithPoolBackoffBase(d.BackoffBase),
 		internal.WithPoolBackoffCap(d.BackoffCap),
 		internal.WithShutdownTimeout(d.ShutdownTimeout),
+		internal.WithExecutor(d.Executor),
 	}
 
 	if d.Runtime != "" {

@@ -265,7 +265,16 @@ func manifestMediaType(data []byte) string {
 
 func (h *persistentHandler) handleManifestDelete(w http.ResponseWriter, r *http.Request) {
 	repo, ref := parseManifestPath(r.URL.Path)
-	h.manifests.delete(repo, ref)
+	// OCI distribution allows DELETE by digest OR by tag. The
+	// digest path needs to cascade — when the manifest blob is
+	// gone, any sibling tag files still pointing at that digest
+	// describe content the registry can no longer serve, and they
+	// surface as ghosts in `image ls`. deleteCascade scans the
+	// repo for tags whose content hashes to the deleted digest
+	// and unlinks them in the same operation. For tag deletes the
+	// scan is a no-op (the tag's own file is removed before the
+	// scan starts).
+	h.manifests.deleteCascade(repo, ref)
 	w.WriteHeader(http.StatusAccepted)
 }
 
@@ -320,11 +329,63 @@ func (s *diskManifestStore) get(repo, ref string) ([]byte, bool) {
 	return data, true
 }
 
-func (s *diskManifestStore) delete(repo, ref string) {
+// deleteCascade removes ref from repo plus any sibling files whose
+// content hashes to the same sha256 — the OCI distribution spec
+// allows DELETE by digest OR tag, but the wire only carries one
+// reference, so a digest delete leaves alias tags pointing at gone
+// content. Walking the repo dir once and matching by content hash
+// makes both paths converge: a tag delete trivially returns (no
+// other file matches the tag's bytes by digest); a digest delete
+// sweeps every tag that resolves to that digest.
+func (s *diskManifestStore) deleteCascade(repo, ref string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	_ = os.Remove(filepath.Join(s.dir, repo, safeRef(ref)))
+	repoDir := filepath.Join(s.dir, repo)
+	target := filepath.Join(repoDir, safeRef(ref))
+
+	// Capture the deleted file's content digest BEFORE removing it
+	// so we can compare against sibling tags.
+	var targetDigest string
+
+	if data, err := os.ReadFile(target); err == nil {
+		targetDigest = fmt.Sprintf("sha256:%x", sha256.Sum256(data))
+	}
+
+	_ = os.Remove(target)
+
+	// If the ref was already a digest, the cascade target is
+	// itself; sweep every tag whose bytes hash to that digest.
+	cascadeDigest := targetDigest
+	if strings.HasPrefix(ref, "sha256:") {
+		cascadeDigest = ref
+	}
+
+	if cascadeDigest == "" {
+		return
+	}
+
+	entries, err := os.ReadDir(repoDir)
+	if err != nil {
+		return
+	}
+
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+
+		path := filepath.Join(repoDir, entry.Name())
+
+		data, readErr := os.ReadFile(path)
+		if readErr != nil {
+			continue
+		}
+
+		if fmt.Sprintf("sha256:%x", sha256.Sum256(data)) == cascadeDigest {
+			_ = os.Remove(path)
+		}
+	}
 }
 
 // listRepos walks the manifest tree and returns every directory that

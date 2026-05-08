@@ -49,6 +49,7 @@ func (i *Info) Run(ctx context.Context, common *cmd.Commons, d *Daemon) error {
 		{"  Commit", nonEmpty(resp.GetCommit(), "(unknown)")},
 		{"  Build date", nonEmpty(resp.GetBuildDate(), "(unknown)")},
 		{"  Socket", resp.GetSocketPath()},
+		{"  Executor", nonEmpty(resp.GetExecutor(), "system")},
 		{"  Registry", resp.GetRegistryAddr()},
 		{"  Data dir", resp.GetDataDir()},
 		{"  Agents dir", resp.GetAgentsDir()},

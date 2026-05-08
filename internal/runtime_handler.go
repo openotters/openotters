@@ -49,6 +49,7 @@ func (h *runtimeHandler) GetInfo(
 	info := h.daemon.Info()
 
 	return connect.NewResponse(&daemonv1.GetInfoResponse{
+		Executor:        info.Executor,
 		RegistryAddr:    info.RegistryAddr,
 		SocketPath:      info.SocketPath,
 		LogDir:          info.LogDir,

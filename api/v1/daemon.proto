@@ -101,6 +101,12 @@ message GetInfoResponse {
   // requests when the daemon receives SIGINT. Same string format as
   // the backoff fields above.
   string shutdown_timeout = 16;
+
+  // Executor backend currently active: "system" (host subprocess
+  // per agent) or "docker" (container per agent). Lets `otters info`
+  // and the dashboard report which backend the daemon was started
+  // with.
+  string executor = 17;
 }
 
 message BuildAgentRequest {
@@ -138,6 +144,12 @@ message BuildToolImageRequest {
   string usage       = 3;
   repeated string tags = 4;
   repeated ToolPlatform platforms = 5;
+  // Upstream repo URL. When set, the daemon stamps the OCI
+  // standard `org.opencontainers.image.source` annotation on
+  // the produced manifest + index. ghcr.io reads this and
+  // auto-links the package to the named GitHub repository,
+  // inheriting its visibility (public repo → public package).
+  string source      = 6;
 }
 
 message BuildToolImageResponse {

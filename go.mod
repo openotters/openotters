@@ -15,9 +15,11 @@ require (
 	github.com/google/go-containerregistry v0.21.5
 	github.com/google/uuid v1.6.0
 	github.com/merlindorin/go-shared v0.0.0-20260401200857-a37e8564e29e
+	github.com/moby/moby/client v0.4.0
+	github.com/opencontainers/go-digest v1.0.0
 	github.com/opencontainers/image-spec v1.1.1
-	github.com/openotters/agentfile v1.0.0-alpha.8
-	github.com/openotters/bin v1.0.0-alpha.4
+	github.com/openotters/agentfile v1.0.0-alpha.9
+	github.com/openotters/bin v1.0.0-alpha.5
 	go.uber.org/zap v1.27.1
 	golang.org/x/net v0.53.0
 	golang.org/x/term v0.42.0
@@ -378,7 +380,6 @@ require (
 	github.com/mitchellh/reflectwalk v1.0.2 // indirect
 	github.com/moby/docker-image-spec v1.3.1 // indirect
 	github.com/moby/moby/api v1.54.1 // indirect
-	github.com/moby/moby/client v0.4.0 // indirect
 	github.com/moby/term v0.5.2 // indirect
 	github.com/modelcontextprotocol/registry v1.6.0 // indirect
 	github.com/moricho/tparallel v0.3.2 // indirect
@@ -402,7 +403,6 @@ require (
 	github.com/nishanths/predeclared v0.2.2 // indirect
 	github.com/nunnatsa/ginkgolinter v0.23.0 // indirect
 	github.com/oklog/ulid/v2 v2.1.1 // indirect
-	github.com/opencontainers/go-digest v1.0.0 // indirect
 	github.com/opentracing/opentracing-go v1.2.0 // indirect
 	github.com/pelletier/go-toml v1.9.5 // indirect
 	github.com/pelletier/go-toml/v2 v2.2.4 // indirect
