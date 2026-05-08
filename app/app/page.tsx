@@ -73,6 +73,17 @@ export default function HomePage() {
 						<Row label="Commit" value={data?.commit} />
 						<Separator />
 						<Row label="Build date" value={data?.buildDate} />
+						<Separator />
+						<Row
+							label="Executor"
+							value={
+								data?.executor ? (
+									<Badge className="font-mono" variant="secondary">
+										{data.executor}
+									</Badge>
+								) : undefined
+							}
+						/>
 					</CardContent>
 				</Card>
 
