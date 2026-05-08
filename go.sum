@@ -938,6 +938,8 @@ github.com/mattn/go-runewidth v0.0.23 h1:7ykA0T0jkPpzSvMS5i9uoNn2Xy3R383f9HDx3Ry
 github.com/mattn/go-runewidth v0.0.23/go.mod h1:XBkDxAl56ILZc9knddidhrOlY5R/pDhgLpndooCuJAs=
 github.com/merlindorin/go-shared v0.0.0-20260401200857-a37e8564e29e h1:5XtcoaFVwZr/XH9EzMsocVz0AD8BQXDL1CFXc+UEpl8=
 github.com/merlindorin/go-shared v0.0.0-20260401200857-a37e8564e29e/go.mod h1:NtPWtXlTjFQrRnwLSiMZdaOArrbgVmoVeYn9V8G1eSY=
+github.com/merlindorin/go-shared v0.0.0-20260508231238-d98333880098 h1:FI8Rr6DAiJ0K1WUx71P3kwPPO2PLC4vjaukN4VeTRFY=
+github.com/merlindorin/go-shared v0.0.0-20260508231238-d98333880098/go.mod h1:NtPWtXlTjFQrRnwLSiMZdaOArrbgVmoVeYn9V8G1eSY=
 github.com/mgechev/revive v1.15.0 h1:vJ0HzSBzfNyPbHKolgiFjHxLek9KUijhqh42yGoqZ8Q=
 github.com/mgechev/revive v1.15.0/go.mod h1:LlAKO3QQe9OJ0pVZzI2GPa8CbXGZ/9lNpCGvK4T/a8A=
 github.com/minio/sha256-simd v1.0.1 h1:6kaan5IFmwTNynnKKpDHe6FWHohJOHhCPchzK49dzMM=

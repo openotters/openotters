@@ -14,7 +14,7 @@ require (
 	github.com/go-git/go-billy/v6 v6.0.0-20260328065524-593ae452e14d
 	github.com/google/go-containerregistry v0.21.5
 	github.com/google/uuid v1.6.0
-	github.com/merlindorin/go-shared v0.0.0-20260401200857-a37e8564e29e
+	github.com/merlindorin/go-shared v0.0.0-20260508231238-d98333880098
 	github.com/moby/moby/client v0.4.0
 	github.com/opencontainers/go-digest v1.0.0
 	github.com/opencontainers/image-spec v1.1.1

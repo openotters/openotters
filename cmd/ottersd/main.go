@@ -7,6 +7,7 @@ import (
 	"syscall"
 
 	"github.com/alecthomas/kong"
+
 	c "github.com/merlindorin/go-shared/pkg/cmd"
 
 	"github.com/openotters/openotters/cmd/ottersd/commands"
@@ -31,7 +32,14 @@ func main() {
 			Version: c.NewVersion(name, version, commit, buildSource, date),
 		},
 		SQLite: c.NewSQLite(),
-		Config: c.NewConfig(),
+		// Config lives at ~/.otters/ottersd.yaml (and
+		// /etc/otters/ottersd.yaml host-scoped) so the daemon's
+		// config sits alongside the rest of its state under
+		// ~/.otters/ — providers.yaml, daemon.db, agents/, logs/,
+		// registry/. WithGroup("otters") is what produces that
+		// shape; without it cmd.NewConfig() would default to
+		// ~/.ottersd/config.yaml (file split off from data).
+		Config: c.NewConfig(c.WithGroup("otters")),
 
 		Serve: &commands.Serve{},
 	}
