@@ -7,24 +7,12 @@ import (
 	"io"
 	"net/http"
 	"strings"
-	"sync"
 
 	v1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"go.uber.org/zap"
-	"golang.org/x/sync/errgroup"
 
 	daemonv1 "github.com/openotters/openotters/api/v1"
 )
-
-// listImagesConcurrency caps the number of in-flight Inspect calls
-// when ListImages walks every ref in the registry. Each Inspect
-// makes one ImageInspect + one ImageSave roundtrip on the docker
-// executor; both are I/O bound on the docker socket. 32 saturates
-// the daemon's image pipeline without flooding the unix socket
-// with too many simultaneous tar streams. For the system executor
-// each inspect is a local HTTP GET and concurrency is essentially
-// free.
-const listImagesConcurrency = 32
 
 // MaxRegistryReadBytes is the cap applied to every registry-side
 // read. 100 MiB is comfortably above any realistic OCI manifest
@@ -59,78 +47,41 @@ func (d *Daemon) ListImages(
 ) (*daemonv1.ListImagesResponse, error) {
 	reg := d.pool.provider.Registry()
 
-	refs, err := reg.List(ctx)
+	// One backend call returns every ref's metadata (id, size,
+	// created, labels) — docker's cli.ImageList already includes
+	// all of it; system's ListEntries falls back to per-ref Inspect
+	// against the embedded registry which is local + fast.
+	entries, err := reg.ListEntries(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("listing images: %w", err)
 	}
 
-	// Inspect every ref in parallel for size / created / description.
-	// Slot `i` is reserved for ref `i` so the response order matches
-	// List's; failed inspects leave the slot nil and get filtered out
-	// at the end. ArtifactType is filled in afterwards from the
-	// daemon's image_kinds index in a single SQL round-trip — Inspect
-	// no longer surfaces a kind, so listings don't pay any per-ref
-	// backend cost for that column.
-	results := make([]*daemonv1.ImageInfo, len(refs))
-
-	var mu sync.Mutex
-
-	g, gctx := errgroup.WithContext(ctx)
-	g.SetLimit(listImagesConcurrency)
-
-	for i, ref := range refs {
-		i, ref := i, ref
-		g.Go(func() error {
-			info, infoErr := reg.Inspect(gctx, ref)
-			if infoErr != nil {
-				d.logger.Debug("inspect failed; skipping",
-					zap.String("ref", ref), zap.Error(infoErr))
-
-				return nil
-			}
-
-			entry := &daemonv1.ImageInfo{
-				Ref:         info.Ref,
-				Digest:      info.Digest,
-				Size:        info.Size,
-				CreatedAt:   info.CreatedUnix,
-				Description: info.Description,
-				Source:      info.Source,
-			}
-
-			mu.Lock()
-			results[i] = entry
-			mu.Unlock()
-
-			return nil
-		})
-	}
-
-	if waitErr := g.Wait(); waitErr != nil {
-		return nil, fmt.Errorf("listing images: %w", waitErr)
-	}
-
-	digests := make([]string, 0, len(results))
-
-	for _, e := range results {
-		if e != nil && e.Digest != "" {
+	digests := make([]string, 0, len(entries))
+	for _, e := range entries {
+		if e.Digest != "" {
 			digests = append(digests, e.Digest)
 		}
 	}
 
+	// ArtifactType is joined in from the daemon's image_kinds
+	// index in a single SQL round-trip — no per-backend fallback
+	// since we own the source of truth.
 	kinds, err := d.state.GetImageKinds(ctx, digests)
 	if err != nil {
 		return nil, fmt.Errorf("loading image kinds: %w", err)
 	}
 
-	images := make([]*daemonv1.ImageInfo, 0, len(refs))
-	for _, e := range results {
-		if e == nil {
-			continue
-		}
-
-		e.ArtifactType = kinds[e.Digest]
-		images = append(images, e)
+	images := make([]*daemonv1.ImageInfo, 0, len(entries))
+	for _, e := range entries {
+		images = append(images, &daemonv1.ImageInfo{
+			Ref:          e.Ref,
+			Digest:       e.Digest,
+			ArtifactType: kinds[e.Digest],
+			Size:         e.Size,
+			CreatedAt:    e.CreatedUnix,
+			Description:  e.Description,
+			Source:       e.Source,
+		})
 	}
 
 	return &daemonv1.ListImagesResponse{Images: images}, nil
