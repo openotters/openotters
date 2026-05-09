@@ -10,12 +10,14 @@ import {
 	Layers,
 	MoreHorizontal,
 	Plus,
+	Tag,
 	Trash2,
 } from "lucide-react"
 import Link from "next/link"
 import { useMemo, useState } from "react"
 import { CliInstructionsDialog } from "@/components/cli-instructions-dialog"
 import { PageHeader } from "@/components/page-header"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import {
@@ -25,6 +27,7 @@ import {
 	DropdownMenuSeparator,
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { groupImagesByDigest } from "@/lib/image-tags"
 import { listImages, pullAgentImage, removeImage } from "@/lib/proto/v1/daemon-Runtime_connectquery"
 
 // The registry holds agent images, bin tool images, and any other
@@ -67,11 +70,10 @@ export default function ImagesPage() {
 
 	const pull = useMutation(pullAgentImage)
 
-	const sorted = useMemo(() => {
+	const groups = useMemo(() => {
 		const all = data?.images ?? []
-		return all
-			.filter((i) => i.artifactType === AGENT_ARTIFACT_TYPE)
-			.sort((a, b) => a.ref.localeCompare(b.ref))
+		const filtered = all.filter((i) => i.artifactType === AGENT_ARTIFACT_TYPE)
+		return groupImagesByDigest(filtered)
 	}, [data])
 
 	return (
@@ -123,88 +125,102 @@ export default function ImagesPage() {
 
 			{isLoading && <p className="text-muted-foreground">Loading images…</p>}
 
-			{!isLoading && !error && sorted.length > 0 && (
+			{!isLoading && !error && groups.length > 0 && (
 				<div className="grid gap-4">
-					{sorted.map((image) => (
-						<Card className="group transition-colors hover:bg-muted/50" key={image.digest}>
-							<CardHeader className="pb-3">
-								<div className="flex items-start justify-between">
-									<Link
-										aria-label={`Open ${image.ref} details`}
-										className="flex flex-1 items-center gap-3"
-										href={`/images/${encodeURIComponent(image.ref)}`}>
-										<div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
-											<Layers className="h-5 w-5 text-primary" />
-										</div>
-										<div>
-											<CardTitle className="font-medium text-base">{image.ref}</CardTitle>
-											<CardDescription className="font-mono text-xs">
-												{image.digest.substring(0, 19)}…
-											</CardDescription>
-										</div>
-									</Link>
-									<DropdownMenu>
-										<DropdownMenuTrigger asChild>
-											<Button className="h-8 w-8" size="icon" variant="ghost">
-												<MoreHorizontal className="h-4 w-4" />
-											</Button>
-										</DropdownMenuTrigger>
-										<DropdownMenuContent align="end">
-											<DropdownMenuItem asChild>
-												<Link href={`/images/${encodeURIComponent(image.ref)}`}>
-													<ExternalLink className="mr-2 h-4 w-4" />
-													Details
-												</Link>
-											</DropdownMenuItem>
-											<DropdownMenuItem
-												disabled={pull.isPending}
-												onClick={() => pull.mutate({ ref: image.ref })}>
-												<Download className="mr-2 h-4 w-4" />
-												Re-pull
-											</DropdownMenuItem>
-											<DropdownMenuSeparator />
-											<DropdownMenuItem
-												className="text-destructive"
-												disabled={remove.isPending}
-												onClick={() => remove.mutate({ ref: image.ref })}>
-												<Trash2 className="mr-2 h-4 w-4" />
-												Delete image
-											</DropdownMenuItem>
-										</DropdownMenuContent>
-									</DropdownMenu>
-								</div>
-							</CardHeader>
-							<CardContent className="space-y-3">
-								{image.description && (
-									<p className="text-muted-foreground text-sm">{image.description}</p>
-								)}
-								<div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-muted-foreground text-sm">
-									<div className="flex items-center gap-1.5">
-										<HardDrive className="h-4 w-4" />
-										<span>{formatSize(image.size)}</span>
+					{groups.map((group) => {
+						const image = group.primary
+						const extraTags = group.refs.length - 1
+						return (
+							<Card className="group transition-colors hover:bg-muted/50" key={image.digest}>
+								<CardHeader className="pb-3">
+									<div className="flex items-start justify-between">
+										<Link
+											aria-label={`Open ${image.ref} details`}
+											className="flex flex-1 items-center gap-3"
+											href={`/images/${encodeURIComponent(image.ref)}`}>
+											<div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+												<Layers className="h-5 w-5 text-primary" />
+											</div>
+											<div className="min-w-0 flex-1">
+												<div className="flex items-center gap-2">
+													<CardTitle className="font-medium text-base">
+														{image.ref}
+													</CardTitle>
+													{extraTags > 0 && (
+														<Badge className="font-mono text-xs" variant="secondary">
+															<Tag className="mr-1 h-3 w-3" />
+															+{extraTags}
+														</Badge>
+													)}
+												</div>
+												<CardDescription className="font-mono text-xs">
+													{image.digest.substring(0, 19)}…
+												</CardDescription>
+											</div>
+										</Link>
+										<DropdownMenu>
+											<DropdownMenuTrigger asChild>
+												<Button className="h-8 w-8" size="icon" variant="ghost">
+													<MoreHorizontal className="h-4 w-4" />
+												</Button>
+											</DropdownMenuTrigger>
+											<DropdownMenuContent align="end">
+												<DropdownMenuItem asChild>
+													<Link href={`/images/${encodeURIComponent(image.ref)}`}>
+														<ExternalLink className="mr-2 h-4 w-4" />
+														Details
+													</Link>
+												</DropdownMenuItem>
+												<DropdownMenuItem
+													disabled={pull.isPending}
+													onClick={() => pull.mutate({ ref: image.ref })}>
+													<Download className="mr-2 h-4 w-4" />
+													Re-pull
+												</DropdownMenuItem>
+												<DropdownMenuSeparator />
+												<DropdownMenuItem
+													className="text-destructive"
+													disabled={remove.isPending}
+													onClick={() => remove.mutate({ ref: image.ref })}>
+													<Trash2 className="mr-2 h-4 w-4" />
+													Delete image
+												</DropdownMenuItem>
+											</DropdownMenuContent>
+										</DropdownMenu>
 									</div>
-									<div className="flex items-center gap-1.5">
-										<Clock className="h-4 w-4" />
-										<span>Built {formatDate(image.createdAt)}</span>
-									</div>
-									{image.source && (
-										<a
-											className="inline-flex items-center gap-1 underline-offset-2 hover:text-foreground hover:underline"
-											href={image.source}
-											rel="noreferrer"
-											target="_blank">
-											<ExternalLink className="h-4 w-4" />
-											<span className="max-w-[40ch] truncate">{image.source}</span>
-										</a>
+								</CardHeader>
+								<CardContent className="space-y-3">
+									{image.description && (
+										<p className="text-muted-foreground text-sm">{image.description}</p>
 									)}
-								</div>
-							</CardContent>
-						</Card>
-					))}
+									<div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-muted-foreground text-sm">
+										<div className="flex items-center gap-1.5">
+											<HardDrive className="h-4 w-4" />
+											<span>{formatSize(image.size)}</span>
+										</div>
+										<div className="flex items-center gap-1.5">
+											<Clock className="h-4 w-4" />
+											<span>Built {formatDate(image.createdAt)}</span>
+										</div>
+										{image.source && (
+											<a
+												className="inline-flex items-center gap-1 underline-offset-2 hover:text-foreground hover:underline"
+												href={image.source}
+												rel="noreferrer"
+												target="_blank">
+												<ExternalLink className="h-4 w-4" />
+												<span className="max-w-[40ch] truncate">{image.source}</span>
+											</a>
+										)}
+									</div>
+								</CardContent>
+							</Card>
+						)
+					})}
 				</div>
 			)}
 
-			{!isLoading && !error && sorted.length === 0 && (
+			{!isLoading && !error && groups.length === 0 && (
 				<Card className="py-12">
 					<CardContent className="flex flex-col items-center justify-center text-center">
 						<Layers className="mb-4 h-12 w-12 text-muted-foreground/50" />

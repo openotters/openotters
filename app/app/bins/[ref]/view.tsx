@@ -7,11 +7,13 @@ import {
 	Clock,
 	ExternalLink,
 	HardDrive,
+	Tag,
 	Terminal,
 	Trash2,
 } from "lucide-react"
 import Link from "next/link"
 import { notFound, useRouter } from "next/navigation"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
 	Card,
@@ -21,6 +23,7 @@ import {
 	CardTitle,
 } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
+import { refsForDigest } from "@/lib/image-tags"
 import {
 	describeImage,
 	listImages,
@@ -124,6 +127,38 @@ export default function BinDetailPage() {
 					</CardContent>
 				</Card>
 			)}
+
+			{(() => {
+				const refs = refsForDigest(list.data?.images ?? [], bin.digest)
+				if (refs.length <= 1) return null
+				return (
+					<Card>
+						<CardHeader className="pb-2">
+							<CardTitle className="text-base">Tags</CardTitle>
+							<CardDescription>
+								{refs.length} ref(s) in the registry point at this bin (same digest).
+							</CardDescription>
+						</CardHeader>
+						<CardContent>
+							<div className="flex flex-wrap gap-2">
+								{refs.map((r) => (
+									<Link
+										className="no-underline"
+										href={`/bins/${encodeURIComponent(r)}`}
+										key={r}>
+										<Badge
+											className="cursor-pointer font-mono text-xs"
+											variant={r === bin.ref ? "default" : "secondary"}>
+											<Tag className="mr-1 h-3 w-3" />
+											{r}
+										</Badge>
+									</Link>
+								))}
+							</div>
+						</CardContent>
+					</Card>
+				)
+			})()}
 
 			<Card>
 				<CardHeader>

@@ -135,8 +135,21 @@ func spaHandler(root http.FileSystem) http.HandlerFunc {
 		}
 
 		// Rule 5: dynamic-route placeholder match.
+		//
+		// Match against EscapedPath so percent-encoded slashes inside a
+		// segment (e.g. `/bins/ghcr.io%2Fopenotters%2Ftools%2Fjq%3Alatest`
+		// when a UI link does `encodeURIComponent(ref)` on a full OCI ref)
+		// don't decode into extra path separators that break the
+		// `[^/]+` placeholder. URL.Path would decode `%2F` to `/` and the
+		// regex would reject the URL — falling through to the SPA index
+		// instead of the correct dynamic-route bundle.
+		matchPath := path.Clean(r.URL.EscapedPath())
+		if matchPath == "" || matchPath == "." {
+			matchPath = "/"
+		}
+
 		for _, rt := range routes {
-			if rt.re.MatchString(clean) {
+			if rt.re.MatchString(matchPath) {
 				w.Header().Set("Content-Type", "text/html; charset=utf-8")
 				http.ServeContent(w, r, "index.html", time.Time{}, bytes.NewReader(rt.bytes))
 

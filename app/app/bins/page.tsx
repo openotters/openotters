@@ -2,11 +2,12 @@
 
 import { useMutation, useQuery } from "@connectrpc/connect-query"
 import { useQueryClient } from "@tanstack/react-query"
-import { Clock, ExternalLink, HardDrive, MoreVertical, Terminal, Trash2 } from "lucide-react"
+import { Clock, ExternalLink, HardDrive, MoreVertical, Tag, Terminal, Trash2 } from "lucide-react"
 import Link from "next/link"
 import { useMemo } from "react"
 import { AddBinButton } from "@/components/add-bin-button"
 import { PageHeader } from "@/components/page-header"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import {
@@ -15,6 +16,7 @@ import {
 	DropdownMenuItem,
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { groupImagesByDigest } from "@/lib/image-tags"
 import { listImages, removeImage } from "@/lib/proto/v1/daemon-Runtime_connectquery"
 
 const BIN_ARTIFACT_TYPE = "application/vnd.openotters.bin.v1"
@@ -47,11 +49,10 @@ export default function BinsPage() {
 		},
 	})
 
-	const sorted = useMemo(() => {
+	const groups = useMemo(() => {
 		const all = data?.images ?? []
-		return all
-			.filter((i) => i.artifactType === BIN_ARTIFACT_TYPE)
-			.sort((a, b) => a.ref.localeCompare(b.ref))
+		const filtered = all.filter((i) => i.artifactType === BIN_ARTIFACT_TYPE)
+		return groupImagesByDigest(filtered)
 	}, [data])
 
 	return (
@@ -76,9 +77,12 @@ export default function BinsPage() {
 
 			{isLoading && <p className="text-muted-foreground">Loading bins…</p>}
 
-			{!isLoading && !error && sorted.length > 0 && (
+			{!isLoading && !error && groups.length > 0 && (
 				<div className="grid gap-4">
-					{sorted.map((bin) => (
+					{groups.map((group) => {
+						const bin = group.primary
+						const extraTags = group.refs.length - 1
+						return (
 						<Card className="group transition-colors hover:bg-muted/50" key={bin.digest}>
 							<CardHeader className="pb-3">
 								<div className="flex items-start justify-between">
@@ -89,8 +93,16 @@ export default function BinsPage() {
 										<div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
 											<Terminal className="h-5 w-5 text-primary" />
 										</div>
-										<div>
-											<CardTitle className="font-mono text-base">{bin.ref}</CardTitle>
+										<div className="min-w-0 flex-1">
+											<div className="flex items-center gap-2">
+												<CardTitle className="font-mono text-base">{bin.ref}</CardTitle>
+												{extraTags > 0 && (
+													<Badge className="font-mono text-xs" variant="secondary">
+														<Tag className="mr-1 h-3 w-3" />
+														+{extraTags}
+													</Badge>
+												)}
+											</div>
 											<CardDescription className="font-mono text-xs">
 												{bin.digest.substring(0, 19)}…
 											</CardDescription>
@@ -133,11 +145,12 @@ export default function BinsPage() {
 								</div>
 							</CardContent>
 						</Card>
-					))}
+						)
+					})}
 				</div>
 			)}
 
-			{!isLoading && !error && sorted.length === 0 && (
+			{!isLoading && !error && groups.length === 0 && (
 				<Card className="border-dashed py-12">
 					<CardContent className="flex flex-col items-center justify-center text-center">
 						<Terminal className="mb-4 h-12 w-12 text-muted-foreground/50" />
