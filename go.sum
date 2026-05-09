@@ -1039,6 +1039,8 @@ github.com/openotters/agentfile v1.0.0-alpha.16 h1:rIsu5wd1ugk7potUPSIdw7KO2DFnH
 github.com/openotters/agentfile v1.0.0-alpha.16/go.mod h1:4AZClO7jTxsbNgmFkPuSNlZVf6nSKgdBZ+uWpmYMCLg=
 github.com/openotters/agentfile v1.0.0-alpha.17 h1:ig+Ld+URdNpMB6TKNa7qdAhsBsG74DpKAgIUsgzo4nw=
 github.com/openotters/agentfile v1.0.0-alpha.17/go.mod h1:4AZClO7jTxsbNgmFkPuSNlZVf6nSKgdBZ+uWpmYMCLg=
+github.com/openotters/agentfile v1.0.0-alpha.18 h1:T0IaK+P/smDWkS7+rDEzVKsX8C5lvv4pnL7gtV3xLVM=
+github.com/openotters/agentfile v1.0.0-alpha.18/go.mod h1:4AZClO7jTxsbNgmFkPuSNlZVf6nSKgdBZ+uWpmYMCLg=
 github.com/openotters/bin v1.0.0-alpha.5 h1:4BW7y8JmJTch7uZwXzDnTutvB8EWI27vBbfjZ1grV0Q=
 github.com/openotters/bin v1.0.0-alpha.5/go.mod h1:stTqtsTdkqkS1AgFej2NXOU8M474uQTM9ojyC0ajGQI=
 github.com/openotters/bin v1.0.0-alpha.6 h1:77scnz9WsCxVuGEc4Pbwhqs/rUo8KR1h8l/LETgWwZw=
