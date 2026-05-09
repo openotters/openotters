@@ -10,8 +10,11 @@ import {
 	ExternalLink,
 	FileCode,
 	Library,
+	Plus,
 	Sparkles,
 	Terminal,
+	Trash2,
+	Variable,
 } from "lucide-react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
@@ -61,6 +64,12 @@ interface SelectedBin {
 	ref: string
 }
 
+interface DeclaredEnv {
+	key: string
+	value: string
+	description: string
+}
+
 interface WizardState {
 	from: string
 	runtime: string
@@ -70,6 +79,7 @@ interface WizardState {
 	source: string
 	soul: string
 	bins: SelectedBin[]
+	envs: DeclaredEnv[]
 }
 
 const blank: WizardState = {
@@ -81,6 +91,48 @@ const blank: WizardState = {
 	source: "",
 	soul: SOUL_TEMPLATE,
 	bins: [],
+	envs: [],
+}
+
+// Reserved ENV keys mirror agentfile/spec/parse.go's reservedEnvKeys
+// + the *_API_KEY / *_API_BASE suffix rule. Validated client-side so
+// the user gets feedback before BuildAgent rejects the file.
+const RESERVED_ENV_KEYS = new Set([
+	"PATH",
+	"HOME",
+	"XDG_CONFIG_HOME",
+	"XDG_CACHE_HOME",
+	"XDG_DATA_HOME",
+	"TMPDIR",
+	"LANG",
+	"OTTERS_AGENT_ROOT",
+])
+
+const ENV_KEY_PATTERN = /^[A-Z_][A-Z0-9_]*$/
+
+function validateEnvKey(key: string): string | null {
+	if (key === "") return null // empty rows are draft, not errors
+	if (!ENV_KEY_PATTERN.test(key)) {
+		return "Uppercase letters, digits, underscore; cannot start with a digit"
+	}
+	if (RESERVED_ENV_KEYS.has(key)) {
+		return "Reserved by the locked-down agent env"
+	}
+	if (key.endsWith("_API_KEY") || key.endsWith("_API_BASE")) {
+		return "_API_KEY / _API_BASE are reserved for provider creds"
+	}
+	return null
+}
+
+// escapeEnvValue quotes ENV values that contain whitespace or quotes
+// so the generated Agentfile parses cleanly. Bare alphanumeric +
+// punctuation stays unquoted to match how users typically write them.
+function escapeEnvValue(v: string): string {
+	if (v === "") return '""'
+	if (/[\s"\\]/.test(v)) {
+		return `"${v.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`
+	}
+	return v
 }
 
 // shortBinName trims an OCI ref down to a usable BIN alias. Reference
@@ -136,6 +188,19 @@ function buildAgentfile(state: WizardState): string {
 		lines.push("", "CONTEXT SOUL <<EOF", soul, "EOF")
 	}
 
+	const validEnvs = state.envs.filter((e) => e.key !== "" && validateEnvKey(e.key) === null)
+	if (validEnvs.length > 0) {
+		lines.push("")
+		for (const env of validEnvs) {
+			let line = `ENV ${env.key}=${escapeEnvValue(env.value)}`
+			const desc = env.description.trim()
+			if (desc) {
+				line += ` "${desc.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`
+			}
+			lines.push(line)
+		}
+	}
+
 	if (state.bins.length > 0) {
 		lines.push("")
 		for (const bin of state.bins) {
@@ -156,6 +221,7 @@ const STEPS: StepDef[] = [
 	{ id: "basics", title: "Basics", description: "FROM, RUNTIME, MODEL, NAME" },
 	{ id: "soul", title: "Soul", description: "Personality & instructions" },
 	{ id: "bins", title: "Tools", description: "Pick installed binaries" },
+	{ id: "envs", title: "Env", description: "OS env vars on the agent process" },
 	{ id: "review", title: "Review", description: "Confirm and build" },
 ]
 
@@ -251,6 +317,18 @@ export default function NewAgentPage() {
 		}))
 	}
 
+	const addEnv = () =>
+		setState((s) => ({ ...s, envs: [...s.envs, { key: "", value: "", description: "" }] }))
+
+	const updateEnv = (idx: number, patch: Partial<DeclaredEnv>) =>
+		setState((s) => ({
+			...s,
+			envs: s.envs.map((e, i) => (i === idx ? { ...e, ...patch } : e)),
+		}))
+
+	const removeEnv = (idx: number) =>
+		setState((s) => ({ ...s, envs: s.envs.filter((_, i) => i !== idx) }))
+
 	const wizardAgentfile = useMemo(() => buildAgentfile(state), [state])
 
 	const canAdvanceFromBasics = state.modelRef.trim() !== "" && state.agentName.trim() !== ""
@@ -262,7 +340,13 @@ export default function NewAgentPage() {
 			case 1:
 				return state.soul.trim() !== ""
 			case 2:
+				return true
 			case 3:
+				// Block "Next" if any non-empty env row carries an
+				// invalid key (reserved, wrong shape, _API_* suffix).
+				// Empty rows are drafts and skipped at build time.
+				return state.envs.every((e) => e.key === "" || validateEnvKey(e.key) === null)
+			case 4:
 				return true
 			default:
 				return false
@@ -359,7 +443,15 @@ export default function NewAgentPage() {
 									selected={state.bins}
 								/>
 							)}
-							{step === 3 && <ReviewStep agentfile={wizardAgentfile} state={state} />}
+							{step === 3 && (
+								<EnvsStep
+									envs={state.envs}
+									onAdd={addEnv}
+									onRemove={removeEnv}
+									onUpdate={updateEnv}
+								/>
+							)}
+							{step === 4 && <ReviewStep agentfile={wizardAgentfile} state={state} />}
 
 							<div className="flex items-center justify-between">
 								<Button
@@ -695,6 +787,116 @@ function BinsStep({ available, availableLoading, selected, onToggle, onRename }:
 	)
 }
 
+interface EnvsStepProps {
+	envs: DeclaredEnv[]
+	onAdd: () => void
+	onUpdate: (idx: number, patch: Partial<DeclaredEnv>) => void
+	onRemove: (idx: number) => void
+}
+
+function EnvsStep({ envs, onAdd, onUpdate, onRemove }: EnvsStepProps) {
+	return (
+		<Card>
+			<CardHeader>
+				<CardTitle>ENV</CardTitle>
+				<CardDescription>
+					OS environment variables set on the spawned agent process — application
+					knobs the agent (or its tools) read via{" "}
+					<code className="font-mono text-xs">os.Getenv</code>. Distinct from{" "}
+					<code className="font-mono text-xs">CONFIG</code> (a runtime-SDK knob)
+					and <code className="font-mono text-xs">ARG</code> (build-time
+					substitution). Keys must be uppercase POSIX-style; reserved keys
+					(<code className="font-mono text-xs">PATH</code>,{" "}
+					<code className="font-mono text-xs">HOME</code>,{" "}
+					<code className="font-mono text-xs">XDG_*</code>,{" "}
+					<code className="font-mono text-xs">TMPDIR</code>,{" "}
+					<code className="font-mono text-xs">LANG</code>,{" "}
+					<code className="font-mono text-xs">OTTERS_AGENT_ROOT</code>, plus{" "}
+					<code className="font-mono text-xs">*_API_KEY</code> /{" "}
+					<code className="font-mono text-xs">*_API_BASE</code>) are rejected to
+					keep the locked-down sandbox intact.
+				</CardDescription>
+			</CardHeader>
+			<CardContent className="space-y-3">
+				{envs.length === 0 && (
+					<p className="rounded-lg border border-dashed p-6 text-center text-muted-foreground text-sm">
+						No environment variables. Most agents don't need any —{" "}
+						provider creds (<code className="font-mono text-xs">ANTHROPIC_API_KEY</code>{" "}
+						etc.) flow through automatically based on the chosen MODEL.
+					</p>
+				)}
+				{envs.map((env, idx) => {
+					const keyError = validateEnvKey(env.key)
+					return (
+						<div
+							className={cn(
+								"rounded-lg border p-3 space-y-2",
+								keyError && env.key !== "" && "border-destructive/40 bg-destructive/5",
+							)}
+							key={idx}>
+							<div className="flex items-start gap-2">
+								<Variable className="mt-2 h-4 w-4 shrink-0 text-primary" />
+								<div className="flex-1 space-y-2">
+									<div className="grid gap-2 sm:grid-cols-[1fr_1fr]">
+										<div className="space-y-1">
+											<Label className="text-xs">Key</Label>
+											<Input
+												className="font-mono text-sm"
+												onChange={(e) =>
+													onUpdate(idx, {
+														key: e.target.value
+															.toUpperCase()
+															.replace(/[^A-Z0-9_]/g, "_"),
+													})
+												}
+												placeholder="NODE_ENV"
+												value={env.key}
+											/>
+											{keyError && env.key !== "" && (
+												<p className="text-destructive text-xs">{keyError}</p>
+											)}
+										</div>
+										<div className="space-y-1">
+											<Label className="text-xs">Value</Label>
+											<Input
+												className="font-mono text-sm"
+												onChange={(e) => onUpdate(idx, { value: e.target.value })}
+												placeholder="production"
+												value={env.value}
+											/>
+										</div>
+									</div>
+									<div className="space-y-1">
+										<Label className="text-xs">Description (optional)</Label>
+										<Input
+											className="text-sm"
+											onChange={(e) => onUpdate(idx, { description: e.target.value })}
+											placeholder="Why this is set, what reads it"
+											value={env.description}
+										/>
+									</div>
+								</div>
+								<Button
+									className="text-muted-foreground hover:text-destructive"
+									onClick={() => onRemove(idx)}
+									size="icon"
+									type="button"
+									variant="ghost">
+									<Trash2 className="h-4 w-4" />
+								</Button>
+							</div>
+						</div>
+					)
+				})}
+				<Button onClick={onAdd} size="sm" type="button" variant="outline">
+					<Plus className="mr-2 h-4 w-4" />
+					Add ENV
+				</Button>
+			</CardContent>
+		</Card>
+	)
+}
+
 interface ReviewStepProps {
 	state: WizardState
 	agentfile: string
@@ -726,6 +928,16 @@ function ReviewStep({ state, agentfile }: ReviewStepProps) {
 					<Row label="Source" value={state.source} />
 					<Separator />
 					<Row label="Tools" value={state.bins.length === 0 ? "none" : `${state.bins.length} bin(s)`} />
+					<Separator />
+					<Row
+						label="Env"
+						value={(() => {
+							const valid = state.envs.filter(
+								(e) => e.key !== "" && validateEnvKey(e.key) === null,
+							)
+							return valid.length === 0 ? "none" : `${valid.length} var(s)`
+						})()}
+					/>
 				</div>
 				{state.bins.length > 0 && (
 					<div className="flex flex-wrap gap-1">
@@ -734,6 +946,17 @@ function ReviewStep({ state, agentfile }: ReviewStepProps) {
 								{b.name}
 							</Badge>
 						))}
+					</div>
+				)}
+				{state.envs.some((e) => e.key !== "" && validateEnvKey(e.key) === null) && (
+					<div className="flex flex-wrap gap-1">
+						{state.envs
+							.filter((e) => e.key !== "" && validateEnvKey(e.key) === null)
+							.map((e) => (
+								<Badge className="font-mono text-xs" key={e.key} variant="secondary">
+									{e.key}={e.value || ""}
+								</Badge>
+							))}
 					</div>
 				)}
 				<details>
