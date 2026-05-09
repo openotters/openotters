@@ -52,7 +52,7 @@ export function DaemonStatus() {
 						<div className="space-y-1 text-xs">
 							<p className="font-medium">Cannot reach ottersd</p>
 							<p className="text-muted-foreground">
-								Run <code className="font-mono">ottersd serve --http 127.0.0.1:5000</code>
+								Run <code className="font-mono">ottersd serve --http 127.0.0.1:5500</code>
 							</p>
 							{error?.message && <p className="text-muted-foreground">{error.message}</p>}
 						</div>

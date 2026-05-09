@@ -103,15 +103,15 @@ brews:
         socket:        ~/.otters/otters.sock
         agent data:    ~/.otters/agents
         logs:          #{var}/log/ottersd.{log,err.log} (service mode only)
-        web UI + API:  http://127.0.0.1:5000  (loopback by default)
+        web UI + API:  http://127.0.0.1:5500  (loopback by default)
 
       The daemon ships with an embedded web UI baked into the binary —
       no separate install. Once ottersd is running, open
-      http://127.0.0.1:5000 in your browser. The Connect/gRPC API is
+      http://127.0.0.1:5500 in your browser. The Connect/gRPC API is
       reachable on the same listener under /api.
 
       Customise the listener:
-        ottersd serve --http-addr 127.0.0.1:5050   # change the port
+        ottersd serve --http-addr 127.0.0.1:8080   # change the port
         ottersd serve --no-ui                      # API only
         ottersd serve --no-http                    # CLI only (Unix socket)
 
@@ -120,7 +120,7 @@ brews:
       Get started once the daemon is running:
         otters --help
         otters run <Agentfile>
-        open http://127.0.0.1:5000
+        open http://127.0.0.1:5500
 
       Stop the service:
         brew services stop otters

@@ -25,7 +25,7 @@ type Serve struct {
 	SocketPath      string        `help:"Unix socket path" default:""`
 	Runtime         string        `help:"Path to a local runtime binary (skips pulling the runtime image from OCI)" default:""`
 	RegistryAddr    string        `help:"TCP bind address for the embedded OCI registry (overrides OTTERS_REGISTRY_ADDR)" default:""`
-	HTTPAddr        string        `help:"TCP listener address for the Connect/gRPC-Web API and embedded web UI. Loopback-only by default; non-loopback requires --auth-token." default:"127.0.0.1:5000"`
+	HTTPAddr        string        `help:"TCP listener address for the Connect/gRPC-Web API and embedded web UI. Loopback-only by default; non-loopback requires --auth-token." default:"127.0.0.1:5500"`
 	NoHTTP          bool          `name:"no-http" help:"Disable the TCP listener; only the Unix socket (CLI) is exposed." default:"false"`
 	NoUI            bool          `name:"no-ui" help:"Don't serve the embedded web UI on the TCP listener; only the Connect/gRPC API is reachable." default:"false"`
 	UIPath          string        `name:"ui-path" help:"Serve the web UI from this directory instead of the binary's embedded build. Useful for running a local Next.js export." default:""`

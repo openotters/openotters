@@ -40,12 +40,12 @@ tasks:
       Start the Next.js dev server (hot reload, source maps) pointed
       at a local daemon. Defaults assume `task daemon:dev` is running
       in a sibling terminal on 127.0.0.1:5050 — safe to run alongside
-      a brew-installed daemon on the default :5000.
+      a brew-installed daemon on the default :5500.
 
       Open http://localhost:3000 once webpack reports "Ready in …".
 
       Override the daemon URL with OTTERSD_URL=... on the command line
-      (e.g. `OTTERSD_URL=http://127.0.0.1:5000 task ui:dev` to point
+      (e.g. `OTTERSD_URL=http://127.0.0.1:5500 task ui:dev` to point
       at the brew daemon instead).
     vars:
       WEB_APP_DIR: '{{.WEB_APP_DIR | default "./app"}}'

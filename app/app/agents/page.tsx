@@ -37,7 +37,7 @@ export default function AgentsPage() {
 			{error && (
 				<div className="rounded-lg border border-destructive/40 bg-destructive/10 p-4 text-sm">
 					Failed to reach daemon: {error.message}. Make sure{" "}
-					<code className="font-mono">ottersd serve --http 127.0.0.1:5000</code> is running.
+					<code className="font-mono">ottersd serve --http 127.0.0.1:5500</code> is running.
 				</div>
 			)}
 
