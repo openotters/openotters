@@ -1697,6 +1697,11 @@ func (d *Daemon) upsertImagesFromTags(ctx context.Context, tags []string, kindHi
 
 	reg := d.pool.provider.Registry()
 
+	// Carry-forward source for kinds the registry can't surface
+	// itself (docker's ManifestKind is always empty). Loaded once;
+	// nil on lookup failure means "no carry-forward available".
+	var existing []PersistedImage
+
 	for _, tag := range tags {
 		info, err := reg.Inspect(ctx, tag)
 		if err != nil {
@@ -1711,6 +1716,27 @@ func (d *Daemon) upsertImagesFromTags(ctx context.Context, tags []string, kindHi
 		if kind == "" {
 			if k, kErr := reg.ManifestKind(ctx, tag); kErr == nil {
 				kind = k
+			}
+		}
+
+		// On docker, ManifestKind can't see the manifest's
+		// artifactType — re-pulls / re-pushes would otherwise
+		// blank the kind and drop the row from filtered listings.
+		// Preserve whatever the cache last knew for this ref or
+		// digest.
+		if kind == "" {
+			if existing == nil {
+				if rows, listErr := d.state.ListImages(ctx); listErr == nil {
+					existing = rows
+				}
+			}
+
+			for _, e := range existing {
+				if (e.Ref == tag || e.Digest == info.Digest) && e.ArtifactType != "" {
+					kind = e.ArtifactType
+
+					break
+				}
 			}
 		}
 
