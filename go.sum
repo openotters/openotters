@@ -1031,8 +1031,12 @@ github.com/openotters/agentfile v1.0.0-alpha.12 h1:w6CxsqjdQ4wg20reQ7AFbgZPMfuNB
 github.com/openotters/agentfile v1.0.0-alpha.12/go.mod h1:4AZClO7jTxsbNgmFkPuSNlZVf6nSKgdBZ+uWpmYMCLg=
 github.com/openotters/agentfile v1.0.0-alpha.13 h1:dHPzPIGcBHu/x08m+DCFKJemFFIKGL45lfnkJdHF6QA=
 github.com/openotters/agentfile v1.0.0-alpha.13/go.mod h1:4AZClO7jTxsbNgmFkPuSNlZVf6nSKgdBZ+uWpmYMCLg=
+github.com/openotters/agentfile v1.0.0-alpha.14 h1:0o7oHltX/eJEplgHQk2PCUyEMqlZAO/B5PFADJxcdws=
+github.com/openotters/agentfile v1.0.0-alpha.14/go.mod h1:4AZClO7jTxsbNgmFkPuSNlZVf6nSKgdBZ+uWpmYMCLg=
 github.com/openotters/bin v1.0.0-alpha.5 h1:4BW7y8JmJTch7uZwXzDnTutvB8EWI27vBbfjZ1grV0Q=
 github.com/openotters/bin v1.0.0-alpha.5/go.mod h1:stTqtsTdkqkS1AgFej2NXOU8M474uQTM9ojyC0ajGQI=
+github.com/openotters/bin v1.0.0-alpha.6 h1:77scnz9WsCxVuGEc4Pbwhqs/rUo8KR1h8l/LETgWwZw=
+github.com/openotters/bin v1.0.0-alpha.6/go.mod h1:+vFlidwqgNa3w/19/sCKedffDBihMZuPnJcH2/xUJa0=
 github.com/opentracing/opentracing-go v1.2.0 h1:uEJPy/1a5RIPAJ0Ov+OIO8OxWu77jEv+1B0VhjKrZUs=
 github.com/opentracing/opentracing-go v1.2.0/go.mod h1:GxEUsuufX4nBwe+T+Wl9TAgYrxe9dPLANfrWvHYVTgc=
 github.com/ory/dockertest/v3 v3.12.0 h1:3oV9d0sDzlSQfHtIaB5k6ghUCVMVLpAY8hwrqoCyRCw=

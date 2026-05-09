@@ -17,14 +17,14 @@ import (
 )
 
 // listImagesConcurrency caps the number of in-flight Inspect calls
-// when ListImages walks every ref in the registry. Inspect on the
-// docker executor is expensive (the first call per image streams
-// the image tar to read its manifest's artifactType), and the UI
-// listings render hundreds of milliseconds slower per ref when
-// they're done sequentially. 8 keeps the docker daemon's image
-// pipeline busy without flooding it; for the system executor each
-// inspect is a local HTTP GET and concurrency is essentially free.
-const listImagesConcurrency = 8
+// when ListImages walks every ref in the registry. Each Inspect
+// makes one ImageInspect + one ImageSave roundtrip on the docker
+// executor; both are I/O bound on the docker socket. 32 saturates
+// the daemon's image pipeline without flooding the unix socket
+// with too many simultaneous tar streams. For the system executor
+// each inspect is a local HTTP GET and concurrency is essentially
+// free.
+const listImagesConcurrency = 32
 
 // MaxRegistryReadBytes is the cap applied to every registry-side
 // read. 100 MiB is comfortably above any realistic OCI manifest
