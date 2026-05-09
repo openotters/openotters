@@ -7,12 +7,24 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"sync"
 
 	v1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"go.uber.org/zap"
+	"golang.org/x/sync/errgroup"
 
 	daemonv1 "github.com/openotters/openotters/api/v1"
 )
+
+// listImagesConcurrency caps the number of in-flight Inspect calls
+// when ListImages walks every ref in the registry. Inspect on the
+// docker executor is expensive (the first call per image streams
+// the image tar to read its manifest's artifactType), and the UI
+// listings render hundreds of milliseconds slower per ref when
+// they're done sequentially. 8 keeps the docker daemon's image
+// pipeline busy without flooding it; for the system executor each
+// inspect is a local HTTP GET and concurrency is essentially free.
+const listImagesConcurrency = 8
 
 // MaxRegistryReadBytes is the cap applied to every registry-side
 // read. 100 MiB is comfortably above any realistic OCI manifest
@@ -52,22 +64,54 @@ func (d *Daemon) ListImages(
 		return nil, fmt.Errorf("listing images: %w", err)
 	}
 
-	images := make([]*daemonv1.ImageInfo, 0, len(refs))
-	for _, ref := range refs {
-		info, infoErr := reg.Inspect(ctx, ref)
-		if infoErr != nil {
-			d.logger.Debug("inspect failed; skipping", zap.String("ref", ref), zap.Error(infoErr))
-			continue
-		}
-		images = append(images, &daemonv1.ImageInfo{
-			Ref:          info.Ref,
-			Digest:       info.Digest,
-			ArtifactType: info.MediaType,
-			Size:         info.Size,
-			CreatedAt:    info.CreatedUnix,
-			Description:  info.Description,
-			Source:       info.Source,
+	// Inspect every ref in parallel. Slot `i` is reserved for ref
+	// `i` so the response order matches List's; failed inspects
+	// leave the slot nil and get filtered out at the end.
+	results := make([]*daemonv1.ImageInfo, len(refs))
+
+	var mu sync.Mutex
+
+	g, gctx := errgroup.WithContext(ctx)
+	g.SetLimit(listImagesConcurrency)
+
+	for i, ref := range refs {
+		i, ref := i, ref
+		g.Go(func() error {
+			info, infoErr := reg.Inspect(gctx, ref)
+			if infoErr != nil {
+				d.logger.Debug("inspect failed; skipping",
+					zap.String("ref", ref), zap.Error(infoErr))
+
+				return nil
+			}
+
+			entry := &daemonv1.ImageInfo{
+				Ref:          info.Ref,
+				Digest:       info.Digest,
+				ArtifactType: info.MediaType,
+				Size:         info.Size,
+				CreatedAt:    info.CreatedUnix,
+				Description:  info.Description,
+				Source:       info.Source,
+			}
+
+			mu.Lock()
+			results[i] = entry
+			mu.Unlock()
+
+			return nil
 		})
+	}
+
+	if waitErr := g.Wait(); waitErr != nil {
+		return nil, fmt.Errorf("listing images: %w", waitErr)
+	}
+
+	images := make([]*daemonv1.ImageInfo, 0, len(refs))
+	for _, e := range results {
+		if e != nil {
+			images = append(images, e)
+		}
 	}
 
 	return &daemonv1.ListImagesResponse{Images: images}, nil
