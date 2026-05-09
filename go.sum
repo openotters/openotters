@@ -1023,6 +1023,8 @@ github.com/opencontainers/runc v1.2.8 h1:RnEICeDReapbZ5lZEgHvj7E9Q3Eex9toYmaGBsb
 github.com/opencontainers/runc v1.2.8/go.mod h1:cC0YkmZcuvr+rtBZ6T7NBoVbMGNAdLa/21vIElJDOzI=
 github.com/openotters/agentfile v1.0.0-alpha.9 h1:UWlE6OPsLxLHR1eV7OemVmqpKhnmjH8cOaG6Ak/C0oI=
 github.com/openotters/agentfile v1.0.0-alpha.9/go.mod h1:4AZClO7jTxsbNgmFkPuSNlZVf6nSKgdBZ+uWpmYMCLg=
+github.com/openotters/agentfile v1.0.0-alpha.10 h1:emxpvwOJLVct2e5OGES508za8nRbwsr/l4epwXwF+6s=
+github.com/openotters/agentfile v1.0.0-alpha.10/go.mod h1:4AZClO7jTxsbNgmFkPuSNlZVf6nSKgdBZ+uWpmYMCLg=
 github.com/openotters/bin v1.0.0-alpha.5 h1:4BW7y8JmJTch7uZwXzDnTutvB8EWI27vBbfjZ1grV0Q=
 github.com/openotters/bin v1.0.0-alpha.5/go.mod h1:stTqtsTdkqkS1AgFej2NXOU8M474uQTM9ojyC0ajGQI=
 github.com/opentracing/opentracing-go v1.2.0 h1:uEJPy/1a5RIPAJ0Ov+OIO8OxWu77jEv+1B0VhjKrZUs=
