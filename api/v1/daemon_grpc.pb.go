@@ -26,7 +26,7 @@ const (
 	Runtime_PullAgentImage_FullMethodName      = "/openotters.daemon.v1.Runtime/PullAgentImage"
 	Runtime_PushAgentImage_FullMethodName      = "/openotters.daemon.v1.Runtime/PushAgentImage"
 	Runtime_ListImages_FullMethodName          = "/openotters.daemon.v1.Runtime/ListImages"
-	Runtime_RefreshImages_FullMethodName       = "/openotters.daemon.v1.Runtime/RefreshImages"
+	Runtime_RefreshImage_FullMethodName        = "/openotters.daemon.v1.Runtime/RefreshImage"
 	Runtime_RemoveImage_FullMethodName         = "/openotters.daemon.v1.Runtime/RemoveImage"
 	Runtime_DescribeImage_FullMethodName       = "/openotters.daemon.v1.Runtime/DescribeImage"
 	Runtime_CreateAgent_FullMethodName         = "/openotters.daemon.v1.Runtime/CreateAgent"
@@ -57,7 +57,7 @@ type RuntimeClient interface {
 	PullAgentImage(ctx context.Context, in *PullRequest, opts ...grpc.CallOption) (*PullResponse, error)
 	PushAgentImage(ctx context.Context, in *PushRequest, opts ...grpc.CallOption) (*PushResponse, error)
 	ListImages(ctx context.Context, in *ListImagesRequest, opts ...grpc.CallOption) (*ListImagesResponse, error)
-	RefreshImages(ctx context.Context, in *RefreshImagesRequest, opts ...grpc.CallOption) (*RefreshImagesResponse, error)
+	RefreshImage(ctx context.Context, in *RefreshImageRequest, opts ...grpc.CallOption) (*RefreshImageResponse, error)
 	RemoveImage(ctx context.Context, in *RemoveImageRequest, opts ...grpc.CallOption) (*RemoveImageResponse, error)
 	DescribeImage(ctx context.Context, in *DescribeImageRequest, opts ...grpc.CallOption) (*DescribeImageResponse, error)
 	CreateAgent(ctx context.Context, in *CreateAgentRequest, opts ...grpc.CallOption) (*CreateAgentResponse, error)
@@ -155,10 +155,10 @@ func (c *runtimeClient) ListImages(ctx context.Context, in *ListImagesRequest, o
 	return out, nil
 }
 
-func (c *runtimeClient) RefreshImages(ctx context.Context, in *RefreshImagesRequest, opts ...grpc.CallOption) (*RefreshImagesResponse, error) {
+func (c *runtimeClient) RefreshImage(ctx context.Context, in *RefreshImageRequest, opts ...grpc.CallOption) (*RefreshImageResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(RefreshImagesResponse)
-	err := c.cc.Invoke(ctx, Runtime_RefreshImages_FullMethodName, in, out, cOpts...)
+	out := new(RefreshImageResponse)
+	err := c.cc.Invoke(ctx, Runtime_RefreshImage_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -355,7 +355,7 @@ type RuntimeServer interface {
 	PullAgentImage(context.Context, *PullRequest) (*PullResponse, error)
 	PushAgentImage(context.Context, *PushRequest) (*PushResponse, error)
 	ListImages(context.Context, *ListImagesRequest) (*ListImagesResponse, error)
-	RefreshImages(context.Context, *RefreshImagesRequest) (*RefreshImagesResponse, error)
+	RefreshImage(context.Context, *RefreshImageRequest) (*RefreshImageResponse, error)
 	RemoveImage(context.Context, *RemoveImageRequest) (*RemoveImageResponse, error)
 	DescribeImage(context.Context, *DescribeImageRequest) (*DescribeImageResponse, error)
 	CreateAgent(context.Context, *CreateAgentRequest) (*CreateAgentResponse, error)
@@ -404,8 +404,8 @@ func (UnimplementedRuntimeServer) PushAgentImage(context.Context, *PushRequest) 
 func (UnimplementedRuntimeServer) ListImages(context.Context, *ListImagesRequest) (*ListImagesResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListImages not implemented")
 }
-func (UnimplementedRuntimeServer) RefreshImages(context.Context, *RefreshImagesRequest) (*RefreshImagesResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method RefreshImages not implemented")
+func (UnimplementedRuntimeServer) RefreshImage(context.Context, *RefreshImageRequest) (*RefreshImageResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method RefreshImage not implemented")
 }
 func (UnimplementedRuntimeServer) RemoveImage(context.Context, *RemoveImageRequest) (*RemoveImageResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method RemoveImage not implemented")
@@ -605,20 +605,20 @@ func _Runtime_ListImages_Handler(srv interface{}, ctx context.Context, dec func(
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Runtime_RefreshImages_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(RefreshImagesRequest)
+func _Runtime_RefreshImage_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RefreshImageRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(RuntimeServer).RefreshImages(ctx, in)
+		return srv.(RuntimeServer).RefreshImage(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: Runtime_RefreshImages_FullMethodName,
+		FullMethod: Runtime_RefreshImage_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(RuntimeServer).RefreshImages(ctx, req.(*RefreshImagesRequest))
+		return srv.(RuntimeServer).RefreshImage(ctx, req.(*RefreshImageRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -958,8 +958,8 @@ var Runtime_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _Runtime_ListImages_Handler,
 		},
 		{
-			MethodName: "RefreshImages",
-			Handler:    _Runtime_RefreshImages_Handler,
+			MethodName: "RefreshImage",
+			Handler:    _Runtime_RefreshImage_Handler,
 		},
 		{
 			MethodName: "RemoveImage",

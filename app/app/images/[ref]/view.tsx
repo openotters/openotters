@@ -9,6 +9,7 @@ import {
 	ExternalLink,
 	HardDrive,
 	Layers,
+	RefreshCw,
 	Tag,
 	Trash2,
 } from "lucide-react"
@@ -29,6 +30,7 @@ import {
 	describeImage,
 	listImages,
 	pullAgentImage,
+	refreshImage,
 	removeImage,
 } from "@/lib/proto/v1/daemon-Runtime_connectquery"
 import { useRouteParams } from "@/lib/use-route-params"
@@ -64,6 +66,12 @@ export default function ImageDetailPage() {
 	const describe = useQuery(describeImage, { ref }, { enabled: ref !== "" })
 
 	const pull = useMutation(pullAgentImage)
+	const refresh = useMutation(refreshImage, {
+		onSuccess: () => {
+			queryClient.invalidateQueries({ queryKey: ["openotters.daemon.v1.Runtime", "ListImages"] })
+			queryClient.invalidateQueries({ queryKey: ["openotters.daemon.v1.Runtime", "DescribeImage"] })
+		},
+	})
 	const remove = useMutation(removeImage, {
 		onSuccess: () => {
 			queryClient.invalidateQueries({ queryKey: ["openotters.daemon.v1.Runtime", "ListImages"] })
@@ -118,6 +126,16 @@ export default function ImageDetailPage() {
 					</div>
 				</div>
 				<div className="flex items-center gap-2">
+					<Button
+						disabled={refresh.isPending}
+						onClick={() => refresh.mutate({ ref: image.ref })}
+						size="sm"
+						variant="outline">
+						<RefreshCw
+							className={`mr-2 h-4 w-4 ${refresh.isPending ? "animate-spin" : ""}`}
+						/>
+						Refresh
+					</Button>
 					<Button
 						disabled={pull.isPending}
 						onClick={() => pull.mutate({ ref: image.ref })}

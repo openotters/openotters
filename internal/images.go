@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"math"
 	"net/http"
 	"strings"
 
@@ -71,76 +70,72 @@ func (d *Daemon) ListImages(
 	return &daemonv1.ListImagesResponse{Images: images}, nil
 }
 
-// RefreshImages reconciles the daemon's images cache with the
-// executor registry's authoritative state. Walks ListEntries,
-// asks ManifestKind for each (or carries forward what the existing
-// cache row knew), and replaces the table in one transaction.
-// Returns the count of images currently in the cache after
-// refresh — useful for UI confirmation.
-func (d *Daemon) RefreshImages(
-	ctx context.Context, _ *daemonv1.RefreshImagesRequest,
-) (*daemonv1.RefreshImagesResponse, error) {
+// RefreshImage re-reads a single ref's metadata from the executor
+// registry and updates the cache row. Used by the dashboard's
+// per-image Refresh button when an operator suspects a row is
+// stale (e.g. they pushed a new digest under the same tag from
+// another tool, or the docker store changed under the daemon).
+//
+// Carries forward the cache's existing artifact_type when the
+// registry can't surface a fresh kind (docker's ManifestKind
+// always returns empty), so refresh on docker doesn't downgrade a
+// previously-built kind.
+func (d *Daemon) RefreshImage(
+	ctx context.Context, req *daemonv1.RefreshImageRequest,
+) (*daemonv1.RefreshImageResponse, error) {
+	ref := req.GetRef()
+	if ref == "" {
+		return nil, fmt.Errorf("ref is required")
+	}
+
 	reg := d.pool.provider.Registry()
 
-	entries, err := reg.ListEntries(ctx)
+	info, err := reg.Inspect(ctx, ref)
 	if err != nil {
-		return nil, fmt.Errorf("listing images: %w", err)
+		return nil, fmt.Errorf("inspecting %s: %w", ref, err)
 	}
 
-	existing, err := d.state.ListImages(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("loading existing image cache: %w", err)
-	}
+	kind, _ := reg.ManifestKind(ctx, ref)
 
-	// Carry forward known artifactType per digest from the
-	// existing cache so a refresh doesn't blank kinds the docker
-	// executor can't re-derive (its ManifestKind always returns
-	// empty). A fresh build / pull will overwrite any stale value
-	// anyway.
-	priorKindByDigest := make(map[string]string, len(existing))
+	if kind == "" {
+		// Carry forward whatever kind the existing cache row knew
+		// for this digest — the docker backend's ManifestKind is
+		// a no-op and we don't want a refresh to blank out a
+		// build-supplied value.
+		existing, listErr := d.state.ListImages(ctx)
+		if listErr == nil {
+			for _, e := range existing {
+				if e.Digest == info.Digest && e.ArtifactType != "" {
+					kind = e.ArtifactType
 
-	for _, p := range existing {
-		if p.ArtifactType != "" && priorKindByDigest[p.Digest] == "" {
-			priorKindByDigest[p.Digest] = p.ArtifactType
+					break
+				}
+			}
 		}
 	}
 
-	out := make([]PersistedImage, 0, len(entries))
-
-	for _, e := range entries {
-		kind, kindErr := reg.ManifestKind(ctx, e.Ref)
-		if kindErr != nil {
-			d.logger.Debug("manifest kind for refresh",
-				zap.String("ref", e.Ref), zap.Error(kindErr))
-		}
-
-		if kind == "" {
-			kind = priorKindByDigest[e.Digest]
-		}
-
-		out = append(out, PersistedImage{
-			Ref:          e.Ref,
-			Digest:       e.Digest,
-			ArtifactType: kind,
-			Size:         e.Size,
-			CreatedUnix:  e.CreatedUnix,
-			Description:  e.Description,
-			Source:       e.Source,
-		})
+	if err = d.state.UpsertImage(ctx, PersistedImage{
+		Ref:          ref,
+		Digest:       info.Digest,
+		ArtifactType: kind,
+		Size:         info.Size,
+		CreatedUnix:  info.CreatedUnix,
+		Description:  info.Description,
+		Source:       info.Source,
+	}); err != nil {
+		return nil, fmt.Errorf("upsert %s: %w", ref, err)
 	}
 
-	if err = d.state.ReplaceAllImages(ctx, out); err != nil {
-		return nil, fmt.Errorf("replacing images cache: %w", err)
-	}
+	d.logger.Info("image refreshed",
+		zap.String("ref", ref),
+		zap.String("digest", info.Digest),
+		zap.String("artifact_type", kind))
 
-	d.logger.Info("images refreshed", zap.Int("count", len(out)))
-
-	count := len(out)
-	if count > math.MaxInt32 {
-		count = math.MaxInt32
-	}
-
-	return &daemonv1.RefreshImagesResponse{Count: int32(count)}, nil
+	return &daemonv1.RefreshImageResponse{
+		Ref:          ref,
+		Digest:       info.Digest,
+		ArtifactType: kind,
+	}, nil
 }
 
 func (d *Daemon) RemoveImage(

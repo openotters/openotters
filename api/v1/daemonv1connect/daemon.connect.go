@@ -47,8 +47,8 @@ const (
 	RuntimePushAgentImageProcedure = "/openotters.daemon.v1.Runtime/PushAgentImage"
 	// RuntimeListImagesProcedure is the fully-qualified name of the Runtime's ListImages RPC.
 	RuntimeListImagesProcedure = "/openotters.daemon.v1.Runtime/ListImages"
-	// RuntimeRefreshImagesProcedure is the fully-qualified name of the Runtime's RefreshImages RPC.
-	RuntimeRefreshImagesProcedure = "/openotters.daemon.v1.Runtime/RefreshImages"
+	// RuntimeRefreshImageProcedure is the fully-qualified name of the Runtime's RefreshImage RPC.
+	RuntimeRefreshImageProcedure = "/openotters.daemon.v1.Runtime/RefreshImage"
 	// RuntimeRemoveImageProcedure is the fully-qualified name of the Runtime's RemoveImage RPC.
 	RuntimeRemoveImageProcedure = "/openotters.daemon.v1.Runtime/RemoveImage"
 	// RuntimeDescribeImageProcedure is the fully-qualified name of the Runtime's DescribeImage RPC.
@@ -96,7 +96,7 @@ type RuntimeClient interface {
 	PullAgentImage(context.Context, *connect.Request[v1.PullRequest]) (*connect.Response[v1.PullResponse], error)
 	PushAgentImage(context.Context, *connect.Request[v1.PushRequest]) (*connect.Response[v1.PushResponse], error)
 	ListImages(context.Context, *connect.Request[v1.ListImagesRequest]) (*connect.Response[v1.ListImagesResponse], error)
-	RefreshImages(context.Context, *connect.Request[v1.RefreshImagesRequest]) (*connect.Response[v1.RefreshImagesResponse], error)
+	RefreshImage(context.Context, *connect.Request[v1.RefreshImageRequest]) (*connect.Response[v1.RefreshImageResponse], error)
 	RemoveImage(context.Context, *connect.Request[v1.RemoveImageRequest]) (*connect.Response[v1.RemoveImageResponse], error)
 	DescribeImage(context.Context, *connect.Request[v1.DescribeImageRequest]) (*connect.Response[v1.DescribeImageResponse], error)
 	CreateAgent(context.Context, *connect.Request[v1.CreateAgentRequest]) (*connect.Response[v1.CreateAgentResponse], error)
@@ -169,10 +169,10 @@ func NewRuntimeClient(httpClient connect.HTTPClient, baseURL string, opts ...con
 			connect.WithSchema(runtimeMethods.ByName("ListImages")),
 			connect.WithClientOptions(opts...),
 		),
-		refreshImages: connect.NewClient[v1.RefreshImagesRequest, v1.RefreshImagesResponse](
+		refreshImage: connect.NewClient[v1.RefreshImageRequest, v1.RefreshImageResponse](
 			httpClient,
-			baseURL+RuntimeRefreshImagesProcedure,
-			connect.WithSchema(runtimeMethods.ByName("RefreshImages")),
+			baseURL+RuntimeRefreshImageProcedure,
+			connect.WithSchema(runtimeMethods.ByName("RefreshImage")),
 			connect.WithClientOptions(opts...),
 		),
 		removeImage: connect.NewClient[v1.RemoveImageRequest, v1.RemoveImageResponse](
@@ -289,7 +289,7 @@ type runtimeClient struct {
 	pullAgentImage      *connect.Client[v1.PullRequest, v1.PullResponse]
 	pushAgentImage      *connect.Client[v1.PushRequest, v1.PushResponse]
 	listImages          *connect.Client[v1.ListImagesRequest, v1.ListImagesResponse]
-	refreshImages       *connect.Client[v1.RefreshImagesRequest, v1.RefreshImagesResponse]
+	refreshImage        *connect.Client[v1.RefreshImageRequest, v1.RefreshImageResponse]
 	removeImage         *connect.Client[v1.RemoveImageRequest, v1.RemoveImageResponse]
 	describeImage       *connect.Client[v1.DescribeImageRequest, v1.DescribeImageResponse]
 	createAgent         *connect.Client[v1.CreateAgentRequest, v1.CreateAgentResponse]
@@ -344,9 +344,9 @@ func (c *runtimeClient) ListImages(ctx context.Context, req *connect.Request[v1.
 	return c.listImages.CallUnary(ctx, req)
 }
 
-// RefreshImages calls openotters.daemon.v1.Runtime.RefreshImages.
-func (c *runtimeClient) RefreshImages(ctx context.Context, req *connect.Request[v1.RefreshImagesRequest]) (*connect.Response[v1.RefreshImagesResponse], error) {
-	return c.refreshImages.CallUnary(ctx, req)
+// RefreshImage calls openotters.daemon.v1.Runtime.RefreshImage.
+func (c *runtimeClient) RefreshImage(ctx context.Context, req *connect.Request[v1.RefreshImageRequest]) (*connect.Response[v1.RefreshImageResponse], error) {
+	return c.refreshImage.CallUnary(ctx, req)
 }
 
 // RemoveImage calls openotters.daemon.v1.Runtime.RemoveImage.
@@ -443,7 +443,7 @@ type RuntimeHandler interface {
 	PullAgentImage(context.Context, *connect.Request[v1.PullRequest]) (*connect.Response[v1.PullResponse], error)
 	PushAgentImage(context.Context, *connect.Request[v1.PushRequest]) (*connect.Response[v1.PushResponse], error)
 	ListImages(context.Context, *connect.Request[v1.ListImagesRequest]) (*connect.Response[v1.ListImagesResponse], error)
-	RefreshImages(context.Context, *connect.Request[v1.RefreshImagesRequest]) (*connect.Response[v1.RefreshImagesResponse], error)
+	RefreshImage(context.Context, *connect.Request[v1.RefreshImageRequest]) (*connect.Response[v1.RefreshImageResponse], error)
 	RemoveImage(context.Context, *connect.Request[v1.RemoveImageRequest]) (*connect.Response[v1.RemoveImageResponse], error)
 	DescribeImage(context.Context, *connect.Request[v1.DescribeImageRequest]) (*connect.Response[v1.DescribeImageResponse], error)
 	CreateAgent(context.Context, *connect.Request[v1.CreateAgentRequest]) (*connect.Response[v1.CreateAgentResponse], error)
@@ -512,10 +512,10 @@ func NewRuntimeHandler(svc RuntimeHandler, opts ...connect.HandlerOption) (strin
 		connect.WithSchema(runtimeMethods.ByName("ListImages")),
 		connect.WithHandlerOptions(opts...),
 	)
-	runtimeRefreshImagesHandler := connect.NewUnaryHandler(
-		RuntimeRefreshImagesProcedure,
-		svc.RefreshImages,
-		connect.WithSchema(runtimeMethods.ByName("RefreshImages")),
+	runtimeRefreshImageHandler := connect.NewUnaryHandler(
+		RuntimeRefreshImageProcedure,
+		svc.RefreshImage,
+		connect.WithSchema(runtimeMethods.ByName("RefreshImage")),
 		connect.WithHandlerOptions(opts...),
 	)
 	runtimeRemoveImageHandler := connect.NewUnaryHandler(
@@ -636,8 +636,8 @@ func NewRuntimeHandler(svc RuntimeHandler, opts ...connect.HandlerOption) (strin
 			runtimePushAgentImageHandler.ServeHTTP(w, r)
 		case RuntimeListImagesProcedure:
 			runtimeListImagesHandler.ServeHTTP(w, r)
-		case RuntimeRefreshImagesProcedure:
-			runtimeRefreshImagesHandler.ServeHTTP(w, r)
+		case RuntimeRefreshImageProcedure:
+			runtimeRefreshImageHandler.ServeHTTP(w, r)
 		case RuntimeRemoveImageProcedure:
 			runtimeRemoveImageHandler.ServeHTTP(w, r)
 		case RuntimeDescribeImageProcedure:
@@ -709,8 +709,8 @@ func (UnimplementedRuntimeHandler) ListImages(context.Context, *connect.Request[
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("openotters.daemon.v1.Runtime.ListImages is not implemented"))
 }
 
-func (UnimplementedRuntimeHandler) RefreshImages(context.Context, *connect.Request[v1.RefreshImagesRequest]) (*connect.Response[v1.RefreshImagesResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("openotters.daemon.v1.Runtime.RefreshImages is not implemented"))
+func (UnimplementedRuntimeHandler) RefreshImage(context.Context, *connect.Request[v1.RefreshImageRequest]) (*connect.Response[v1.RefreshImageResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("openotters.daemon.v1.Runtime.RefreshImage is not implemented"))
 }
 
 func (UnimplementedRuntimeHandler) RemoveImage(context.Context, *connect.Request[v1.RemoveImageRequest]) (*connect.Response[v1.RemoveImageResponse], error) {

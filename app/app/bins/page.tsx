@@ -7,7 +7,6 @@ import {
 	ExternalLink,
 	HardDrive,
 	MoreVertical,
-	RefreshCw,
 	Tag,
 	Terminal,
 	Trash2,
@@ -26,11 +25,7 @@ import {
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { groupImagesByDigest } from "@/lib/image-tags"
-import {
-	listImages,
-	refreshImages,
-	removeImage,
-} from "@/lib/proto/v1/daemon-Runtime_connectquery"
+import { listImages, removeImage } from "@/lib/proto/v1/daemon-Runtime_connectquery"
 
 const BIN_ARTIFACT_TYPE = "application/vnd.openotters.bin.v1"
 
@@ -61,11 +56,6 @@ export default function BinsPage() {
 			queryClient.invalidateQueries({ queryKey: ["openotters.daemon.v1.Runtime", "ListImages"] })
 		},
 	})
-	const refresh = useMutation(refreshImages, {
-		onSuccess: () => {
-			queryClient.invalidateQueries({ queryKey: ["openotters.daemon.v1.Runtime", "ListImages"] })
-		},
-	})
 
 	const groups = useMemo(() => {
 		const all = data?.images ?? []
@@ -76,20 +66,7 @@ export default function BinsPage() {
 	return (
 		<div className="space-y-6">
 			<PageHeader
-				actions={
-					<div className="flex items-center gap-2">
-						<Button
-							disabled={refresh.isPending}
-							onClick={() => refresh.mutate({})}
-							variant="outline">
-							<RefreshCw
-								className={`mr-2 h-4 w-4 ${refresh.isPending ? "animate-spin" : ""}`}
-							/>
-							Refresh
-						</Button>
-						<AddBinButton />
-					</div>
-				}
+				actions={<AddBinButton />}
 				command="otters bin ls"
 				description={
 					<>

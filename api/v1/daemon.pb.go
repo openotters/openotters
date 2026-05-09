@@ -1455,26 +1455,29 @@ func (x *ListImagesResponse) GetImages() []*ImageInfo {
 	return nil
 }
 
-type RefreshImagesRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
+type RefreshImageRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Ref to refresh. The daemon re-reads this ref's metadata from
+	// the executor registry and upserts the cache row.
+	Ref           string `protobuf:"bytes,1,opt,name=ref,proto3" json:"ref,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *RefreshImagesRequest) Reset() {
-	*x = RefreshImagesRequest{}
+func (x *RefreshImageRequest) Reset() {
+	*x = RefreshImageRequest{}
 	mi := &file_v1_daemon_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *RefreshImagesRequest) String() string {
+func (x *RefreshImageRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*RefreshImagesRequest) ProtoMessage() {}
+func (*RefreshImageRequest) ProtoMessage() {}
 
-func (x *RefreshImagesRequest) ProtoReflect() protoreflect.Message {
+func (x *RefreshImageRequest) ProtoReflect() protoreflect.Message {
 	mi := &file_v1_daemon_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -1486,33 +1489,41 @@ func (x *RefreshImagesRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use RefreshImagesRequest.ProtoReflect.Descriptor instead.
-func (*RefreshImagesRequest) Descriptor() ([]byte, []int) {
+// Deprecated: Use RefreshImageRequest.ProtoReflect.Descriptor instead.
+func (*RefreshImageRequest) Descriptor() ([]byte, []int) {
 	return file_v1_daemon_proto_rawDescGZIP(), []int{22}
 }
 
-type RefreshImagesResponse struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Total number of images in the daemon's cache after refresh.
-	Count         int32 `protobuf:"varint,1,opt,name=count,proto3" json:"count,omitempty"`
+func (x *RefreshImageRequest) GetRef() string {
+	if x != nil {
+		return x.Ref
+	}
+	return ""
+}
+
+type RefreshImageResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Ref           string                 `protobuf:"bytes,1,opt,name=ref,proto3" json:"ref,omitempty"`
+	Digest        string                 `protobuf:"bytes,2,opt,name=digest,proto3" json:"digest,omitempty"`
+	ArtifactType  string                 `protobuf:"bytes,3,opt,name=artifact_type,json=artifactType,proto3" json:"artifact_type,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *RefreshImagesResponse) Reset() {
-	*x = RefreshImagesResponse{}
+func (x *RefreshImageResponse) Reset() {
+	*x = RefreshImageResponse{}
 	mi := &file_v1_daemon_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *RefreshImagesResponse) String() string {
+func (x *RefreshImageResponse) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*RefreshImagesResponse) ProtoMessage() {}
+func (*RefreshImageResponse) ProtoMessage() {}
 
-func (x *RefreshImagesResponse) ProtoReflect() protoreflect.Message {
+func (x *RefreshImageResponse) ProtoReflect() protoreflect.Message {
 	mi := &file_v1_daemon_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -1524,16 +1535,30 @@ func (x *RefreshImagesResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use RefreshImagesResponse.ProtoReflect.Descriptor instead.
-func (*RefreshImagesResponse) Descriptor() ([]byte, []int) {
+// Deprecated: Use RefreshImageResponse.ProtoReflect.Descriptor instead.
+func (*RefreshImageResponse) Descriptor() ([]byte, []int) {
 	return file_v1_daemon_proto_rawDescGZIP(), []int{23}
 }
 
-func (x *RefreshImagesResponse) GetCount() int32 {
+func (x *RefreshImageResponse) GetRef() string {
 	if x != nil {
-		return x.Count
+		return x.Ref
 	}
-	return 0
+	return ""
+}
+
+func (x *RefreshImageResponse) GetDigest() string {
+	if x != nil {
+		return x.Digest
+	}
+	return ""
+}
+
+func (x *RefreshImageResponse) GetArtifactType() string {
+	if x != nil {
+		return x.ArtifactType
+	}
+	return ""
 }
 
 type RemoveImageRequest struct {
@@ -3466,10 +3491,13 @@ const file_v1_daemon_proto_rawDesc = "" +
 	"\x06digest\x18\x03 \x01(\tR\x06digest\x12 \n" +
 	"\vdescription\x18\x04 \x01(\tR\vdescription\"M\n" +
 	"\x12ListImagesResponse\x127\n" +
-	"\x06images\x18\x01 \x03(\v2\x1f.openotters.daemon.v1.ImageInfoR\x06images\"\x16\n" +
-	"\x14RefreshImagesRequest\"-\n" +
-	"\x15RefreshImagesResponse\x12\x14\n" +
-	"\x05count\x18\x01 \x01(\x05R\x05count\"&\n" +
+	"\x06images\x18\x01 \x03(\v2\x1f.openotters.daemon.v1.ImageInfoR\x06images\"'\n" +
+	"\x13RefreshImageRequest\x12\x10\n" +
+	"\x03ref\x18\x01 \x01(\tR\x03ref\"e\n" +
+	"\x14RefreshImageResponse\x12\x10\n" +
+	"\x03ref\x18\x01 \x01(\tR\x03ref\x12\x16\n" +
+	"\x06digest\x18\x02 \x01(\tR\x06digest\x12#\n" +
+	"\rartifact_type\x18\x03 \x01(\tR\fartifactType\"&\n" +
 	"\x12RemoveImageRequest\x12\x10\n" +
 	"\x03ref\x18\x01 \x01(\tR\x03ref\"\x15\n" +
 	"\x13RemoveImageResponse\"(\n" +
@@ -3588,7 +3616,7 @@ const file_v1_daemon_proto_rawDesc = "" +
 	"\bprovider\x18\x01 \x01(\v2\x1e.openotters.daemon.v1.ProviderR\bprovider\"+\n" +
 	"\x15RemoveProviderRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\"\x18\n" +
-	"\x16RemoveProviderResponse2\xe3\x13\n" +
+	"\x16RemoveProviderResponse2\xe0\x13\n" +
 	"\aRuntime\x12V\n" +
 	"\aGetInfo\x12$.openotters.daemon.v1.GetInfoRequest\x1a%.openotters.daemon.v1.GetInfoResponse\x12_\n" +
 	"\n" +
@@ -3598,8 +3626,8 @@ const file_v1_daemon_proto_rawDesc = "" +
 	"\x0ePullAgentImage\x12!.openotters.daemon.v1.PullRequest\x1a\".openotters.daemon.v1.PullResponse\x12W\n" +
 	"\x0ePushAgentImage\x12!.openotters.daemon.v1.PushRequest\x1a\".openotters.daemon.v1.PushResponse\x12_\n" +
 	"\n" +
-	"ListImages\x12'.openotters.daemon.v1.ListImagesRequest\x1a(.openotters.daemon.v1.ListImagesResponse\x12h\n" +
-	"\rRefreshImages\x12*.openotters.daemon.v1.RefreshImagesRequest\x1a+.openotters.daemon.v1.RefreshImagesResponse\x12b\n" +
+	"ListImages\x12'.openotters.daemon.v1.ListImagesRequest\x1a(.openotters.daemon.v1.ListImagesResponse\x12e\n" +
+	"\fRefreshImage\x12).openotters.daemon.v1.RefreshImageRequest\x1a*.openotters.daemon.v1.RefreshImageResponse\x12b\n" +
 	"\vRemoveImage\x12(.openotters.daemon.v1.RemoveImageRequest\x1a).openotters.daemon.v1.RemoveImageResponse\x12h\n" +
 	"\rDescribeImage\x12*.openotters.daemon.v1.DescribeImageRequest\x1a+.openotters.daemon.v1.DescribeImageResponse\x12b\n" +
 	"\vCreateAgent\x12(.openotters.daemon.v1.CreateAgentRequest\x1a).openotters.daemon.v1.CreateAgentResponse\x12_\n" +
@@ -3657,8 +3685,8 @@ var file_v1_daemon_proto_goTypes = []any{
 	(*ImageInfo)(nil),                   // 19: openotters.daemon.v1.ImageInfo
 	(*AgentTool)(nil),                   // 20: openotters.daemon.v1.AgentTool
 	(*ListImagesResponse)(nil),          // 21: openotters.daemon.v1.ListImagesResponse
-	(*RefreshImagesRequest)(nil),        // 22: openotters.daemon.v1.RefreshImagesRequest
-	(*RefreshImagesResponse)(nil),       // 23: openotters.daemon.v1.RefreshImagesResponse
+	(*RefreshImageRequest)(nil),         // 22: openotters.daemon.v1.RefreshImageRequest
+	(*RefreshImageResponse)(nil),        // 23: openotters.daemon.v1.RefreshImageResponse
 	(*RemoveImageRequest)(nil),          // 24: openotters.daemon.v1.RemoveImageRequest
 	(*RemoveImageResponse)(nil),         // 25: openotters.daemon.v1.RemoveImageResponse
 	(*DescribeImageRequest)(nil),        // 26: openotters.daemon.v1.DescribeImageRequest
@@ -3717,7 +3745,7 @@ var file_v1_daemon_proto_depIdxs = []int32{
 	14, // 18: openotters.daemon.v1.Runtime.PullAgentImage:input_type -> openotters.daemon.v1.PullRequest
 	16, // 19: openotters.daemon.v1.Runtime.PushAgentImage:input_type -> openotters.daemon.v1.PushRequest
 	18, // 20: openotters.daemon.v1.Runtime.ListImages:input_type -> openotters.daemon.v1.ListImagesRequest
-	22, // 21: openotters.daemon.v1.Runtime.RefreshImages:input_type -> openotters.daemon.v1.RefreshImagesRequest
+	22, // 21: openotters.daemon.v1.Runtime.RefreshImage:input_type -> openotters.daemon.v1.RefreshImageRequest
 	24, // 22: openotters.daemon.v1.Runtime.RemoveImage:input_type -> openotters.daemon.v1.RemoveImageRequest
 	26, // 23: openotters.daemon.v1.Runtime.DescribeImage:input_type -> openotters.daemon.v1.DescribeImageRequest
 	29, // 24: openotters.daemon.v1.Runtime.CreateAgent:input_type -> openotters.daemon.v1.CreateAgentRequest
@@ -3742,7 +3770,7 @@ var file_v1_daemon_proto_depIdxs = []int32{
 	15, // 43: openotters.daemon.v1.Runtime.PullAgentImage:output_type -> openotters.daemon.v1.PullResponse
 	17, // 44: openotters.daemon.v1.Runtime.PushAgentImage:output_type -> openotters.daemon.v1.PushResponse
 	21, // 45: openotters.daemon.v1.Runtime.ListImages:output_type -> openotters.daemon.v1.ListImagesResponse
-	23, // 46: openotters.daemon.v1.Runtime.RefreshImages:output_type -> openotters.daemon.v1.RefreshImagesResponse
+	23, // 46: openotters.daemon.v1.Runtime.RefreshImage:output_type -> openotters.daemon.v1.RefreshImageResponse
 	25, // 47: openotters.daemon.v1.Runtime.RemoveImage:output_type -> openotters.daemon.v1.RemoveImageResponse
 	27, // 48: openotters.daemon.v1.Runtime.DescribeImage:output_type -> openotters.daemon.v1.DescribeImageResponse
 	30, // 49: openotters.daemon.v1.Runtime.CreateAgent:output_type -> openotters.daemon.v1.CreateAgentResponse

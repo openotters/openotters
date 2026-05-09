@@ -163,10 +163,10 @@ func (h *runtimeHandler) RemoveImage(
 	return connect.NewResponse(resp), nil
 }
 
-func (h *runtimeHandler) RefreshImages(
-	ctx context.Context, req *connect.Request[daemonv1.RefreshImagesRequest],
-) (*connect.Response[daemonv1.RefreshImagesResponse], error) {
-	resp, err := h.daemon.RefreshImages(ctx, req.Msg)
+func (h *runtimeHandler) RefreshImage(
+	ctx context.Context, req *connect.Request[daemonv1.RefreshImageRequest],
+) (*connect.Response[daemonv1.RefreshImageResponse], error) {
+	resp, err := h.daemon.RefreshImage(ctx, req.Msg)
 	if err != nil {
 		return nil, err
 	}

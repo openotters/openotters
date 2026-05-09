@@ -1739,7 +1739,7 @@ func (d *Daemon) upsertImagesFromTags(ctx context.Context, tags []string, kindHi
 // srcRef is what the executor's store keys its blobs under (a
 // digest for docker, "latest" for the system executor's bin
 // pipeline). digest is the manifest's content-addressed digest
-// that gets indexed in image_kinds; artifactType is the openotters
+// that gets indexed in the images cache; artifactType is the openotters
 // kind ("application/vnd.openotters.{agent,bin}.v1") the build
 // pipeline produced.
 func (d *Daemon) commitBuilt(

@@ -12,7 +12,7 @@ service Runtime {
   rpc PullAgentImage(PullRequest) returns (PullResponse);
   rpc PushAgentImage(PushRequest) returns (PushResponse);
   rpc ListImages(ListImagesRequest) returns (ListImagesResponse);
-  rpc RefreshImages(RefreshImagesRequest) returns (RefreshImagesResponse);
+  rpc RefreshImage(RefreshImageRequest) returns (RefreshImageResponse);
   rpc RemoveImage(RemoveImageRequest) returns (RemoveImageResponse);
   rpc DescribeImage(DescribeImageRequest) returns (DescribeImageResponse);
   rpc CreateAgent(CreateAgentRequest) returns (CreateAgentResponse);
@@ -225,11 +225,16 @@ message ListImagesResponse {
   repeated ImageInfo images = 1;
 }
 
-message RefreshImagesRequest {}
+message RefreshImageRequest {
+  // Ref to refresh. The daemon re-reads this ref's metadata from
+  // the executor registry and upserts the cache row.
+  string ref = 1;
+}
 
-message RefreshImagesResponse {
-  // Total number of images in the daemon's cache after refresh.
-  int32 count = 1;
+message RefreshImageResponse {
+  string ref = 1;
+  string digest = 2;
+  string artifact_type = 3;
 }
 
 message RemoveImageRequest {
