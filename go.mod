@@ -18,7 +18,7 @@ require (
 	github.com/moby/moby/client v0.4.0
 	github.com/opencontainers/go-digest v1.0.0
 	github.com/opencontainers/image-spec v1.1.1
-	github.com/openotters/agentfile v1.0.0-alpha.16
+	github.com/openotters/agentfile v1.0.0-alpha.17
 	github.com/openotters/bin v1.0.0-alpha.6
 	go.uber.org/zap v1.27.1
 	golang.org/x/net v0.53.0
