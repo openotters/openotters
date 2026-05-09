@@ -134,8 +134,37 @@ func (d *Daemon) RemoveImage(
 func (d *Daemon) DescribeImage(
 	ctx context.Context, req *daemonv1.DescribeImageRequest,
 ) (*daemonv1.DescribeImageResponse, error) {
-	addr := d.registry.Addr()
 	ref := req.GetRef()
+
+	// System executor exposes an embedded HTTP OCI registry that lets
+	// us walk manifest + config + layer descriptors directly. Docker
+	// executor doesn't (the daemon's image API is the only window
+	// onto the store), so we fall back to executor.Registry.Inspect
+	// for the metadata fields and skip the raw config / layer blobs.
+	// Inspect returns enough for the dashboard's image-detail card;
+	// the env card (which parses the config blob) gracefully degrades
+	// when Config is empty.
+	if d.registry != nil {
+		return d.describeImageEmbedded(ctx, ref)
+	}
+
+	info, err := d.pool.provider.Registry().Inspect(ctx, ref)
+	if err != nil {
+		return nil, fmt.Errorf("describing %s: %w", ref, err)
+	}
+
+	return &daemonv1.DescribeImageResponse{
+		Ref:          info.Ref,
+		Digest:       info.Digest,
+		ArtifactType: info.MediaType,
+		Labels:       info.Annotations,
+	}, nil
+}
+
+func (d *Daemon) describeImageEmbedded(
+	ctx context.Context, ref string,
+) (*daemonv1.DescribeImageResponse, error) {
+	addr := d.registry.Addr()
 
 	repo, tag := splitRef(ref)
 
