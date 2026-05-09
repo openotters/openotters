@@ -2,6 +2,7 @@ package commands
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -84,7 +85,54 @@ func (a *AgentInspect) Run(ctx context.Context, common *cmd.Commons, d *Daemon) 
 		}
 	}
 
+	// Render ENV declarations from the agent's image config blob.
+	// Best-effort: a missing image (orphaned agent after rm) or a
+	// parse failure logs nothing — the rest of inspect already
+	// succeeded.
+	if envs := fetchAgentEnvs(ctx, c, match.GetImage()); len(envs) > 0 {
+		_, _ = p.Println("env:")
+
+		for _, e := range envs {
+			suffix := ""
+			if e.Description != "" {
+				suffix = " — " + e.Description
+			}
+
+			_, _ = p.Printf("  %s=%s%s\n", e.Key, e.Value, suffix)
+		}
+	}
+
 	return nil
+}
+
+type agentEnv struct {
+	Key         string `json:"key"`
+	Value       string `json:"value"`
+	Description string `json:"description"`
+}
+
+type agentSpec struct {
+	Agent struct {
+		Envs []agentEnv `json:"envs"`
+	} `json:"agent"`
+}
+
+func fetchAgentEnvs(ctx context.Context, c daemonv1.RuntimeClient, imageRef string) []agentEnv {
+	if imageRef == "" {
+		return nil
+	}
+
+	resp, err := c.DescribeImage(ctx, &daemonv1.DescribeImageRequest{Ref: imageRef})
+	if err != nil || resp.GetConfig() == "" {
+		return nil
+	}
+
+	var spec agentSpec
+	if jsonErr := json.Unmarshal([]byte(resp.GetConfig()), &spec); jsonErr != nil {
+		return nil
+	}
+
+	return spec.Agent.Envs
 }
 
 // resolveAgent matches ref against full id, name, or id prefix — same

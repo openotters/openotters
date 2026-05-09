@@ -23,6 +23,13 @@ CONTEXT <NAME> ["desc"] <<EOF
 CONFIG <key>[=<value>] ["desc"]
 CONFIG <key>! ["desc"]       — runtime config knob. `!` = required.
 
+ENV <KEY>=<value> ["desc"]   — OS env var on the spawned agent
+                               process (NODE_ENV, FEATURE_X, etc.).
+                               UPPERCASE only. Reserved keys
+                               (PATH, HOME, XDG_*, TMPDIR, LANG,
+                               OTTERS_AGENT_ROOT, *_API_KEY,
+                               *_API_BASE) are rejected at build.
+
 BIN <name> <image-ref> ["desc"] [<<USAGE]
                              — tool binary. USAGE heredoc is the
                                LLM-visible tool description.
