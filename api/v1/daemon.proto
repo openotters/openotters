@@ -12,6 +12,7 @@ service Runtime {
   rpc PullAgentImage(PullRequest) returns (PullResponse);
   rpc PushAgentImage(PushRequest) returns (PushResponse);
   rpc ListImages(ListImagesRequest) returns (ListImagesResponse);
+  rpc RefreshImages(RefreshImagesRequest) returns (RefreshImagesResponse);
   rpc RemoveImage(RemoveImageRequest) returns (RemoveImageResponse);
   rpc DescribeImage(DescribeImageRequest) returns (DescribeImageResponse);
   rpc CreateAgent(CreateAgentRequest) returns (CreateAgentResponse);
@@ -222,6 +223,13 @@ message AgentTool {
 
 message ListImagesResponse {
   repeated ImageInfo images = 1;
+}
+
+message RefreshImagesRequest {}
+
+message RefreshImagesResponse {
+  // Total number of images in the daemon's cache after refresh.
+  int32 count = 1;
 }
 
 message RemoveImageRequest {

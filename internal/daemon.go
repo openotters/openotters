@@ -1130,11 +1130,9 @@ func (d *Daemon) Save(
 		}
 	}
 
-	// Index the artifact's kind so subsequent ListImages can surface
-	// it. Best-effort: ManifestKind on the executor's registry reads
-	// the now-pushed manifest body. An empty kind (docker backend or
-	// non-openotters artifact) is silently skipped.
-	d.indexImageKindBestEffort(ctx, digest, tags)
+	// Refresh the daemon's image cache for every saved tag so the
+	// listing surfaces pick them up immediately.
+	d.upsertImagesFromTags(ctx, tags, "")
 
 	d.logger.Info("image saved", zap.String("digest", digest), zap.Strings("tags", tags))
 
@@ -1174,12 +1172,8 @@ func (d *Daemon) Pull(
 		digest = info.Digest
 	}
 
-	// Populate the kind index. ManifestKind on the system backend
-	// reads the embedded registry's manifest cheaply; on docker it's
-	// a no-op (returns empty), which is fine — agent images pulled
-	// from ghcr.io won't surface there but the legitimate hot paths
-	// (build / save) plumb the kind through directly.
-	d.indexImageKindBestEffort(ctx, digest, tags)
+	// Refresh the daemon's image cache for every pulled tag.
+	d.upsertImagesFromTags(ctx, tags, "")
 
 	d.logger.Info("image pulled", zap.String("ref", req.GetRef()), zap.Strings("tags", tags))
 
@@ -1686,42 +1680,52 @@ func (d *Daemon) openBuildStore() oras.Target {
 	return orasmem.New()
 }
 
-// indexImageKindBestEffort populates image_kinds for a freshly
-// ingested digest by asking the executor's registry for the
-// manifest kind. Used by Pull / Save where the kind isn't already
-// in hand (build paths plumb it through commitBuilt directly).
+// upsertImagesFromTags re-fetches each tag from the executor
+// registry and upserts a full row into the daemon's images cache.
+// Used by Pull / Save / Push to keep the DB in sync with the
+// executor's actual state after a successful operation. Failures
+// are logged but not surfaced — the primary operation already
+// succeeded.
 //
-// Best-effort: missing digest, empty kind, or storage errors all
-// result in a warn-level log and a return — the caller's primary
-// operation already succeeded, so we don't fail it on an indexing
-// hiccup. The system backend reads the manifest blob it just
-// served; the docker backend currently returns empty (it has no
-// cheap way to read manifest body) so docker-pulled images come
-// back as "unknown" until the source rebuild ships.
-func (d *Daemon) indexImageKindBestEffort(ctx context.Context, manifestDigest string, tags []string) {
-	if manifestDigest == "" || len(tags) == 0 {
+// kindHint is the artifactType the caller already knows (build
+// paths supply it). When non-empty it wins over whatever
+// ManifestKind returns; otherwise we ask the registry.
+func (d *Daemon) upsertImagesFromTags(ctx context.Context, tags []string, kindHint string) {
+	if len(tags) == 0 {
 		return
 	}
 
-	kind, err := d.pool.provider.Registry().ManifestKind(ctx, tags[0])
-	if err != nil {
-		d.logger.Debug("read manifest kind for indexing",
-			zap.String("digest", manifestDigest),
-			zap.String("ref", tags[0]),
-			zap.Error(err))
+	reg := d.pool.provider.Registry()
 
-		return
-	}
+	for _, tag := range tags {
+		info, err := reg.Inspect(ctx, tag)
+		if err != nil {
+			d.logger.Debug("inspect for image cache",
+				zap.String("ref", tag), zap.Error(err))
 
-	if kind == "" {
-		return
-	}
+			continue
+		}
 
-	if err = d.state.IndexImageKind(ctx, manifestDigest, kind); err != nil {
-		d.logger.Warn("indexing image kind",
-			zap.String("digest", manifestDigest),
-			zap.String("artifact_type", kind),
-			zap.Error(err))
+		kind := kindHint
+
+		if kind == "" {
+			if k, kErr := reg.ManifestKind(ctx, tag); kErr == nil {
+				kind = k
+			}
+		}
+
+		if upsertErr := d.state.UpsertImage(ctx, PersistedImage{
+			Ref:          tag,
+			Digest:       info.Digest,
+			ArtifactType: kind,
+			Size:         info.Size,
+			CreatedUnix:  info.CreatedUnix,
+			Description:  info.Description,
+			Source:       info.Source,
+		}); upsertErr != nil {
+			d.logger.Warn("upsert image cache",
+				zap.String("ref", tag), zap.Error(upsertErr))
+		}
 	}
 }
 
@@ -1746,17 +1750,13 @@ func (d *Daemon) commitBuilt(
 		return err
 	}
 
-	// Record the kind in the daemon's image_kinds index. ListImages
-	// reads from this index instead of asking the backend, which
-	// docker can't answer reliably for our agent manifests anyway.
-	if manifestDigest != "" && artifactType != "" {
-		if err := d.state.IndexImageKind(ctx, manifestDigest, artifactType); err != nil {
-			d.logger.Warn("indexing image kind",
-				zap.String("digest", manifestDigest),
-				zap.String("artifact_type", artifactType),
-				zap.Error(err))
-		}
-	}
+	// Refresh the daemon's image cache for this ref so ListImages
+	// surfaces the just-built artifact without waiting for a
+	// manual RefreshImages call. Failures are logged best-effort —
+	// the storage write already succeeded.
+	d.upsertImagesFromTags(ctx, []string{ref.String()}, artifactType)
+
+	_ = manifestDigest // currently embedded in the upsert via Inspect
 
 	return nil
 }

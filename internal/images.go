@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"strings"
 
@@ -45,46 +46,101 @@ func readAllCapped(r io.Reader) ([]byte, error) {
 func (d *Daemon) ListImages(
 	ctx context.Context, _ *daemonv1.ListImagesRequest,
 ) (*daemonv1.ListImagesResponse, error) {
+	// Reads exclusively from the daemon's images cache — no docker
+	// round trip per call. Cache is populated at every ingestion
+	// site (build / pull / save / push) and reconciled on demand
+	// via RefreshImages.
+	rows, err := d.state.ListImages(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("listing images: %w", err)
+	}
+
+	images := make([]*daemonv1.ImageInfo, 0, len(rows))
+	for _, r := range rows {
+		images = append(images, &daemonv1.ImageInfo{
+			Ref:          r.Ref,
+			Digest:       r.Digest,
+			ArtifactType: r.ArtifactType,
+			Size:         r.Size,
+			CreatedAt:    r.CreatedUnix,
+			Description:  r.Description,
+			Source:       r.Source,
+		})
+	}
+
+	return &daemonv1.ListImagesResponse{Images: images}, nil
+}
+
+// RefreshImages reconciles the daemon's images cache with the
+// executor registry's authoritative state. Walks ListEntries,
+// asks ManifestKind for each (or carries forward what the existing
+// cache row knew), and replaces the table in one transaction.
+// Returns the count of images currently in the cache after
+// refresh — useful for UI confirmation.
+func (d *Daemon) RefreshImages(
+	ctx context.Context, _ *daemonv1.RefreshImagesRequest,
+) (*daemonv1.RefreshImagesResponse, error) {
 	reg := d.pool.provider.Registry()
 
-	// One backend call returns every ref's metadata (id, size,
-	// created, labels) — docker's cli.ImageList already includes
-	// all of it; system's ListEntries falls back to per-ref Inspect
-	// against the embedded registry which is local + fast.
 	entries, err := reg.ListEntries(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("listing images: %w", err)
 	}
 
-	digests := make([]string, 0, len(entries))
-	for _, e := range entries {
-		if e.Digest != "" {
-			digests = append(digests, e.Digest)
+	existing, err := d.state.ListImages(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("loading existing image cache: %w", err)
+	}
+
+	// Carry forward known artifactType per digest from the
+	// existing cache so a refresh doesn't blank kinds the docker
+	// executor can't re-derive (its ManifestKind always returns
+	// empty). A fresh build / pull will overwrite any stale value
+	// anyway.
+	priorKindByDigest := make(map[string]string, len(existing))
+
+	for _, p := range existing {
+		if p.ArtifactType != "" && priorKindByDigest[p.Digest] == "" {
+			priorKindByDigest[p.Digest] = p.ArtifactType
 		}
 	}
 
-	// ArtifactType is joined in from the daemon's image_kinds
-	// index in a single SQL round-trip — no per-backend fallback
-	// since we own the source of truth.
-	kinds, err := d.state.GetImageKinds(ctx, digests)
-	if err != nil {
-		return nil, fmt.Errorf("loading image kinds: %w", err)
-	}
+	out := make([]PersistedImage, 0, len(entries))
 
-	images := make([]*daemonv1.ImageInfo, 0, len(entries))
 	for _, e := range entries {
-		images = append(images, &daemonv1.ImageInfo{
+		kind, kindErr := reg.ManifestKind(ctx, e.Ref)
+		if kindErr != nil {
+			d.logger.Debug("manifest kind for refresh",
+				zap.String("ref", e.Ref), zap.Error(kindErr))
+		}
+
+		if kind == "" {
+			kind = priorKindByDigest[e.Digest]
+		}
+
+		out = append(out, PersistedImage{
 			Ref:          e.Ref,
 			Digest:       e.Digest,
-			ArtifactType: kinds[e.Digest],
+			ArtifactType: kind,
 			Size:         e.Size,
-			CreatedAt:    e.CreatedUnix,
+			CreatedUnix:  e.CreatedUnix,
 			Description:  e.Description,
 			Source:       e.Source,
 		})
 	}
 
-	return &daemonv1.ListImagesResponse{Images: images}, nil
+	if err = d.state.ReplaceAllImages(ctx, out); err != nil {
+		return nil, fmt.Errorf("replacing images cache: %w", err)
+	}
+
+	d.logger.Info("images refreshed", zap.Int("count", len(out)))
+
+	count := len(out)
+	if count > math.MaxInt32 {
+		count = math.MaxInt32
+	}
+
+	return &daemonv1.RefreshImagesResponse{Count: int32(count)}, nil
 }
 
 func (d *Daemon) RemoveImage(
@@ -93,9 +149,9 @@ func (d *Daemon) RemoveImage(
 	ref := req.GetRef()
 	reg := d.pool.provider.Registry()
 
-	// Capture the digest before removing so the image_kinds row
-	// can be invalidated. Best-effort — if Inspect fails (already
-	// gone, never existed) the remove still proceeds.
+	// Capture the digest before removing — docker's ImageRemove
+	// untags every alias of the underlying ID, so we want to drop
+	// every cache row for that digest in one go.
 	var digest string
 	if info, err := reg.Inspect(ctx, ref); err == nil {
 		digest = info.Digest
@@ -106,10 +162,13 @@ func (d *Daemon) RemoveImage(
 	}
 
 	if digest != "" {
-		if err := d.state.DeleteImageKind(ctx, digest); err != nil {
-			d.logger.Warn("deleting image kind index entry",
+		if err := d.state.DeleteImagesByDigest(ctx, digest); err != nil {
+			d.logger.Warn("removing images cache rows",
 				zap.String("digest", digest), zap.Error(err))
 		}
+	} else if err := d.state.DeleteImageByRef(ctx, ref); err != nil {
+		d.logger.Warn("removing images cache row",
+			zap.String("ref", ref), zap.Error(err))
 	}
 
 	d.logger.Info("image removed", zap.String("ref", ref))

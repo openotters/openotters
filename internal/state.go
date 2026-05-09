@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"strings"
 	"time"
 )
 
@@ -61,22 +60,39 @@ func migrateState(ctx context.Context, db *sql.DB) error {
 		return err
 	}
 
-	// image_kinds owns the mapping from manifest digest → openotters
-	// artifact kind ("application/vnd.openotters.{agent,bin}.v1").
-	// Populated at ingestion time (build / pull / save) where the
-	// kind is already known, so the listing path doesn't have to
-	// re-derive it from each backend's idiosyncratic config layout
-	// (docker doesn't surface `Config.Labels` for our agent
-	// manifests; the embedded HTTP registry on system always does).
-	// Keyed by digest, content-addressed, so re-tags share rows and
-	// stale entries for absent digests are harmless.
+	// images is the daemon-owned cache of every ref the executor
+	// registry has shown us. Populated at every ingestion site
+	// (build / pull / save) and kept in sync via RefreshImages
+	// (walks the executor registry on demand). ListImages reads
+	// exclusively from this table — no per-call docker round
+	// trip — so the dashboard's listing surfaces are SQL-fast.
+	// Refs are unique per registry; refs sharing a digest get a
+	// row each (matches how cli.ImageList expands RepoTags).
 	if _, err := db.ExecContext(ctx, `
-		CREATE TABLE IF NOT EXISTS image_kinds (
-			digest        TEXT PRIMARY KEY,
-			artifact_type TEXT NOT NULL,
+		CREATE TABLE IF NOT EXISTS images (
+			ref           TEXT PRIMARY KEY,
+			digest        TEXT NOT NULL,
+			artifact_type TEXT NOT NULL DEFAULT '',
+			size          INTEGER NOT NULL DEFAULT 0,
+			created_unix  INTEGER NOT NULL DEFAULT 0,
+			description   TEXT NOT NULL DEFAULT '',
+			source        TEXT NOT NULL DEFAULT '',
 			indexed_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 		);
 	`); err != nil {
+		return err
+	}
+
+	if _, err := db.ExecContext(ctx,
+		`CREATE INDEX IF NOT EXISTS idx_images_digest ON images(digest)`,
+	); err != nil {
+		return err
+	}
+
+	// image_kinds was the previous, narrower index. Drop it on
+	// upgrade — same alpha breakage policy as the agentfile
+	// format change that landed earlier.
+	if _, err := db.ExecContext(ctx, `DROP TABLE IF EXISTS image_kinds`); err != nil {
 		return err
 	}
 
@@ -160,83 +176,137 @@ func (s *StateStore) UpdateStatus(ctx context.Context, id, status string) error 
 	return err
 }
 
-// IndexImageKind records the openotters artifact kind for a manifest
-// digest. Idempotent: re-indexing the same digest is a no-op
-// (INSERT OR REPLACE updates indexed_at). Empty artifactType is
-// rejected — callers should skip the call rather than persist a
-// blank row.
-func (s *StateStore) IndexImageKind(ctx context.Context, digest, artifactType string) error {
-	if digest == "" || artifactType == "" {
-		return fmt.Errorf("index image kind: digest and artifactType required")
+// PersistedImage is the on-disk row shape — one per ref. The
+// daemon's ListImages serves these directly; build / pull / save
+// flows upsert through UpsertImage when they have a fresh fact.
+type PersistedImage struct {
+	Ref          string
+	Digest       string
+	ArtifactType string
+	Size         int64
+	CreatedUnix  int64
+	Description  string
+	Source       string
+}
+
+// UpsertImage records (or refreshes) one image row. Idempotent —
+// INSERT OR REPLACE keyed by ref so a re-tag of the same digest
+// updates the same row, and a re-pull with new metadata wins.
+func (s *StateStore) UpsertImage(ctx context.Context, img PersistedImage) error {
+	if img.Ref == "" {
+		return fmt.Errorf("upsert image: ref required")
 	}
 
 	_, err := s.db.ExecContext(ctx,
-		`INSERT OR REPLACE INTO image_kinds (digest, artifact_type, indexed_at)
-		 VALUES (?, ?, CURRENT_TIMESTAMP)`,
-		digest, artifactType,
+		`INSERT OR REPLACE INTO images
+		 (ref, digest, artifact_type, size, created_unix, description, source, indexed_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
+		img.Ref, img.Digest, img.ArtifactType, img.Size, img.CreatedUnix,
+		img.Description, img.Source,
 	)
 
 	return err
 }
 
-// GetImageKinds bulk-fetches kind rows for a set of digests.
-// Returns a map keyed by digest containing only the digests
-// present in the index — missing digests are absent from the map.
-// Single SQL round-trip; the listing path uses this to populate
-// every image's artifactType column without per-ref backend reads.
-func (s *StateStore) GetImageKinds(ctx context.Context, digests []string) (map[string]string, error) {
-	if len(digests) == 0 {
-		return map[string]string{}, nil
-	}
-
-	placeholders := make([]string, len(digests))
-	args := make([]any, len(digests))
-
-	for i, d := range digests {
-		placeholders[i] = "?"
-		args[i] = d
-	}
-
-	// G202 false positive: only placeholder characters concatenated,
-	// every input value is bound through args.
-	//nolint:gosec // only "?" placeholders concatenated; values bound via args
-	query := "SELECT digest, artifact_type FROM image_kinds WHERE digest IN (" +
-		strings.Join(placeholders, ",") + ")"
-
-	rows, err := s.db.QueryContext(ctx, query, args...)
+// ListImages returns every row in insertion-stable order. The
+// dashboard's image listing surfaces serve directly from this — no
+// docker / embedded-registry round trip per call.
+func (s *StateStore) ListImages(ctx context.Context) ([]PersistedImage, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT ref, digest, artifact_type, size, created_unix, description, source
+		 FROM images ORDER BY ref ASC`,
+	)
 	if err != nil {
-		return nil, fmt.Errorf("querying image kinds: %w", err)
+		return nil, fmt.Errorf("querying images: %w", err)
 	}
 	defer rows.Close()
 
-	out := make(map[string]string, len(digests))
+	var out []PersistedImage
 
 	for rows.Next() {
-		var digest, kind string
-		if scanErr := rows.Scan(&digest, &kind); scanErr != nil {
-			return nil, fmt.Errorf("scanning image kind: %w", scanErr)
+		var img PersistedImage
+		if scanErr := rows.Scan(
+			&img.Ref, &img.Digest, &img.ArtifactType, &img.Size,
+			&img.CreatedUnix, &img.Description, &img.Source,
+		); scanErr != nil {
+			return nil, fmt.Errorf("scanning image: %w", scanErr)
 		}
 
-		out[digest] = kind
+		out = append(out, img)
 	}
 
 	return out, rows.Err()
 }
 
-// DeleteImageKind drops the index row for a digest. Used after
-// RemoveImage so the index doesn't accumulate orphan rows for
-// deleted content. Misses are not errors — the row may already be
-// gone if a parallel RemoveImage on a different tag won the race.
-func (s *StateStore) DeleteImageKind(ctx context.Context, digest string) error {
+// DeleteImageByRef drops a single ref. Used when the operator
+// explicitly removes a tag without nuking the underlying digest
+// (other refs may still alias it).
+func (s *StateStore) DeleteImageByRef(ctx context.Context, ref string) error {
+	if ref == "" {
+		return nil
+	}
+
+	_, err := s.db.ExecContext(ctx, "DELETE FROM images WHERE ref = ?", ref)
+
+	return err
+}
+
+// DeleteImagesByDigest drops every row sharing a digest. The
+// docker executor's ContainerRemove(force) untags every alias
+// when removing one, so the daemon mirrors that semantic — the DB
+// loses every ref that shared the deleted content.
+func (s *StateStore) DeleteImagesByDigest(ctx context.Context, digest string) error {
 	if digest == "" {
 		return nil
 	}
 
-	_, err := s.db.ExecContext(ctx,
-		"DELETE FROM image_kinds WHERE digest = ?", digest,
-	)
+	_, err := s.db.ExecContext(ctx, "DELETE FROM images WHERE digest = ?", digest)
 
 	return err
+}
+
+// ReplaceAllImages reconciles the table against the current
+// authoritative set in one transaction: every supplied row is
+// upserted; rows whose ref isn't present any more are deleted.
+// Used by RefreshImages to bring the DB into agreement with the
+// executor registry's ListEntries result.
+func (s *StateStore) ReplaceAllImages(ctx context.Context, imgs []PersistedImage) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+
+	defer func() { _ = tx.Rollback() }()
+
+	if _, err = tx.ExecContext(ctx, "DELETE FROM images"); err != nil {
+		return fmt.Errorf("clearing images: %w", err)
+	}
+
+	stmt, err := tx.PrepareContext(ctx,
+		`INSERT INTO images
+		 (ref, digest, artifact_type, size, created_unix, description, source, indexed_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
+	)
+	if err != nil {
+		return fmt.Errorf("prepare insert: %w", err)
+	}
+
+	defer stmt.Close()
+
+	for _, img := range imgs {
+		if img.Ref == "" {
+			continue
+		}
+
+		if _, err = stmt.ExecContext(ctx,
+			img.Ref, img.Digest, img.ArtifactType, img.Size, img.CreatedUnix,
+			img.Description, img.Source,
+		); err != nil {
+			return fmt.Errorf("inserting %s: %w", img.Ref, err)
+		}
+	}
+
+	return tx.Commit()
 }
 
 func (s *StateStore) ListAgents(ctx context.Context) ([]persistedAgent, error) {

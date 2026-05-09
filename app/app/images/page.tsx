@@ -10,6 +10,7 @@ import {
 	Layers,
 	MoreHorizontal,
 	Plus,
+	RefreshCw,
 	Tag,
 	Trash2,
 } from "lucide-react"
@@ -28,7 +29,12 @@ import {
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { groupImagesByDigest } from "@/lib/image-tags"
-import { listImages, pullAgentImage, removeImage } from "@/lib/proto/v1/daemon-Runtime_connectquery"
+import {
+	listImages,
+	pullAgentImage,
+	refreshImages,
+	removeImage,
+} from "@/lib/proto/v1/daemon-Runtime_connectquery"
 
 // The registry holds agent images, bin tool images, and any other
 // OCI artifacts the daemon has pulled (docker executor base images,
@@ -69,6 +75,11 @@ export default function ImagesPage() {
 	})
 
 	const pull = useMutation(pullAgentImage)
+	const refresh = useMutation(refreshImages, {
+		onSuccess: () => {
+			queryClient.invalidateQueries({ queryKey: ["openotters.daemon.v1.Runtime", "ListImages"] })
+		},
+	})
 
 	const groups = useMemo(() => {
 		const all = data?.images ?? []
@@ -80,10 +91,21 @@ export default function ImagesPage() {
 		<div className="space-y-6">
 			<PageHeader
 				actions={
-					<Button onClick={() => setBuildOpen(true)}>
-						<Plus className="mr-2 h-4 w-4" />
-						Build Image
-					</Button>
+					<div className="flex items-center gap-2">
+						<Button
+							disabled={refresh.isPending}
+							onClick={() => refresh.mutate({})}
+							variant="outline">
+							<RefreshCw
+								className={`mr-2 h-4 w-4 ${refresh.isPending ? "animate-spin" : ""}`}
+							/>
+							Refresh
+						</Button>
+						<Button onClick={() => setBuildOpen(true)}>
+							<Plus className="mr-2 h-4 w-4" />
+							Build Image
+						</Button>
+					</div>
 				}
 				command="otters image ls"
 				description="Built agent images in the embedded registry."

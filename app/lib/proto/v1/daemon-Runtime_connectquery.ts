@@ -40,6 +40,11 @@ export const pushAgentImage = Runtime.method.pushAgentImage;
 export const listImages = Runtime.method.listImages;
 
 /**
+ * @generated from rpc openotters.daemon.v1.Runtime.RefreshImages
+ */
+export const refreshImages = Runtime.method.refreshImages;
+
+/**
  * @generated from rpc openotters.daemon.v1.Runtime.RemoveImage
  */
 export const removeImage = Runtime.method.removeImage;

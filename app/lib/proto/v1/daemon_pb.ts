@@ -10,7 +10,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file v1/daemon.proto.
  */
 export const file_v1_daemon: GenFile = /*@__PURE__*/
-  fileDesc("Cg92MS9kYWVtb24ucHJvdG8SFG9wZW5vdHRlcnMuZGFlbW9uLnYxIhMKEUxpc3RNb2RlbHNSZXF1ZXN0IkEKEkxpc3RNb2RlbHNSZXNwb25zZRIrCgZtb2RlbHMYASADKAsyGy5vcGVub3R0ZXJzLmRhZW1vbi52MS5Nb2RlbCLbAQoFTW9kZWwSEAoIcHJvdmlkZXIYASABKAkSDAoEbmFtZRgCIAEoCRILCgNyZWYYAyABKAkSEAoIYXBpX2Jhc2UYBCABKAkSFAoMZGlzcGxheV9uYW1lGAUgASgJEhYKDmNvbnRleHRfd2luZG93GAYgASgDEhoKEmRlZmF1bHRfbWF4X3Rva2VucxgHIAEoAxIZChFjb3N0X2lucHV0X3Blcl8xbRgIIAEoARIaChJjb3N0X291dHB1dF9wZXJfMW0YCSABKAESEgoKY2FuX3JlYXNvbhgKIAEoCCJKChNHZXRBZ2VudExvZ3NSZXF1ZXN0EgsKA3JlZhgBIAEoCRISCgp0YWlsX2J5dGVzGAIgASgDEhIKCnRhaWxfbGluZXMYAyABKAMiNQoUR2V0QWdlbnRMb2dzUmVzcG9uc2USDwoHY29udGVudBgBIAEoDBIMCgRwYXRoGAIgASgJIhAKDkdldEluZm9SZXF1ZXN0Iu8CCg9HZXRJbmZvUmVzcG9uc2USFQoNcmVnaXN0cnlfYWRkchgBIAEoCRITCgtzb2NrZXRfcGF0aBgCIAEoCRIPCgdsb2dfZGlyGAMgASgJEhIKCmFnZW50c19kaXIYBCABKAkSEAoIZGF0YV9kaXIYBSABKAkSFAoMcnVudGltZV9wYXRoGAYgASgJEg8KB3ZlcnNpb24YByABKAkSDgoGY29tbWl0GAggASgJEhIKCmJ1aWxkX2RhdGUYCSABKAkSFgoOYWdlbnRzX3J1bm5pbmcYCiABKAUSFAoMYWdlbnRzX3RvdGFsGAsgASgFEhEKCXByb3ZpZGVycxgMIAEoBRIWCg5tYXhfY29uY3VycmVudBgNIAEoBRIUCgxiYWNrb2ZmX2Jhc2UYDiABKAkSEwoLYmFja29mZl9jYXAYDyABKAkSGAoQc2h1dGRvd25fdGltZW91dBgQIAEoCRIQCghleGVjdXRvchgRIAEoCSJKChFCdWlsZEFnZW50UmVxdWVzdBIWCg5hZ2VudGZpbGVfcGF0aBgBIAEoCRIMCgR0YWdzGAIgAygJEg8KB2NvbnRlbnQYAyABKAwiPwoSQnVpbGRBZ2VudFJlc3BvbnNlEg4KBmRpZ2VzdBgBIAEoCRIMCgR0YWdzGAIgAygJEgsKA3JlZhgDIAEoCSI6CgxUb29sUGxhdGZvcm0SCgoCb3MYASABKAkSDAoEYXJjaBgCIAEoCRIQCghiaW5fcGF0aBgDIAEoCSKeAQoVQnVpbGRUb29sSW1hZ2VSZXF1ZXN0EgwKBG5hbWUYASABKAkSEwoLZGVzY3JpcHRpb24YAiABKAkSDQoFdXNhZ2UYAyABKAkSDAoEdGFncxgEIAMoCRI1CglwbGF0Zm9ybXMYBSADKAsyIi5vcGVub3R0ZXJzLmRhZW1vbi52MS5Ub29sUGxhdGZvcm0SDgoGc291cmNlGAYgASgJIkMKFkJ1aWxkVG9vbEltYWdlUmVzcG9uc2USDgoGZGlnZXN0GAEgASgJEgwKBHRhZ3MYAiADKAkSCwoDcmVmGAMgASgJIjsKFVNhdmVBZ2VudEltYWdlUmVxdWVzdBIUCgxvY2lfYXJ0aWZhY3QYASABKAwSDAoEdGFncxgCIAMoCSI2ChZTYXZlQWdlbnRJbWFnZVJlc3BvbnNlEg4KBmRpZ2VzdBgBIAEoCRIMCgR0YWdzGAIgAygJIigKC1B1bGxSZXF1ZXN0EgsKA3JlZhgBIAEoCRIMCgR0YWdzGAIgAygJIiwKDFB1bGxSZXNwb25zZRIOCgZkaWdlc3QYASABKAkSDAoEdGFncxgCIAMoCSIaCgtQdXNoUmVxdWVzdBILCgNyZWYYASABKAkiKwoMUHVzaFJlc3BvbnNlEg4KBmRpZ2VzdBgBIAEoCRILCgNyZWYYAiABKAkiEwoRTGlzdEltYWdlc1JlcXVlc3QihgEKCUltYWdlSW5mbxILCgNyZWYYASABKAkSDgoGZGlnZXN0GAIgASgJEhUKDWFydGlmYWN0X3R5cGUYAyABKAkSDAoEc2l6ZRgEIAEoAxISCgpjcmVhdGVkX2F0GAUgASgDEhMKC2Rlc2NyaXB0aW9uGAYgASgJEg4KBnNvdXJjZRgHIAEoCSJLCglBZ2VudFRvb2wSDAoEbmFtZRgBIAEoCRILCgNyZWYYAiABKAkSDgoGZGlnZXN0GAMgASgJEhMKC2Rlc2NyaXB0aW9uGAQgASgJIkUKEkxpc3RJbWFnZXNSZXNwb25zZRIvCgZpbWFnZXMYASADKAsyHy5vcGVub3R0ZXJzLmRhZW1vbi52MS5JbWFnZUluZm8iIQoSUmVtb3ZlSW1hZ2VSZXF1ZXN0EgsKA3JlZhgBIAEoCSIVChNSZW1vdmVJbWFnZVJlc3BvbnNlIiMKFERlc2NyaWJlSW1hZ2VSZXF1ZXN0EgsKA3JlZhgBIAEoCSLjAQoVRGVzY3JpYmVJbWFnZVJlc3BvbnNlEgsKA3JlZhgBIAEoCRIOCgZkaWdlc3QYAiABKAkSFQoNYXJ0aWZhY3RfdHlwZRgDIAEoCRIOCgZjb25maWcYBCABKAkSDgoGbGF5ZXJzGAUgAygJEkcKBmxhYmVscxgGIAMoCzI3Lm9wZW5vdHRlcnMuZGFlbW9uLnYxLkRlc2NyaWJlSW1hZ2VSZXNwb25zZS5MYWJlbHNFbnRyeRotCgtMYWJlbHNFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBIjoKBU1vdW50EgwKBGhvc3QYASABKAkSDgoGdGFyZ2V0GAIgASgJEhMKC2Rlc2NyaXB0aW9uGAMgASgJInwKEkNyZWF0ZUFnZW50UmVxdWVzdBIMCgRuYW1lGAEgASgJEgsKA3JlZhgCIAEoCRINCgVtb2RlbBgDIAEoCRIPCgdydW50aW1lGAQgASgJEisKBm1vdW50cxgFIAMoCzIbLm9wZW5vdHRlcnMuZGFlbW9uLnYxLk1vdW50Ij8KE0NyZWF0ZUFnZW50UmVzcG9uc2USCgoCaWQYASABKAkSDAoEbmFtZRgCIAEoCRIOCgZzdGF0dXMYAyABKAkiEwoRTGlzdEFnZW50c1JlcXVlc3QiowIKCUFnZW50SW5mbxIKCgJpZBgBIAEoCRIMCgRuYW1lGAIgASgJEg0KBW1vZGVsGAMgASgJEg4KBnN0YXR1cxgEIAEoCRIMCgRyb290GAUgASgJEhIKCmNyZWF0ZWRfYXQYBiABKAMSDAoEYWRkchgHIAEoCRINCgVpbWFnZRgIIAEoCRIrCgZtb3VudHMYCSADKAsyGy5vcGVub3R0ZXJzLmRhZW1vbi52MS5Nb3VudBIUCgxpbWFnZV9kaWdlc3QYCiABKAkSEwoLcnVudGltZV9yZWYYCyABKAkSFgoOcnVudGltZV9kaWdlc3QYDCABKAkSLgoFdG9vbHMYDSADKAsyHy5vcGVub3R0ZXJzLmRhZW1vbi52MS5BZ2VudFRvb2wiRQoSTGlzdEFnZW50c1Jlc3BvbnNlEi8KBmFnZW50cxgBIAMoCzIfLm9wZW5vdHRlcnMuZGFlbW9uLnYxLkFnZW50SW5mbyIgChFTdGFydEFnZW50UmVxdWVzdBILCgNyZWYYASABKAkiFAoSU3RhcnRBZ2VudFJlc3BvbnNlIh8KEFN0b3BBZ2VudFJlcXVlc3QSCwoDcmVmGAEgASgJIhMKEVN0b3BBZ2VudFJlc3BvbnNlIiEKElJlbW92ZUFnZW50UmVxdWVzdBILCgNyZWYYASABKAkiFQoTUmVtb3ZlQWdlbnRSZXNwb25zZSI+CgtDaGF0UmVxdWVzdBILCgNyZWYYASABKAkSEgoKc2Vzc2lvbl9pZBgCIAEoCRIOCgZwcm9tcHQYAyABKAkiIAoMQ2hhdFJlc3BvbnNlEhAKCHJlc3BvbnNlGAEgASgJInEKE1Byb21wdE9iamVjdFJlcXVlc3QSCwoDcmVmGAEgASgJEg4KBnByb21wdBgCIAEoCRITCgtzY2hlbWFfanNvbhgDIAEoDBITCgtzY2hlbWFfbmFtZRgEIAEoCRITCgtzY2hlbWFfZGVzYxgFIAEoCSI9ChRQcm9tcHRPYmplY3RSZXNwb25zZRITCgtvYmplY3RfanNvbhgBIAEoDBIQCghyYXdfdGV4dBgCIAEoCSJEChFDaGF0U3RyZWFtUmVxdWVzdBILCgNyZWYYASABKAkSEgoKc2Vzc2lvbl9pZBgCIAEoCRIOCgZwcm9tcHQYAyABKAkiTAoPQ2hhdFN0cmVhbUV2ZW50EgwKBHR5cGUYASABKAkSDAoEc3RlcBgCIAEoBRIMCgR0b29sGAMgASgJEg8KB2NvbnRlbnQYBCABKAkiTAoaTGlzdFNlc3Npb25NZXNzYWdlc1JlcXVlc3QSCwoDcmVmGAEgASgJEhIKCnNlc3Npb25faWQYAiABKAkSDQoFbGltaXQYAyABKAUiQwoOU2Vzc2lvbk1lc3NhZ2USDAoEcm9sZRgBIAEoCRIPCgdjb250ZW50GAIgASgJEhIKCmNyZWF0ZWRfYXQYAyABKAMiVQobTGlzdFNlc3Npb25NZXNzYWdlc1Jlc3BvbnNlEjYKCG1lc3NhZ2VzGAEgAygLMiQub3Blbm90dGVycy5kYWVtb24udjEuU2Vzc2lvbk1lc3NhZ2UiSwoIUHJvdmlkZXISDAoEbmFtZRgBIAEoCRIPCgdhcGlfa2V5GAIgASgJEhAKCGFwaV9iYXNlGAMgASgJEg4KBm1vZGVscxgEIAMoCSIWChRMaXN0UHJvdmlkZXJzUmVxdWVzdCJKChVMaXN0UHJvdmlkZXJzUmVzcG9uc2USMQoJcHJvdmlkZXJzGAEgAygLMh4ub3Blbm90dGVycy5kYWVtb24udjEuUHJvdmlkZXIiRgoSQWRkUHJvdmlkZXJSZXF1ZXN0EjAKCHByb3ZpZGVyGAEgASgLMh4ub3Blbm90dGVycy5kYWVtb24udjEuUHJvdmlkZXIiRwoTQWRkUHJvdmlkZXJSZXNwb25zZRIwCghwcm92aWRlchgBIAEoCzIeLm9wZW5vdHRlcnMuZGFlbW9uLnYxLlByb3ZpZGVyIkkKFVVwZGF0ZVByb3ZpZGVyUmVxdWVzdBIwCghwcm92aWRlchgBIAEoCzIeLm9wZW5vdHRlcnMuZGFlbW9uLnYxLlByb3ZpZGVyIkoKFlVwZGF0ZVByb3ZpZGVyUmVzcG9uc2USMAoIcHJvdmlkZXIYASABKAsyHi5vcGVub3R0ZXJzLmRhZW1vbi52MS5Qcm92aWRlciIlChVSZW1vdmVQcm92aWRlclJlcXVlc3QSDAoEbmFtZRgBIAEoCSIYChZSZW1vdmVQcm92aWRlclJlc3BvbnNlMvkSCgdSdW50aW1lElYKB0dldEluZm8SJC5vcGVub3R0ZXJzLmRhZW1vbi52MS5HZXRJbmZvUmVxdWVzdBolLm9wZW5vdHRlcnMuZGFlbW9uLnYxLkdldEluZm9SZXNwb25zZRJfCgpCdWlsZEFnZW50Eicub3Blbm90dGVycy5kYWVtb24udjEuQnVpbGRBZ2VudFJlcXVlc3QaKC5vcGVub3R0ZXJzLmRhZW1vbi52MS5CdWlsZEFnZW50UmVzcG9uc2USawoOQnVpbGRUb29sSW1hZ2USKy5vcGVub3R0ZXJzLmRhZW1vbi52MS5CdWlsZFRvb2xJbWFnZVJlcXVlc3QaLC5vcGVub3R0ZXJzLmRhZW1vbi52MS5CdWlsZFRvb2xJbWFnZVJlc3BvbnNlEmsKDlNhdmVBZ2VudEltYWdlEisub3Blbm90dGVycy5kYWVtb24udjEuU2F2ZUFnZW50SW1hZ2VSZXF1ZXN0Giwub3Blbm90dGVycy5kYWVtb24udjEuU2F2ZUFnZW50SW1hZ2VSZXNwb25zZRJXCg5QdWxsQWdlbnRJbWFnZRIhLm9wZW5vdHRlcnMuZGFlbW9uLnYxLlB1bGxSZXF1ZXN0GiIub3Blbm90dGVycy5kYWVtb24udjEuUHVsbFJlc3BvbnNlElcKDlB1c2hBZ2VudEltYWdlEiEub3Blbm90dGVycy5kYWVtb24udjEuUHVzaFJlcXVlc3QaIi5vcGVub3R0ZXJzLmRhZW1vbi52MS5QdXNoUmVzcG9uc2USXwoKTGlzdEltYWdlcxInLm9wZW5vdHRlcnMuZGFlbW9uLnYxLkxpc3RJbWFnZXNSZXF1ZXN0Gigub3Blbm90dGVycy5kYWVtb24udjEuTGlzdEltYWdlc1Jlc3BvbnNlEmIKC1JlbW92ZUltYWdlEigub3Blbm90dGVycy5kYWVtb24udjEuUmVtb3ZlSW1hZ2VSZXF1ZXN0Gikub3Blbm90dGVycy5kYWVtb24udjEuUmVtb3ZlSW1hZ2VSZXNwb25zZRJoCg1EZXNjcmliZUltYWdlEioub3Blbm90dGVycy5kYWVtb24udjEuRGVzY3JpYmVJbWFnZVJlcXVlc3QaKy5vcGVub3R0ZXJzLmRhZW1vbi52MS5EZXNjcmliZUltYWdlUmVzcG9uc2USYgoLQ3JlYXRlQWdlbnQSKC5vcGVub3R0ZXJzLmRhZW1vbi52MS5DcmVhdGVBZ2VudFJlcXVlc3QaKS5vcGVub3R0ZXJzLmRhZW1vbi52MS5DcmVhdGVBZ2VudFJlc3BvbnNlEl8KCkxpc3RBZ2VudHMSJy5vcGVub3R0ZXJzLmRhZW1vbi52MS5MaXN0QWdlbnRzUmVxdWVzdBooLm9wZW5vdHRlcnMuZGFlbW9uLnYxLkxpc3RBZ2VudHNSZXNwb25zZRJfCgpTdGFydEFnZW50Eicub3Blbm90dGVycy5kYWVtb24udjEuU3RhcnRBZ2VudFJlcXVlc3QaKC5vcGVub3R0ZXJzLmRhZW1vbi52MS5TdGFydEFnZW50UmVzcG9uc2USXAoJU3RvcEFnZW50EiYub3Blbm90dGVycy5kYWVtb24udjEuU3RvcEFnZW50UmVxdWVzdBonLm9wZW5vdHRlcnMuZGFlbW9uLnYxLlN0b3BBZ2VudFJlc3BvbnNlEmIKC1JlbW92ZUFnZW50Eigub3Blbm90dGVycy5kYWVtb24udjEuUmVtb3ZlQWdlbnRSZXF1ZXN0Gikub3Blbm90dGVycy5kYWVtb24udjEuUmVtb3ZlQWdlbnRSZXNwb25zZRJWCg1DaGF0V2l0aEFnZW50EiEub3Blbm90dGVycy5kYWVtb24udjEuQ2hhdFJlcXVlc3QaIi5vcGVub3R0ZXJzLmRhZW1vbi52MS5DaGF0UmVzcG9uc2USZQoMUHJvbXB0T2JqZWN0Eikub3Blbm90dGVycy5kYWVtb24udjEuUHJvbXB0T2JqZWN0UmVxdWVzdBoqLm9wZW5vdHRlcnMuZGFlbW9uLnYxLlByb21wdE9iamVjdFJlc3BvbnNlEmcKE0NoYXRTdHJlYW1XaXRoQWdlbnQSJy5vcGVub3R0ZXJzLmRhZW1vbi52MS5DaGF0U3RyZWFtUmVxdWVzdBolLm9wZW5vdHRlcnMuZGFlbW9uLnYxLkNoYXRTdHJlYW1FdmVudDABEnoKE0xpc3RTZXNzaW9uTWVzc2FnZXMSMC5vcGVub3R0ZXJzLmRhZW1vbi52MS5MaXN0U2Vzc2lvbk1lc3NhZ2VzUmVxdWVzdBoxLm9wZW5vdHRlcnMuZGFlbW9uLnYxLkxpc3RTZXNzaW9uTWVzc2FnZXNSZXNwb25zZRJlCgxHZXRBZ2VudExvZ3MSKS5vcGVub3R0ZXJzLmRhZW1vbi52MS5HZXRBZ2VudExvZ3NSZXF1ZXN0Gioub3Blbm90dGVycy5kYWVtb24udjEuR2V0QWdlbnRMb2dzUmVzcG9uc2USXwoKTGlzdE1vZGVscxInLm9wZW5vdHRlcnMuZGFlbW9uLnYxLkxpc3RNb2RlbHNSZXF1ZXN0Gigub3Blbm90dGVycy5kYWVtb24udjEuTGlzdE1vZGVsc1Jlc3BvbnNlEmgKDUxpc3RQcm92aWRlcnMSKi5vcGVub3R0ZXJzLmRhZW1vbi52MS5MaXN0UHJvdmlkZXJzUmVxdWVzdBorLm9wZW5vdHRlcnMuZGFlbW9uLnYxLkxpc3RQcm92aWRlcnNSZXNwb25zZRJiCgtBZGRQcm92aWRlchIoLm9wZW5vdHRlcnMuZGFlbW9uLnYxLkFkZFByb3ZpZGVyUmVxdWVzdBopLm9wZW5vdHRlcnMuZGFlbW9uLnYxLkFkZFByb3ZpZGVyUmVzcG9uc2USawoOVXBkYXRlUHJvdmlkZXISKy5vcGVub3R0ZXJzLmRhZW1vbi52MS5VcGRhdGVQcm92aWRlclJlcXVlc3QaLC5vcGVub3R0ZXJzLmRhZW1vbi52MS5VcGRhdGVQcm92aWRlclJlc3BvbnNlEmsKDlJlbW92ZVByb3ZpZGVyEisub3Blbm90dGVycy5kYWVtb24udjEuUmVtb3ZlUHJvdmlkZXJSZXF1ZXN0Giwub3Blbm90dGVycy5kYWVtb24udjEuUmVtb3ZlUHJvdmlkZXJSZXNwb25zZUIyWjBnaXRodWIuY29tL29wZW5vdHRlcnMvb3Blbm90dGVycy9hcGkvdjE7ZGFlbW9udjFiBnByb3RvMw");
+  fileDesc("Cg92MS9kYWVtb24ucHJvdG8SFG9wZW5vdHRlcnMuZGFlbW9uLnYxIhMKEUxpc3RNb2RlbHNSZXF1ZXN0IkEKEkxpc3RNb2RlbHNSZXNwb25zZRIrCgZtb2RlbHMYASADKAsyGy5vcGVub3R0ZXJzLmRhZW1vbi52MS5Nb2RlbCLbAQoFTW9kZWwSEAoIcHJvdmlkZXIYASABKAkSDAoEbmFtZRgCIAEoCRILCgNyZWYYAyABKAkSEAoIYXBpX2Jhc2UYBCABKAkSFAoMZGlzcGxheV9uYW1lGAUgASgJEhYKDmNvbnRleHRfd2luZG93GAYgASgDEhoKEmRlZmF1bHRfbWF4X3Rva2VucxgHIAEoAxIZChFjb3N0X2lucHV0X3Blcl8xbRgIIAEoARIaChJjb3N0X291dHB1dF9wZXJfMW0YCSABKAESEgoKY2FuX3JlYXNvbhgKIAEoCCJKChNHZXRBZ2VudExvZ3NSZXF1ZXN0EgsKA3JlZhgBIAEoCRISCgp0YWlsX2J5dGVzGAIgASgDEhIKCnRhaWxfbGluZXMYAyABKAMiNQoUR2V0QWdlbnRMb2dzUmVzcG9uc2USDwoHY29udGVudBgBIAEoDBIMCgRwYXRoGAIgASgJIhAKDkdldEluZm9SZXF1ZXN0Iu8CCg9HZXRJbmZvUmVzcG9uc2USFQoNcmVnaXN0cnlfYWRkchgBIAEoCRITCgtzb2NrZXRfcGF0aBgCIAEoCRIPCgdsb2dfZGlyGAMgASgJEhIKCmFnZW50c19kaXIYBCABKAkSEAoIZGF0YV9kaXIYBSABKAkSFAoMcnVudGltZV9wYXRoGAYgASgJEg8KB3ZlcnNpb24YByABKAkSDgoGY29tbWl0GAggASgJEhIKCmJ1aWxkX2RhdGUYCSABKAkSFgoOYWdlbnRzX3J1bm5pbmcYCiABKAUSFAoMYWdlbnRzX3RvdGFsGAsgASgFEhEKCXByb3ZpZGVycxgMIAEoBRIWCg5tYXhfY29uY3VycmVudBgNIAEoBRIUCgxiYWNrb2ZmX2Jhc2UYDiABKAkSEwoLYmFja29mZl9jYXAYDyABKAkSGAoQc2h1dGRvd25fdGltZW91dBgQIAEoCRIQCghleGVjdXRvchgRIAEoCSJKChFCdWlsZEFnZW50UmVxdWVzdBIWCg5hZ2VudGZpbGVfcGF0aBgBIAEoCRIMCgR0YWdzGAIgAygJEg8KB2NvbnRlbnQYAyABKAwiPwoSQnVpbGRBZ2VudFJlc3BvbnNlEg4KBmRpZ2VzdBgBIAEoCRIMCgR0YWdzGAIgAygJEgsKA3JlZhgDIAEoCSI6CgxUb29sUGxhdGZvcm0SCgoCb3MYASABKAkSDAoEYXJjaBgCIAEoCRIQCghiaW5fcGF0aBgDIAEoCSKeAQoVQnVpbGRUb29sSW1hZ2VSZXF1ZXN0EgwKBG5hbWUYASABKAkSEwoLZGVzY3JpcHRpb24YAiABKAkSDQoFdXNhZ2UYAyABKAkSDAoEdGFncxgEIAMoCRI1CglwbGF0Zm9ybXMYBSADKAsyIi5vcGVub3R0ZXJzLmRhZW1vbi52MS5Ub29sUGxhdGZvcm0SDgoGc291cmNlGAYgASgJIkMKFkJ1aWxkVG9vbEltYWdlUmVzcG9uc2USDgoGZGlnZXN0GAEgASgJEgwKBHRhZ3MYAiADKAkSCwoDcmVmGAMgASgJIjsKFVNhdmVBZ2VudEltYWdlUmVxdWVzdBIUCgxvY2lfYXJ0aWZhY3QYASABKAwSDAoEdGFncxgCIAMoCSI2ChZTYXZlQWdlbnRJbWFnZVJlc3BvbnNlEg4KBmRpZ2VzdBgBIAEoCRIMCgR0YWdzGAIgAygJIigKC1B1bGxSZXF1ZXN0EgsKA3JlZhgBIAEoCRIMCgR0YWdzGAIgAygJIiwKDFB1bGxSZXNwb25zZRIOCgZkaWdlc3QYASABKAkSDAoEdGFncxgCIAMoCSIaCgtQdXNoUmVxdWVzdBILCgNyZWYYASABKAkiKwoMUHVzaFJlc3BvbnNlEg4KBmRpZ2VzdBgBIAEoCRILCgNyZWYYAiABKAkiEwoRTGlzdEltYWdlc1JlcXVlc3QihgEKCUltYWdlSW5mbxILCgNyZWYYASABKAkSDgoGZGlnZXN0GAIgASgJEhUKDWFydGlmYWN0X3R5cGUYAyABKAkSDAoEc2l6ZRgEIAEoAxISCgpjcmVhdGVkX2F0GAUgASgDEhMKC2Rlc2NyaXB0aW9uGAYgASgJEg4KBnNvdXJjZRgHIAEoCSJLCglBZ2VudFRvb2wSDAoEbmFtZRgBIAEoCRILCgNyZWYYAiABKAkSDgoGZGlnZXN0GAMgASgJEhMKC2Rlc2NyaXB0aW9uGAQgASgJIkUKEkxpc3RJbWFnZXNSZXNwb25zZRIvCgZpbWFnZXMYASADKAsyHy5vcGVub3R0ZXJzLmRhZW1vbi52MS5JbWFnZUluZm8iFgoUUmVmcmVzaEltYWdlc1JlcXVlc3QiJgoVUmVmcmVzaEltYWdlc1Jlc3BvbnNlEg0KBWNvdW50GAEgASgFIiEKElJlbW92ZUltYWdlUmVxdWVzdBILCgNyZWYYASABKAkiFQoTUmVtb3ZlSW1hZ2VSZXNwb25zZSIjChREZXNjcmliZUltYWdlUmVxdWVzdBILCgNyZWYYASABKAki4wEKFURlc2NyaWJlSW1hZ2VSZXNwb25zZRILCgNyZWYYASABKAkSDgoGZGlnZXN0GAIgASgJEhUKDWFydGlmYWN0X3R5cGUYAyABKAkSDgoGY29uZmlnGAQgASgJEg4KBmxheWVycxgFIAMoCRJHCgZsYWJlbHMYBiADKAsyNy5vcGVub3R0ZXJzLmRhZW1vbi52MS5EZXNjcmliZUltYWdlUmVzcG9uc2UuTGFiZWxzRW50cnkaLQoLTGFiZWxzRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4ASI6CgVNb3VudBIMCgRob3N0GAEgASgJEg4KBnRhcmdldBgCIAEoCRITCgtkZXNjcmlwdGlvbhgDIAEoCSJ8ChJDcmVhdGVBZ2VudFJlcXVlc3QSDAoEbmFtZRgBIAEoCRILCgNyZWYYAiABKAkSDQoFbW9kZWwYAyABKAkSDwoHcnVudGltZRgEIAEoCRIrCgZtb3VudHMYBSADKAsyGy5vcGVub3R0ZXJzLmRhZW1vbi52MS5Nb3VudCI/ChNDcmVhdGVBZ2VudFJlc3BvbnNlEgoKAmlkGAEgASgJEgwKBG5hbWUYAiABKAkSDgoGc3RhdHVzGAMgASgJIhMKEUxpc3RBZ2VudHNSZXF1ZXN0IqMCCglBZ2VudEluZm8SCgoCaWQYASABKAkSDAoEbmFtZRgCIAEoCRINCgVtb2RlbBgDIAEoCRIOCgZzdGF0dXMYBCABKAkSDAoEcm9vdBgFIAEoCRISCgpjcmVhdGVkX2F0GAYgASgDEgwKBGFkZHIYByABKAkSDQoFaW1hZ2UYCCABKAkSKwoGbW91bnRzGAkgAygLMhsub3Blbm90dGVycy5kYWVtb24udjEuTW91bnQSFAoMaW1hZ2VfZGlnZXN0GAogASgJEhMKC3J1bnRpbWVfcmVmGAsgASgJEhYKDnJ1bnRpbWVfZGlnZXN0GAwgASgJEi4KBXRvb2xzGA0gAygLMh8ub3Blbm90dGVycy5kYWVtb24udjEuQWdlbnRUb29sIkUKEkxpc3RBZ2VudHNSZXNwb25zZRIvCgZhZ2VudHMYASADKAsyHy5vcGVub3R0ZXJzLmRhZW1vbi52MS5BZ2VudEluZm8iIAoRU3RhcnRBZ2VudFJlcXVlc3QSCwoDcmVmGAEgASgJIhQKElN0YXJ0QWdlbnRSZXNwb25zZSIfChBTdG9wQWdlbnRSZXF1ZXN0EgsKA3JlZhgBIAEoCSITChFTdG9wQWdlbnRSZXNwb25zZSIhChJSZW1vdmVBZ2VudFJlcXVlc3QSCwoDcmVmGAEgASgJIhUKE1JlbW92ZUFnZW50UmVzcG9uc2UiPgoLQ2hhdFJlcXVlc3QSCwoDcmVmGAEgASgJEhIKCnNlc3Npb25faWQYAiABKAkSDgoGcHJvbXB0GAMgASgJIiAKDENoYXRSZXNwb25zZRIQCghyZXNwb25zZRgBIAEoCSJxChNQcm9tcHRPYmplY3RSZXF1ZXN0EgsKA3JlZhgBIAEoCRIOCgZwcm9tcHQYAiABKAkSEwoLc2NoZW1hX2pzb24YAyABKAwSEwoLc2NoZW1hX25hbWUYBCABKAkSEwoLc2NoZW1hX2Rlc2MYBSABKAkiPQoUUHJvbXB0T2JqZWN0UmVzcG9uc2USEwoLb2JqZWN0X2pzb24YASABKAwSEAoIcmF3X3RleHQYAiABKAkiRAoRQ2hhdFN0cmVhbVJlcXVlc3QSCwoDcmVmGAEgASgJEhIKCnNlc3Npb25faWQYAiABKAkSDgoGcHJvbXB0GAMgASgJIkwKD0NoYXRTdHJlYW1FdmVudBIMCgR0eXBlGAEgASgJEgwKBHN0ZXAYAiABKAUSDAoEdG9vbBgDIAEoCRIPCgdjb250ZW50GAQgASgJIkwKGkxpc3RTZXNzaW9uTWVzc2FnZXNSZXF1ZXN0EgsKA3JlZhgBIAEoCRISCgpzZXNzaW9uX2lkGAIgASgJEg0KBWxpbWl0GAMgASgFIkMKDlNlc3Npb25NZXNzYWdlEgwKBHJvbGUYASABKAkSDwoHY29udGVudBgCIAEoCRISCgpjcmVhdGVkX2F0GAMgASgDIlUKG0xpc3RTZXNzaW9uTWVzc2FnZXNSZXNwb25zZRI2CghtZXNzYWdlcxgBIAMoCzIkLm9wZW5vdHRlcnMuZGFlbW9uLnYxLlNlc3Npb25NZXNzYWdlIksKCFByb3ZpZGVyEgwKBG5hbWUYASABKAkSDwoHYXBpX2tleRgCIAEoCRIQCghhcGlfYmFzZRgDIAEoCRIOCgZtb2RlbHMYBCADKAkiFgoUTGlzdFByb3ZpZGVyc1JlcXVlc3QiSgoVTGlzdFByb3ZpZGVyc1Jlc3BvbnNlEjEKCXByb3ZpZGVycxgBIAMoCzIeLm9wZW5vdHRlcnMuZGFlbW9uLnYxLlByb3ZpZGVyIkYKEkFkZFByb3ZpZGVyUmVxdWVzdBIwCghwcm92aWRlchgBIAEoCzIeLm9wZW5vdHRlcnMuZGFlbW9uLnYxLlByb3ZpZGVyIkcKE0FkZFByb3ZpZGVyUmVzcG9uc2USMAoIcHJvdmlkZXIYASABKAsyHi5vcGVub3R0ZXJzLmRhZW1vbi52MS5Qcm92aWRlciJJChVVcGRhdGVQcm92aWRlclJlcXVlc3QSMAoIcHJvdmlkZXIYASABKAsyHi5vcGVub3R0ZXJzLmRhZW1vbi52MS5Qcm92aWRlciJKChZVcGRhdGVQcm92aWRlclJlc3BvbnNlEjAKCHByb3ZpZGVyGAEgASgLMh4ub3Blbm90dGVycy5kYWVtb24udjEuUHJvdmlkZXIiJQoVUmVtb3ZlUHJvdmlkZXJSZXF1ZXN0EgwKBG5hbWUYASABKAkiGAoWUmVtb3ZlUHJvdmlkZXJSZXNwb25zZTLjEwoHUnVudGltZRJWCgdHZXRJbmZvEiQub3Blbm90dGVycy5kYWVtb24udjEuR2V0SW5mb1JlcXVlc3QaJS5vcGVub3R0ZXJzLmRhZW1vbi52MS5HZXRJbmZvUmVzcG9uc2USXwoKQnVpbGRBZ2VudBInLm9wZW5vdHRlcnMuZGFlbW9uLnYxLkJ1aWxkQWdlbnRSZXF1ZXN0Gigub3Blbm90dGVycy5kYWVtb24udjEuQnVpbGRBZ2VudFJlc3BvbnNlEmsKDkJ1aWxkVG9vbEltYWdlEisub3Blbm90dGVycy5kYWVtb24udjEuQnVpbGRUb29sSW1hZ2VSZXF1ZXN0Giwub3Blbm90dGVycy5kYWVtb24udjEuQnVpbGRUb29sSW1hZ2VSZXNwb25zZRJrCg5TYXZlQWdlbnRJbWFnZRIrLm9wZW5vdHRlcnMuZGFlbW9uLnYxLlNhdmVBZ2VudEltYWdlUmVxdWVzdBosLm9wZW5vdHRlcnMuZGFlbW9uLnYxLlNhdmVBZ2VudEltYWdlUmVzcG9uc2USVwoOUHVsbEFnZW50SW1hZ2USIS5vcGVub3R0ZXJzLmRhZW1vbi52MS5QdWxsUmVxdWVzdBoiLm9wZW5vdHRlcnMuZGFlbW9uLnYxLlB1bGxSZXNwb25zZRJXCg5QdXNoQWdlbnRJbWFnZRIhLm9wZW5vdHRlcnMuZGFlbW9uLnYxLlB1c2hSZXF1ZXN0GiIub3Blbm90dGVycy5kYWVtb24udjEuUHVzaFJlc3BvbnNlEl8KCkxpc3RJbWFnZXMSJy5vcGVub3R0ZXJzLmRhZW1vbi52MS5MaXN0SW1hZ2VzUmVxdWVzdBooLm9wZW5vdHRlcnMuZGFlbW9uLnYxLkxpc3RJbWFnZXNSZXNwb25zZRJoCg1SZWZyZXNoSW1hZ2VzEioub3Blbm90dGVycy5kYWVtb24udjEuUmVmcmVzaEltYWdlc1JlcXVlc3QaKy5vcGVub3R0ZXJzLmRhZW1vbi52MS5SZWZyZXNoSW1hZ2VzUmVzcG9uc2USYgoLUmVtb3ZlSW1hZ2USKC5vcGVub3R0ZXJzLmRhZW1vbi52MS5SZW1vdmVJbWFnZVJlcXVlc3QaKS5vcGVub3R0ZXJzLmRhZW1vbi52MS5SZW1vdmVJbWFnZVJlc3BvbnNlEmgKDURlc2NyaWJlSW1hZ2USKi5vcGVub3R0ZXJzLmRhZW1vbi52MS5EZXNjcmliZUltYWdlUmVxdWVzdBorLm9wZW5vdHRlcnMuZGFlbW9uLnYxLkRlc2NyaWJlSW1hZ2VSZXNwb25zZRJiCgtDcmVhdGVBZ2VudBIoLm9wZW5vdHRlcnMuZGFlbW9uLnYxLkNyZWF0ZUFnZW50UmVxdWVzdBopLm9wZW5vdHRlcnMuZGFlbW9uLnYxLkNyZWF0ZUFnZW50UmVzcG9uc2USXwoKTGlzdEFnZW50cxInLm9wZW5vdHRlcnMuZGFlbW9uLnYxLkxpc3RBZ2VudHNSZXF1ZXN0Gigub3Blbm90dGVycy5kYWVtb24udjEuTGlzdEFnZW50c1Jlc3BvbnNlEl8KClN0YXJ0QWdlbnQSJy5vcGVub3R0ZXJzLmRhZW1vbi52MS5TdGFydEFnZW50UmVxdWVzdBooLm9wZW5vdHRlcnMuZGFlbW9uLnYxLlN0YXJ0QWdlbnRSZXNwb25zZRJcCglTdG9wQWdlbnQSJi5vcGVub3R0ZXJzLmRhZW1vbi52MS5TdG9wQWdlbnRSZXF1ZXN0Gicub3Blbm90dGVycy5kYWVtb24udjEuU3RvcEFnZW50UmVzcG9uc2USYgoLUmVtb3ZlQWdlbnQSKC5vcGVub3R0ZXJzLmRhZW1vbi52MS5SZW1vdmVBZ2VudFJlcXVlc3QaKS5vcGVub3R0ZXJzLmRhZW1vbi52MS5SZW1vdmVBZ2VudFJlc3BvbnNlElYKDUNoYXRXaXRoQWdlbnQSIS5vcGVub3R0ZXJzLmRhZW1vbi52MS5DaGF0UmVxdWVzdBoiLm9wZW5vdHRlcnMuZGFlbW9uLnYxLkNoYXRSZXNwb25zZRJlCgxQcm9tcHRPYmplY3QSKS5vcGVub3R0ZXJzLmRhZW1vbi52MS5Qcm9tcHRPYmplY3RSZXF1ZXN0Gioub3Blbm90dGVycy5kYWVtb24udjEuUHJvbXB0T2JqZWN0UmVzcG9uc2USZwoTQ2hhdFN0cmVhbVdpdGhBZ2VudBInLm9wZW5vdHRlcnMuZGFlbW9uLnYxLkNoYXRTdHJlYW1SZXF1ZXN0GiUub3Blbm90dGVycy5kYWVtb24udjEuQ2hhdFN0cmVhbUV2ZW50MAESegoTTGlzdFNlc3Npb25NZXNzYWdlcxIwLm9wZW5vdHRlcnMuZGFlbW9uLnYxLkxpc3RTZXNzaW9uTWVzc2FnZXNSZXF1ZXN0GjEub3Blbm90dGVycy5kYWVtb24udjEuTGlzdFNlc3Npb25NZXNzYWdlc1Jlc3BvbnNlEmUKDEdldEFnZW50TG9ncxIpLm9wZW5vdHRlcnMuZGFlbW9uLnYxLkdldEFnZW50TG9nc1JlcXVlc3QaKi5vcGVub3R0ZXJzLmRhZW1vbi52MS5HZXRBZ2VudExvZ3NSZXNwb25zZRJfCgpMaXN0TW9kZWxzEicub3Blbm90dGVycy5kYWVtb24udjEuTGlzdE1vZGVsc1JlcXVlc3QaKC5vcGVub3R0ZXJzLmRhZW1vbi52MS5MaXN0TW9kZWxzUmVzcG9uc2USaAoNTGlzdFByb3ZpZGVycxIqLm9wZW5vdHRlcnMuZGFlbW9uLnYxLkxpc3RQcm92aWRlcnNSZXF1ZXN0Gisub3Blbm90dGVycy5kYWVtb24udjEuTGlzdFByb3ZpZGVyc1Jlc3BvbnNlEmIKC0FkZFByb3ZpZGVyEigub3Blbm90dGVycy5kYWVtb24udjEuQWRkUHJvdmlkZXJSZXF1ZXN0Gikub3Blbm90dGVycy5kYWVtb24udjEuQWRkUHJvdmlkZXJSZXNwb25zZRJrCg5VcGRhdGVQcm92aWRlchIrLm9wZW5vdHRlcnMuZGFlbW9uLnYxLlVwZGF0ZVByb3ZpZGVyUmVxdWVzdBosLm9wZW5vdHRlcnMuZGFlbW9uLnYxLlVwZGF0ZVByb3ZpZGVyUmVzcG9uc2USawoOUmVtb3ZlUHJvdmlkZXISKy5vcGVub3R0ZXJzLmRhZW1vbi52MS5SZW1vdmVQcm92aWRlclJlcXVlc3QaLC5vcGVub3R0ZXJzLmRhZW1vbi52MS5SZW1vdmVQcm92aWRlclJlc3BvbnNlQjJaMGdpdGh1Yi5jb20vb3Blbm90dGVycy9vcGVub3R0ZXJzL2FwaS92MTtkYWVtb252MWIGcHJvdG8z");
 
 /**
  * @generated from message openotters.daemon.v1.ListModelsRequest
@@ -721,6 +721,38 @@ export const ListImagesResponseSchema: GenMessage<ListImagesResponse> = /*@__PUR
   messageDesc(file_v1_daemon, 21);
 
 /**
+ * @generated from message openotters.daemon.v1.RefreshImagesRequest
+ */
+export type RefreshImagesRequest = Message<"openotters.daemon.v1.RefreshImagesRequest"> & {
+};
+
+/**
+ * Describes the message openotters.daemon.v1.RefreshImagesRequest.
+ * Use `create(RefreshImagesRequestSchema)` to create a new message.
+ */
+export const RefreshImagesRequestSchema: GenMessage<RefreshImagesRequest> = /*@__PURE__*/
+  messageDesc(file_v1_daemon, 22);
+
+/**
+ * @generated from message openotters.daemon.v1.RefreshImagesResponse
+ */
+export type RefreshImagesResponse = Message<"openotters.daemon.v1.RefreshImagesResponse"> & {
+  /**
+   * Total number of images in the daemon's cache after refresh.
+   *
+   * @generated from field: int32 count = 1;
+   */
+  count: number;
+};
+
+/**
+ * Describes the message openotters.daemon.v1.RefreshImagesResponse.
+ * Use `create(RefreshImagesResponseSchema)` to create a new message.
+ */
+export const RefreshImagesResponseSchema: GenMessage<RefreshImagesResponse> = /*@__PURE__*/
+  messageDesc(file_v1_daemon, 23);
+
+/**
  * @generated from message openotters.daemon.v1.RemoveImageRequest
  */
 export type RemoveImageRequest = Message<"openotters.daemon.v1.RemoveImageRequest"> & {
@@ -735,7 +767,7 @@ export type RemoveImageRequest = Message<"openotters.daemon.v1.RemoveImageReques
  * Use `create(RemoveImageRequestSchema)` to create a new message.
  */
 export const RemoveImageRequestSchema: GenMessage<RemoveImageRequest> = /*@__PURE__*/
-  messageDesc(file_v1_daemon, 22);
+  messageDesc(file_v1_daemon, 24);
 
 /**
  * @generated from message openotters.daemon.v1.RemoveImageResponse
@@ -748,7 +780,7 @@ export type RemoveImageResponse = Message<"openotters.daemon.v1.RemoveImageRespo
  * Use `create(RemoveImageResponseSchema)` to create a new message.
  */
 export const RemoveImageResponseSchema: GenMessage<RemoveImageResponse> = /*@__PURE__*/
-  messageDesc(file_v1_daemon, 23);
+  messageDesc(file_v1_daemon, 25);
 
 /**
  * @generated from message openotters.daemon.v1.DescribeImageRequest
@@ -765,7 +797,7 @@ export type DescribeImageRequest = Message<"openotters.daemon.v1.DescribeImageRe
  * Use `create(DescribeImageRequestSchema)` to create a new message.
  */
 export const DescribeImageRequestSchema: GenMessage<DescribeImageRequest> = /*@__PURE__*/
-  messageDesc(file_v1_daemon, 24);
+  messageDesc(file_v1_daemon, 26);
 
 /**
  * @generated from message openotters.daemon.v1.DescribeImageResponse
@@ -807,7 +839,7 @@ export type DescribeImageResponse = Message<"openotters.daemon.v1.DescribeImageR
  * Use `create(DescribeImageResponseSchema)` to create a new message.
  */
 export const DescribeImageResponseSchema: GenMessage<DescribeImageResponse> = /*@__PURE__*/
-  messageDesc(file_v1_daemon, 25);
+  messageDesc(file_v1_daemon, 27);
 
 /**
  * @generated from message openotters.daemon.v1.Mount
@@ -846,7 +878,7 @@ export type Mount = Message<"openotters.daemon.v1.Mount"> & {
  * Use `create(MountSchema)` to create a new message.
  */
 export const MountSchema: GenMessage<Mount> = /*@__PURE__*/
-  messageDesc(file_v1_daemon, 26);
+  messageDesc(file_v1_daemon, 28);
 
 /**
  * @generated from message openotters.daemon.v1.CreateAgentRequest
@@ -883,7 +915,7 @@ export type CreateAgentRequest = Message<"openotters.daemon.v1.CreateAgentReques
  * Use `create(CreateAgentRequestSchema)` to create a new message.
  */
 export const CreateAgentRequestSchema: GenMessage<CreateAgentRequest> = /*@__PURE__*/
-  messageDesc(file_v1_daemon, 27);
+  messageDesc(file_v1_daemon, 29);
 
 /**
  * @generated from message openotters.daemon.v1.CreateAgentResponse
@@ -910,7 +942,7 @@ export type CreateAgentResponse = Message<"openotters.daemon.v1.CreateAgentRespo
  * Use `create(CreateAgentResponseSchema)` to create a new message.
  */
 export const CreateAgentResponseSchema: GenMessage<CreateAgentResponse> = /*@__PURE__*/
-  messageDesc(file_v1_daemon, 28);
+  messageDesc(file_v1_daemon, 30);
 
 /**
  * @generated from message openotters.daemon.v1.ListAgentsRequest
@@ -923,7 +955,7 @@ export type ListAgentsRequest = Message<"openotters.daemon.v1.ListAgentsRequest"
  * Use `create(ListAgentsRequestSchema)` to create a new message.
  */
 export const ListAgentsRequestSchema: GenMessage<ListAgentsRequest> = /*@__PURE__*/
-  messageDesc(file_v1_daemon, 29);
+  messageDesc(file_v1_daemon, 31);
 
 /**
  * @generated from message openotters.daemon.v1.AgentInfo
@@ -1012,7 +1044,7 @@ export type AgentInfo = Message<"openotters.daemon.v1.AgentInfo"> & {
  * Use `create(AgentInfoSchema)` to create a new message.
  */
 export const AgentInfoSchema: GenMessage<AgentInfo> = /*@__PURE__*/
-  messageDesc(file_v1_daemon, 30);
+  messageDesc(file_v1_daemon, 32);
 
 /**
  * @generated from message openotters.daemon.v1.ListAgentsResponse
@@ -1029,7 +1061,7 @@ export type ListAgentsResponse = Message<"openotters.daemon.v1.ListAgentsRespons
  * Use `create(ListAgentsResponseSchema)` to create a new message.
  */
 export const ListAgentsResponseSchema: GenMessage<ListAgentsResponse> = /*@__PURE__*/
-  messageDesc(file_v1_daemon, 31);
+  messageDesc(file_v1_daemon, 33);
 
 /**
  * @generated from message openotters.daemon.v1.StartAgentRequest
@@ -1046,7 +1078,7 @@ export type StartAgentRequest = Message<"openotters.daemon.v1.StartAgentRequest"
  * Use `create(StartAgentRequestSchema)` to create a new message.
  */
 export const StartAgentRequestSchema: GenMessage<StartAgentRequest> = /*@__PURE__*/
-  messageDesc(file_v1_daemon, 32);
+  messageDesc(file_v1_daemon, 34);
 
 /**
  * @generated from message openotters.daemon.v1.StartAgentResponse
@@ -1059,7 +1091,7 @@ export type StartAgentResponse = Message<"openotters.daemon.v1.StartAgentRespons
  * Use `create(StartAgentResponseSchema)` to create a new message.
  */
 export const StartAgentResponseSchema: GenMessage<StartAgentResponse> = /*@__PURE__*/
-  messageDesc(file_v1_daemon, 33);
+  messageDesc(file_v1_daemon, 35);
 
 /**
  * @generated from message openotters.daemon.v1.StopAgentRequest
@@ -1076,7 +1108,7 @@ export type StopAgentRequest = Message<"openotters.daemon.v1.StopAgentRequest"> 
  * Use `create(StopAgentRequestSchema)` to create a new message.
  */
 export const StopAgentRequestSchema: GenMessage<StopAgentRequest> = /*@__PURE__*/
-  messageDesc(file_v1_daemon, 34);
+  messageDesc(file_v1_daemon, 36);
 
 /**
  * @generated from message openotters.daemon.v1.StopAgentResponse
@@ -1089,7 +1121,7 @@ export type StopAgentResponse = Message<"openotters.daemon.v1.StopAgentResponse"
  * Use `create(StopAgentResponseSchema)` to create a new message.
  */
 export const StopAgentResponseSchema: GenMessage<StopAgentResponse> = /*@__PURE__*/
-  messageDesc(file_v1_daemon, 35);
+  messageDesc(file_v1_daemon, 37);
 
 /**
  * @generated from message openotters.daemon.v1.RemoveAgentRequest
@@ -1106,7 +1138,7 @@ export type RemoveAgentRequest = Message<"openotters.daemon.v1.RemoveAgentReques
  * Use `create(RemoveAgentRequestSchema)` to create a new message.
  */
 export const RemoveAgentRequestSchema: GenMessage<RemoveAgentRequest> = /*@__PURE__*/
-  messageDesc(file_v1_daemon, 36);
+  messageDesc(file_v1_daemon, 38);
 
 /**
  * @generated from message openotters.daemon.v1.RemoveAgentResponse
@@ -1119,7 +1151,7 @@ export type RemoveAgentResponse = Message<"openotters.daemon.v1.RemoveAgentRespo
  * Use `create(RemoveAgentResponseSchema)` to create a new message.
  */
 export const RemoveAgentResponseSchema: GenMessage<RemoveAgentResponse> = /*@__PURE__*/
-  messageDesc(file_v1_daemon, 37);
+  messageDesc(file_v1_daemon, 39);
 
 /**
  * @generated from message openotters.daemon.v1.ChatRequest
@@ -1146,7 +1178,7 @@ export type ChatRequest = Message<"openotters.daemon.v1.ChatRequest"> & {
  * Use `create(ChatRequestSchema)` to create a new message.
  */
 export const ChatRequestSchema: GenMessage<ChatRequest> = /*@__PURE__*/
-  messageDesc(file_v1_daemon, 38);
+  messageDesc(file_v1_daemon, 40);
 
 /**
  * @generated from message openotters.daemon.v1.ChatResponse
@@ -1163,7 +1195,7 @@ export type ChatResponse = Message<"openotters.daemon.v1.ChatResponse"> & {
  * Use `create(ChatResponseSchema)` to create a new message.
  */
 export const ChatResponseSchema: GenMessage<ChatResponse> = /*@__PURE__*/
-  messageDesc(file_v1_daemon, 39);
+  messageDesc(file_v1_daemon, 41);
 
 /**
  * PromptObject sends a one-shot, stateless structured-output query
@@ -1206,7 +1238,7 @@ export type PromptObjectRequest = Message<"openotters.daemon.v1.PromptObjectRequ
  * Use `create(PromptObjectRequestSchema)` to create a new message.
  */
 export const PromptObjectRequestSchema: GenMessage<PromptObjectRequest> = /*@__PURE__*/
-  messageDesc(file_v1_daemon, 40);
+  messageDesc(file_v1_daemon, 42);
 
 /**
  * @generated from message openotters.daemon.v1.PromptObjectResponse
@@ -1228,7 +1260,7 @@ export type PromptObjectResponse = Message<"openotters.daemon.v1.PromptObjectRes
  * Use `create(PromptObjectResponseSchema)` to create a new message.
  */
 export const PromptObjectResponseSchema: GenMessage<PromptObjectResponse> = /*@__PURE__*/
-  messageDesc(file_v1_daemon, 41);
+  messageDesc(file_v1_daemon, 43);
 
 /**
  * @generated from message openotters.daemon.v1.ChatStreamRequest
@@ -1255,7 +1287,7 @@ export type ChatStreamRequest = Message<"openotters.daemon.v1.ChatStreamRequest"
  * Use `create(ChatStreamRequestSchema)` to create a new message.
  */
 export const ChatStreamRequestSchema: GenMessage<ChatStreamRequest> = /*@__PURE__*/
-  messageDesc(file_v1_daemon, 42);
+  messageDesc(file_v1_daemon, 44);
 
 /**
  * @generated from message openotters.daemon.v1.ChatStreamEvent
@@ -1287,7 +1319,7 @@ export type ChatStreamEvent = Message<"openotters.daemon.v1.ChatStreamEvent"> & 
  * Use `create(ChatStreamEventSchema)` to create a new message.
  */
 export const ChatStreamEventSchema: GenMessage<ChatStreamEvent> = /*@__PURE__*/
-  messageDesc(file_v1_daemon, 43);
+  messageDesc(file_v1_daemon, 45);
 
 /**
  * @generated from message openotters.daemon.v1.ListSessionMessagesRequest
@@ -1314,7 +1346,7 @@ export type ListSessionMessagesRequest = Message<"openotters.daemon.v1.ListSessi
  * Use `create(ListSessionMessagesRequestSchema)` to create a new message.
  */
 export const ListSessionMessagesRequestSchema: GenMessage<ListSessionMessagesRequest> = /*@__PURE__*/
-  messageDesc(file_v1_daemon, 44);
+  messageDesc(file_v1_daemon, 46);
 
 /**
  * @generated from message openotters.daemon.v1.SessionMessage
@@ -1341,7 +1373,7 @@ export type SessionMessage = Message<"openotters.daemon.v1.SessionMessage"> & {
  * Use `create(SessionMessageSchema)` to create a new message.
  */
 export const SessionMessageSchema: GenMessage<SessionMessage> = /*@__PURE__*/
-  messageDesc(file_v1_daemon, 45);
+  messageDesc(file_v1_daemon, 47);
 
 /**
  * @generated from message openotters.daemon.v1.ListSessionMessagesResponse
@@ -1358,7 +1390,7 @@ export type ListSessionMessagesResponse = Message<"openotters.daemon.v1.ListSess
  * Use `create(ListSessionMessagesResponseSchema)` to create a new message.
  */
 export const ListSessionMessagesResponseSchema: GenMessage<ListSessionMessagesResponse> = /*@__PURE__*/
-  messageDesc(file_v1_daemon, 46);
+  messageDesc(file_v1_daemon, 48);
 
 /**
  * Provider mirrors internal.ProviderConfig — the on-disk shape of an
@@ -1397,7 +1429,7 @@ export type Provider = Message<"openotters.daemon.v1.Provider"> & {
  * Use `create(ProviderSchema)` to create a new message.
  */
 export const ProviderSchema: GenMessage<Provider> = /*@__PURE__*/
-  messageDesc(file_v1_daemon, 47);
+  messageDesc(file_v1_daemon, 49);
 
 /**
  * @generated from message openotters.daemon.v1.ListProvidersRequest
@@ -1410,7 +1442,7 @@ export type ListProvidersRequest = Message<"openotters.daemon.v1.ListProvidersRe
  * Use `create(ListProvidersRequestSchema)` to create a new message.
  */
 export const ListProvidersRequestSchema: GenMessage<ListProvidersRequest> = /*@__PURE__*/
-  messageDesc(file_v1_daemon, 48);
+  messageDesc(file_v1_daemon, 50);
 
 /**
  * @generated from message openotters.daemon.v1.ListProvidersResponse
@@ -1427,7 +1459,7 @@ export type ListProvidersResponse = Message<"openotters.daemon.v1.ListProvidersR
  * Use `create(ListProvidersResponseSchema)` to create a new message.
  */
 export const ListProvidersResponseSchema: GenMessage<ListProvidersResponse> = /*@__PURE__*/
-  messageDesc(file_v1_daemon, 49);
+  messageDesc(file_v1_daemon, 51);
 
 /**
  * @generated from message openotters.daemon.v1.AddProviderRequest
@@ -1444,7 +1476,7 @@ export type AddProviderRequest = Message<"openotters.daemon.v1.AddProviderReques
  * Use `create(AddProviderRequestSchema)` to create a new message.
  */
 export const AddProviderRequestSchema: GenMessage<AddProviderRequest> = /*@__PURE__*/
-  messageDesc(file_v1_daemon, 50);
+  messageDesc(file_v1_daemon, 52);
 
 /**
  * @generated from message openotters.daemon.v1.AddProviderResponse
@@ -1461,7 +1493,7 @@ export type AddProviderResponse = Message<"openotters.daemon.v1.AddProviderRespo
  * Use `create(AddProviderResponseSchema)` to create a new message.
  */
 export const AddProviderResponseSchema: GenMessage<AddProviderResponse> = /*@__PURE__*/
-  messageDesc(file_v1_daemon, 51);
+  messageDesc(file_v1_daemon, 53);
 
 /**
  * @generated from message openotters.daemon.v1.UpdateProviderRequest
@@ -1478,7 +1510,7 @@ export type UpdateProviderRequest = Message<"openotters.daemon.v1.UpdateProvider
  * Use `create(UpdateProviderRequestSchema)` to create a new message.
  */
 export const UpdateProviderRequestSchema: GenMessage<UpdateProviderRequest> = /*@__PURE__*/
-  messageDesc(file_v1_daemon, 52);
+  messageDesc(file_v1_daemon, 54);
 
 /**
  * @generated from message openotters.daemon.v1.UpdateProviderResponse
@@ -1495,7 +1527,7 @@ export type UpdateProviderResponse = Message<"openotters.daemon.v1.UpdateProvide
  * Use `create(UpdateProviderResponseSchema)` to create a new message.
  */
 export const UpdateProviderResponseSchema: GenMessage<UpdateProviderResponse> = /*@__PURE__*/
-  messageDesc(file_v1_daemon, 53);
+  messageDesc(file_v1_daemon, 55);
 
 /**
  * @generated from message openotters.daemon.v1.RemoveProviderRequest
@@ -1512,7 +1544,7 @@ export type RemoveProviderRequest = Message<"openotters.daemon.v1.RemoveProvider
  * Use `create(RemoveProviderRequestSchema)` to create a new message.
  */
 export const RemoveProviderRequestSchema: GenMessage<RemoveProviderRequest> = /*@__PURE__*/
-  messageDesc(file_v1_daemon, 54);
+  messageDesc(file_v1_daemon, 56);
 
 /**
  * @generated from message openotters.daemon.v1.RemoveProviderResponse
@@ -1525,7 +1557,7 @@ export type RemoveProviderResponse = Message<"openotters.daemon.v1.RemoveProvide
  * Use `create(RemoveProviderResponseSchema)` to create a new message.
  */
 export const RemoveProviderResponseSchema: GenMessage<RemoveProviderResponse> = /*@__PURE__*/
-  messageDesc(file_v1_daemon, 55);
+  messageDesc(file_v1_daemon, 57);
 
 /**
  * @generated from service openotters.daemon.v1.Runtime
@@ -1586,6 +1618,14 @@ export const Runtime: GenService<{
     methodKind: "unary";
     input: typeof ListImagesRequestSchema;
     output: typeof ListImagesResponseSchema;
+  },
+  /**
+   * @generated from rpc openotters.daemon.v1.Runtime.RefreshImages
+   */
+  refreshImages: {
+    methodKind: "unary";
+    input: typeof RefreshImagesRequestSchema;
+    output: typeof RefreshImagesResponseSchema;
   },
   /**
    * @generated from rpc openotters.daemon.v1.Runtime.RemoveImage
