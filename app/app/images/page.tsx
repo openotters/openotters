@@ -27,9 +27,13 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { listImages, pullAgentImage, removeImage } from "@/lib/proto/v1/daemon-Runtime_connectquery"
 
-// Bin artifacts share the registry; the Bins page is responsible for
-// them, so the Images page filters them out by media type.
-const BIN_ARTIFACT_TYPE = "application/vnd.openotters.bin.v1"
+// The registry holds agent images, bin tool images, and any other
+// OCI artifacts the daemon has pulled (docker executor base images,
+// arbitrary pulls, etc.). The Images page is the agent-image surface,
+// so we positively filter on the agent artifact type — unknown
+// artifacts go to the appropriate other view, or stay invisible if
+// they're third-party OCI content the daemon happens to be hosting.
+const AGENT_ARTIFACT_TYPE = "application/vnd.openotters.agent.v1"
 
 function formatSize(bytes: bigint): string {
 	const n = Number(bytes)
@@ -66,7 +70,7 @@ export default function ImagesPage() {
 	const sorted = useMemo(() => {
 		const all = data?.images ?? []
 		return all
-			.filter((i) => i.artifactType !== BIN_ARTIFACT_TYPE)
+			.filter((i) => i.artifactType === AGENT_ARTIFACT_TYPE)
 			.sort((a, b) => a.ref.localeCompare(b.ref))
 	}, [data])
 

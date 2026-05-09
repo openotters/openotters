@@ -31,6 +31,7 @@ import {
 import { useRouteParams } from "@/lib/use-route-params"
 
 const BIN_ARTIFACT_TYPE = "application/vnd.openotters.bin.v1"
+const AGENT_ARTIFACT_TYPE = "application/vnd.openotters.agent.v1"
 
 function formatSize(bytes: bigint): string {
 	const n = Number(bytes)
@@ -90,6 +91,11 @@ export default function ImageDetailPage() {
 	// Bin artifacts have their own detail route; redirect-via-link
 	// rather than auto-redirect so the user sees the breadcrumb.
 	const isBin = image.artifactType === BIN_ARTIFACT_TYPE
+	// Anything that isn't an agent or bin lives in the registry as
+	// shared OCI content (docker executor base images, foreign
+	// pulls). Surface it as "Unknown artifact" so users don't try to
+	// run / edit it as if it were an agent.
+	const isUnknown = !isBin && image.artifactType !== AGENT_ARTIFACT_TYPE
 
 	return (
 		<div className="space-y-6">
@@ -128,6 +134,21 @@ export default function ImageDetailPage() {
 					</Button>
 				</div>
 			</div>
+
+			{isUnknown && (
+				<div className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-4 text-sm">
+					<p className="font-medium">Unknown artifact type</p>
+					<p className="mt-1 text-muted-foreground">
+						This image's manifest carries{" "}
+						<code className="font-mono text-xs">{image.artifactType || "(no artifact type)"}</code>,
+						which isn't one of openotters' tracked types ({" "}
+						<code className="font-mono text-xs">{AGENT_ARTIFACT_TYPE}</code> or{" "}
+						<code className="font-mono text-xs">{BIN_ARTIFACT_TYPE}</code>). It lives in
+						the registry but isn't a runnable agent — likely a docker executor base image
+						or a third-party OCI artifact pulled into the store.
+					</p>
+				</div>
+			)}
 
 			{image.description && (
 				<Card>

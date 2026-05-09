@@ -39,6 +39,7 @@ import {
 } from "@/lib/proto/v1/daemon-Runtime_connectquery"
 
 const BIN_ARTIFACT_TYPE = "application/vnd.openotters.bin.v1"
+const AGENT_ARTIFACT_TYPE = "application/vnd.openotters.agent.v1"
 const DEFAULT_RUNTIME = "ghcr.io/openotters/runtime:latest"
 
 const SOUL_TEMPLATE = `You are a friendly assistant. Keep replies short and direct.`
@@ -285,9 +286,12 @@ export default function NewAgentPage() {
 		const all = images.data?.images ?? []
 		// "scratch" is the canonical empty base; surface it first so
 		// it's the default for new agents that aren't extending an
-		// existing one. Filter out bin artifacts — they're not valid
-		// FROM targets.
-		const refs = all.filter((i) => i.artifactType !== BIN_ARTIFACT_TYPE).map((i) => i.ref)
+		// existing one. Only agent artifacts are valid FROM targets —
+		// bin tool images and unrelated OCI artifacts (docker executor
+		// base images, random pulls) would fail at build.
+		const refs = all
+			.filter((i) => i.artifactType === AGENT_ARTIFACT_TYPE)
+			.map((i) => i.ref)
 		return ["scratch", ...refs]
 	}, [images.data])
 
@@ -1053,9 +1057,11 @@ function CatalogTab({
 	const [model, setModel] = useState("")
 	const [search, setSearch] = useState("")
 
-	// Bin artifacts aren't valid agent images — same filter as Images page.
+	// Only agent artifacts are valid catalog choices. Bin images and
+	// unrelated OCI artifacts (docker base images etc.) live in the
+	// registry too but can't be CreateAgent'd directly.
 	const agentImages = useMemo(
-		() => images.filter((i) => i.artifactType !== BIN_ARTIFACT_TYPE),
+		() => images.filter((i) => i.artifactType === AGENT_ARTIFACT_TYPE),
 		[images],
 	)
 
