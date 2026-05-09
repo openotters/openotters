@@ -83,3 +83,40 @@ export function refsForDigest<T extends TaggedImage>(
 	}
 	return [...refs].sort((a, b) => a.localeCompare(b))
 }
+
+// parseRefName returns the repository portion of an OCI ref, stripping
+// the trailing tag if present. A colon is a tag separator only when it
+// appears after the last slash — otherwise it's a registry port
+// (e.g. `localhost:5000/foo`).
+export function parseRefName(ref: string): string {
+	const lastSlash = ref.lastIndexOf("/")
+	const lastColon = ref.lastIndexOf(":")
+	if (lastColon > lastSlash) return ref.substring(0, lastColon)
+	return ref
+}
+
+export function parseRefTag(ref: string): string {
+	const name = parseRefName(ref)
+	if (name === ref) return ""
+	return ref.substring(name.length + 1)
+}
+
+// versionsForRef returns every entry that shares the repository name
+// of the target ref — i.e. all versions/tags of the same image.
+// Sorted with `:latest` first, then most recently built, then by ref.
+export function versionsForRef<T extends TaggedImage>(
+	images: T[],
+	targetRef: string,
+): T[] {
+	const name = parseRefName(targetRef)
+	const matches = images.filter((i) => parseRefName(i.ref) === name)
+	return matches.sort((a, b) => {
+		const aLatest = a.ref.endsWith(":latest")
+		const bLatest = b.ref.endsWith(":latest")
+		if (aLatest !== bLatest) return aLatest ? -1 : 1
+		if (a.createdAt !== b.createdAt) {
+			return Number(b.createdAt - a.createdAt)
+		}
+		return a.ref.localeCompare(b.ref)
+	})
+}
