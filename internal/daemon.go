@@ -985,7 +985,8 @@ func (d *Daemon) buildAgentfile(
 	pushed := make([]string, 0, len(tags))
 	for _, tag := range tags {
 		ref := d.refFor(tag)
-		if pushErr := d.commitBuilt(ctx, store, srcRef, ref); pushErr != nil {
+		if pushErr := d.commitBuilt(ctx, store, srcRef, ref,
+			built.Digest.String(), spec.AgentArtifactType); pushErr != nil {
 			return nil, fmt.Errorf("pushing %s: %w", tag, pushErr)
 		}
 
@@ -1089,7 +1090,8 @@ func (d *Daemon) BuildTool(
 		if d.executor == executorDocker {
 			srcRef = dig.String()
 		}
-		if pushErr := d.commitBuilt(ctx, store, srcRef, ref); pushErr != nil {
+		if pushErr := d.commitBuilt(ctx, store, srcRef, ref,
+			dig.String(), spec.BinArtifactType); pushErr != nil {
 			return nil, fmt.Errorf("pushing %s: %w", tag, pushErr)
 		}
 
@@ -1128,6 +1130,12 @@ func (d *Daemon) Save(
 		}
 	}
 
+	// Index the artifact's kind so subsequent ListImages can surface
+	// it. Best-effort: ManifestKind on the executor's registry reads
+	// the now-pushed manifest body. An empty kind (docker backend or
+	// non-openotters artifact) is silently skipped.
+	d.indexImageKindBestEffort(ctx, digest, tags)
+
 	d.logger.Info("image saved", zap.String("digest", digest), zap.Strings("tags", tags))
 
 	return &daemonv1.SaveAgentImageResponse{Digest: digest, Tags: tags}, nil
@@ -1165,6 +1173,13 @@ func (d *Daemon) Pull(
 	if info, err := reg.Inspect(ctx, tags[0]); err == nil {
 		digest = info.Digest
 	}
+
+	// Populate the kind index. ManifestKind on the system backend
+	// reads the embedded registry's manifest cheaply; on docker it's
+	// a no-op (returns empty), which is fine — agent images pulled
+	// from ghcr.io won't surface there but the legitimate hot paths
+	// (build / save) plumb the kind through directly.
+	d.indexImageKindBestEffort(ctx, digest, tags)
 
 	d.logger.Info("image pulled", zap.String("ref", req.GetRef()), zap.Strings("tags", tags))
 
@@ -1671,6 +1686,45 @@ func (d *Daemon) openBuildStore() oras.Target {
 	return orasmem.New()
 }
 
+// indexImageKindBestEffort populates image_kinds for a freshly
+// ingested digest by asking the executor's registry for the
+// manifest kind. Used by Pull / Save where the kind isn't already
+// in hand (build paths plumb it through commitBuilt directly).
+//
+// Best-effort: missing digest, empty kind, or storage errors all
+// result in a warn-level log and a return — the caller's primary
+// operation already succeeded, so we don't fail it on an indexing
+// hiccup. The system backend reads the manifest blob it just
+// served; the docker backend currently returns empty (it has no
+// cheap way to read manifest body) so docker-pulled images come
+// back as "unknown" until the source rebuild ships.
+func (d *Daemon) indexImageKindBestEffort(ctx context.Context, manifestDigest string, tags []string) {
+	if manifestDigest == "" || len(tags) == 0 {
+		return
+	}
+
+	kind, err := d.pool.provider.Registry().ManifestKind(ctx, tags[0])
+	if err != nil {
+		d.logger.Debug("read manifest kind for indexing",
+			zap.String("digest", manifestDigest),
+			zap.String("ref", tags[0]),
+			zap.Error(err))
+
+		return
+	}
+
+	if kind == "" {
+		return
+	}
+
+	if err = d.state.IndexImageKind(ctx, manifestDigest, kind); err != nil {
+		d.logger.Warn("indexing image kind",
+			zap.String("digest", manifestDigest),
+			zap.String("artifact_type", kind),
+			zap.Error(err))
+	}
+}
+
 // commitBuilt makes the freshly built manifest visible at ref. For
 // the docker backend this calls store.Tag — the underlying
 // docker.Store flushes the staged blobs into Docker via ImageLoad
@@ -1678,11 +1732,40 @@ func (d *Daemon) openBuildStore() oras.Target {
 // subsequent calls. For the system backend it copies from the
 // in-memory build store into the embedded HTTP registry.
 //
-// digestStr is the manifest digest the build pipeline returned;
-// every store keeps a staged-descriptor map so a digest is enough
-// to resolve back to MediaType + Size.
+// srcRef is what the executor's store keys its blobs under (a
+// digest for docker, "latest" for the system executor's bin
+// pipeline). digest is the manifest's content-addressed digest
+// that gets indexed in image_kinds; artifactType is the openotters
+// kind ("application/vnd.openotters.{agent,bin}.v1") the build
+// pipeline produced.
 func (d *Daemon) commitBuilt(
-	ctx context.Context, store oras.Target, digestStr string, ref spec.Reference,
+	ctx context.Context, store oras.Target, srcRef string, ref spec.Reference,
+	manifestDigest, artifactType string,
+) error {
+	if err := d.commitBuiltStorage(ctx, store, srcRef, ref); err != nil {
+		return err
+	}
+
+	// Record the kind in the daemon's image_kinds index. ListImages
+	// reads from this index instead of asking the backend, which
+	// docker can't answer reliably for our agent manifests anyway.
+	if manifestDigest != "" && artifactType != "" {
+		if err := d.state.IndexImageKind(ctx, manifestDigest, artifactType); err != nil {
+			d.logger.Warn("indexing image kind",
+				zap.String("digest", manifestDigest),
+				zap.String("artifact_type", artifactType),
+				zap.Error(err))
+		}
+	}
+
+	return nil
+}
+
+// commitBuiltStorage copies the build store's manifest into the
+// executor-native registry. Split from commitBuilt so the
+// per-executor branching stays a single decision point.
+func (d *Daemon) commitBuiltStorage(
+	ctx context.Context, store oras.Target, srcRef string, ref spec.Reference,
 ) error {
 	if d.executor == executorDocker {
 		dockerStore, ok := store.(*docker.Store)
@@ -1690,17 +1773,14 @@ func (d *Daemon) commitBuilt(
 			return fmt.Errorf("commit: expected *docker.Store, got %T", store)
 		}
 
-		dgst, err := digest.Parse(digestStr)
+		dgst, err := digest.Parse(srcRef)
 		if err != nil {
-			return fmt.Errorf("commit: parse digest %s: %w", digestStr, err)
+			return fmt.Errorf("commit: parse digest %s: %w", srcRef, err)
 		}
 
 		desc := ocispec.Descriptor{Digest: dgst}
-		if err = dockerStore.Tag(ctx, desc, ref.String()); err != nil {
-			return err
-		}
 
-		return nil
+		return dockerStore.Tag(ctx, desc, ref.String())
 	}
 
 	// System path: the in-memory build store needs to be copied
@@ -1711,7 +1791,7 @@ func (d *Daemon) commitBuilt(
 		return fmt.Errorf("commit: expected *orasmem.Store, got %T", store)
 	}
 
-	return d.pushImage(ctx, memStore, digestStr, ref)
+	return d.pushImage(ctx, memStore, srcRef, ref)
 }
 
 // localRef rewrites a user-provided tag so it points at the daemon's

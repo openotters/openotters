@@ -64,9 +64,13 @@ func (d *Daemon) ListImages(
 		return nil, fmt.Errorf("listing images: %w", err)
 	}
 
-	// Inspect every ref in parallel. Slot `i` is reserved for ref
-	// `i` so the response order matches List's; failed inspects
-	// leave the slot nil and get filtered out at the end.
+	// Inspect every ref in parallel for size / created / description.
+	// Slot `i` is reserved for ref `i` so the response order matches
+	// List's; failed inspects leave the slot nil and get filtered out
+	// at the end. ArtifactType is filled in afterwards from the
+	// daemon's image_kinds index in a single SQL round-trip — Inspect
+	// no longer surfaces a kind, so listings don't pay any per-ref
+	// backend cost for that column.
 	results := make([]*daemonv1.ImageInfo, len(refs))
 
 	var mu sync.Mutex
@@ -86,13 +90,12 @@ func (d *Daemon) ListImages(
 			}
 
 			entry := &daemonv1.ImageInfo{
-				Ref:          info.Ref,
-				Digest:       info.Digest,
-				ArtifactType: info.MediaType,
-				Size:         info.Size,
-				CreatedAt:    info.CreatedUnix,
-				Description:  info.Description,
-				Source:       info.Source,
+				Ref:         info.Ref,
+				Digest:      info.Digest,
+				Size:        info.Size,
+				CreatedAt:   info.CreatedUnix,
+				Description: info.Description,
+				Source:      info.Source,
 			}
 
 			mu.Lock()
@@ -107,11 +110,27 @@ func (d *Daemon) ListImages(
 		return nil, fmt.Errorf("listing images: %w", waitErr)
 	}
 
+	digests := make([]string, 0, len(results))
+
+	for _, e := range results {
+		if e != nil && e.Digest != "" {
+			digests = append(digests, e.Digest)
+		}
+	}
+
+	kinds, err := d.state.GetImageKinds(ctx, digests)
+	if err != nil {
+		return nil, fmt.Errorf("loading image kinds: %w", err)
+	}
+
 	images := make([]*daemonv1.ImageInfo, 0, len(refs))
 	for _, e := range results {
-		if e != nil {
-			images = append(images, e)
+		if e == nil {
+			continue
 		}
+
+		e.ArtifactType = kinds[e.Digest]
+		images = append(images, e)
 	}
 
 	return &daemonv1.ListImagesResponse{Images: images}, nil
@@ -121,9 +140,25 @@ func (d *Daemon) RemoveImage(
 	ctx context.Context, req *daemonv1.RemoveImageRequest,
 ) (*daemonv1.RemoveImageResponse, error) {
 	ref := req.GetRef()
+	reg := d.pool.provider.Registry()
 
-	if err := d.pool.provider.Registry().Remove(ctx, ref); err != nil {
+	// Capture the digest before removing so the image_kinds row
+	// can be invalidated. Best-effort — if Inspect fails (already
+	// gone, never existed) the remove still proceeds.
+	var digest string
+	if info, err := reg.Inspect(ctx, ref); err == nil {
+		digest = info.Digest
+	}
+
+	if err := reg.Remove(ctx, ref); err != nil {
 		return nil, fmt.Errorf("removing %s: %w", ref, err)
+	}
+
+	if digest != "" {
+		if err := d.state.DeleteImageKind(ctx, digest); err != nil {
+			d.logger.Warn("deleting image kind index entry",
+				zap.String("digest", digest), zap.Error(err))
+		}
 	}
 
 	d.logger.Info("image removed", zap.String("ref", ref))

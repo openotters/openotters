@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -56,7 +57,30 @@ func migrateState(ctx context.Context, db *sql.DB) error {
 
 	// mounts was added later; guard against ALTER failing on a second
 	// run by checking PRAGMA table_info.
-	return addColumnIfMissing(ctx, db, "agents", "mounts", "TEXT NOT NULL DEFAULT '[]'")
+	if err := addColumnIfMissing(ctx, db, "agents", "mounts", "TEXT NOT NULL DEFAULT '[]'"); err != nil {
+		return err
+	}
+
+	// image_kinds owns the mapping from manifest digest → openotters
+	// artifact kind ("application/vnd.openotters.{agent,bin}.v1").
+	// Populated at ingestion time (build / pull / save) where the
+	// kind is already known, so the listing path doesn't have to
+	// re-derive it from each backend's idiosyncratic config layout
+	// (docker doesn't surface `Config.Labels` for our agent
+	// manifests; the embedded HTTP registry on system always does).
+	// Keyed by digest, content-addressed, so re-tags share rows and
+	// stale entries for absent digests are harmless.
+	if _, err := db.ExecContext(ctx, `
+		CREATE TABLE IF NOT EXISTS image_kinds (
+			digest        TEXT PRIMARY KEY,
+			artifact_type TEXT NOT NULL,
+			indexed_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+		);
+	`); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // addColumnIfMissing is a small helper for schema migrations that only
@@ -131,6 +155,85 @@ func (s *StateStore) RemoveAgent(ctx context.Context, id string) error {
 func (s *StateStore) UpdateStatus(ctx context.Context, id, status string) error {
 	_, err := s.db.ExecContext(ctx,
 		"UPDATE agents SET status = ? WHERE id = ?", status, id,
+	)
+
+	return err
+}
+
+// IndexImageKind records the openotters artifact kind for a manifest
+// digest. Idempotent: re-indexing the same digest is a no-op
+// (INSERT OR REPLACE updates indexed_at). Empty artifactType is
+// rejected — callers should skip the call rather than persist a
+// blank row.
+func (s *StateStore) IndexImageKind(ctx context.Context, digest, artifactType string) error {
+	if digest == "" || artifactType == "" {
+		return fmt.Errorf("index image kind: digest and artifactType required")
+	}
+
+	_, err := s.db.ExecContext(ctx,
+		`INSERT OR REPLACE INTO image_kinds (digest, artifact_type, indexed_at)
+		 VALUES (?, ?, CURRENT_TIMESTAMP)`,
+		digest, artifactType,
+	)
+
+	return err
+}
+
+// GetImageKinds bulk-fetches kind rows for a set of digests.
+// Returns a map keyed by digest containing only the digests
+// present in the index — missing digests are absent from the map.
+// Single SQL round-trip; the listing path uses this to populate
+// every image's artifactType column without per-ref backend reads.
+func (s *StateStore) GetImageKinds(ctx context.Context, digests []string) (map[string]string, error) {
+	if len(digests) == 0 {
+		return map[string]string{}, nil
+	}
+
+	placeholders := make([]string, len(digests))
+	args := make([]any, len(digests))
+
+	for i, d := range digests {
+		placeholders[i] = "?"
+		args[i] = d
+	}
+
+	// G202 false positive: only placeholder characters concatenated,
+	// every input value is bound through args.
+	//nolint:gosec // only "?" placeholders concatenated; values bound via args
+	query := "SELECT digest, artifact_type FROM image_kinds WHERE digest IN (" +
+		strings.Join(placeholders, ",") + ")"
+
+	rows, err := s.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("querying image kinds: %w", err)
+	}
+	defer rows.Close()
+
+	out := make(map[string]string, len(digests))
+
+	for rows.Next() {
+		var digest, kind string
+		if scanErr := rows.Scan(&digest, &kind); scanErr != nil {
+			return nil, fmt.Errorf("scanning image kind: %w", scanErr)
+		}
+
+		out[digest] = kind
+	}
+
+	return out, rows.Err()
+}
+
+// DeleteImageKind drops the index row for a digest. Used after
+// RemoveImage so the index doesn't accumulate orphan rows for
+// deleted content. Misses are not errors — the row may already be
+// gone if a parallel RemoveImage on a different tag won the race.
+func (s *StateStore) DeleteImageKind(ctx context.Context, digest string) error {
+	if digest == "" {
+		return nil
+	}
+
+	_, err := s.db.ExecContext(ctx,
+		"DELETE FROM image_kinds WHERE digest = ?", digest,
 	)
 
 	return err
