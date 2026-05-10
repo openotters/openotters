@@ -13,9 +13,22 @@ import (
 	"go.uber.org/zap"
 
 	agentpkg "github.com/openotters/agentfile/executor"
+	"github.com/openotters/agentfile/executor/docker"
 	"github.com/openotters/agentfile/executor/system"
 	"github.com/openotters/agentfile/spec"
 )
+
+// AgentExtras carries per-agent runtime injection that is independent
+// of the underlying executor backend — the daemon's host-side socket
+// path and the agent's JWT. Each backend translates DaemonSocket
+// into the form its runtime sees (system: unix://<host-path>; docker:
+// bind-mounted into the container, runtime sees a fixed in-container
+// path). Kept executor-agnostic so callers don't have to know which
+// backend is active.
+type AgentExtras struct {
+	DaemonSocket string
+	AgentToken   string
+}
 
 const (
 	defaultMaxConcurrent = 4
@@ -178,9 +191,9 @@ func (p *Pool) Wait() error {
 // without touching the signature.
 func (p *Pool) Add(
 	id uuid.UUID, ref spec.Reference,
-	agentOpts []system.AgentOption, overrides ...spec.Override,
+	agentOpts []system.AgentOption, extras AgentExtras, overrides ...spec.Override,
 ) {
-	go p.runNew(id, ref, agentOpts, overrides)
+	go p.runNew(id, ref, agentOpts, extras, overrides)
 }
 
 // Start re-runs an existing agent that was previously stopped or
@@ -298,16 +311,36 @@ func (p *Pool) Remove(ctx context.Context, id uuid.UUID) error {
 // abstract executor.Provider interface untouched.
 func (p *Pool) createAgent(
 	ctx context.Context, id uuid.UUID, ref spec.Reference,
-	agentOpts []system.AgentOption, overrides []spec.Override,
+	agentOpts []system.AgentOption, extras AgentExtras, overrides []spec.Override,
 ) (agentpkg.Agent, error) {
 	if sp, ok := p.provider.(*system.Provider); ok {
-		return sp.CreateWithOptions(ctx, id, ref, agentOpts, overrides...)
+		// Append backend-native options for the extras shared across
+		// providers — keeps the daemon's call site executor-agnostic.
+		opts := agentOpts
+		if extras.DaemonSocket != "" {
+			opts = append(opts, system.WithDaemonSocket(extras.DaemonSocket))
+		}
+		if extras.AgentToken != "" {
+			opts = append(opts, system.WithAgentToken(extras.AgentToken))
+		}
+		return sp.CreateWithOptions(ctx, id, ref, opts, overrides...)
+	}
+
+	if dp, ok := p.provider.(*docker.Provider); ok {
+		var dockerOpts []docker.AgentOption
+		if extras.DaemonSocket != "" {
+			dockerOpts = append(dockerOpts, docker.WithDaemonSocket(extras.DaemonSocket))
+		}
+		if extras.AgentToken != "" {
+			dockerOpts = append(dockerOpts, docker.WithAgentToken(extras.AgentToken))
+		}
+		return dp.CreateWithOptions(ctx, id, ref, dockerOpts, overrides...)
 	}
 
 	return p.provider.Create(ctx, id, ref, overrides...)
 }
 
-func (p *Pool) runNew(id uuid.UUID, ref spec.Reference, agentOpts []system.AgentOption, overrides []spec.Override) {
+func (p *Pool) runNew(id uuid.UUID, ref spec.Reference, agentOpts []system.AgentOption, extras AgentExtras, overrides []spec.Override) {
 	rootCtx := p.rootContext()
 
 	// createAgent is fast (no subprocess); take the sem only for the
@@ -319,7 +352,7 @@ func (p *Pool) runNew(id uuid.UUID, ref spec.Reference, agentOpts []system.Agent
 		return
 	}
 
-	a, err := p.createAgent(rootCtx, id, ref, agentOpts, overrides)
+	a, err := p.createAgent(rootCtx, id, ref, agentOpts, extras, overrides)
 	<-p.sem
 
 	if err != nil {

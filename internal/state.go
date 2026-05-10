@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 )
@@ -29,6 +30,14 @@ type persistedAgent struct {
 	// comment for the reserved io.openotters.* keys. Stored as JSON
 	// in the agents.labels_json column.
 	Labels map[string]string
+	// Token + TokenJTI — JWT minted at CreateAgent and persisted so
+	// the runtime keeps the same credential across daemon restarts.
+	// TokenJTI is the JWT's `jti` claim (extracted at issuance), used
+	// by RemoveAgent to revoke the token via state.RevokeToken.
+	// Empty for v1-era rows; daemon.Restore re-tokenizes on first
+	// boot under this schema.
+	Token    string
+	TokenJTI string
 }
 
 type StateStore struct {
@@ -70,6 +79,20 @@ func migrateState(ctx context.Context, db *sql.DB) error {
 	// label_selector field. See api/v1/daemon.proto for the
 	// reserved io.openotters.* keys.
 	if err := addColumnIfMissing(ctx, db, "agents", "labels_json", "TEXT NOT NULL DEFAULT '{}'"); err != nil {
+		return err
+	}
+
+	// token + token_jti — per-agent JWT minted at CreateAgent so the
+	// runtime can call back into the daemon over the authenticated
+	// TCP endpoint. token is the signed string injected as
+	// OTTERS_AGENT_TOKEN; token_jti is the random claim id used to
+	// revoke the token (entry in revoked_tokens) when the agent is
+	// removed. Both default empty for v1-era rows; daemon.Restore
+	// re-tokenizes them on first boot under this version.
+	if err := addColumnIfMissing(ctx, db, "agents", "token", "TEXT NOT NULL DEFAULT ''"); err != nil {
+		return err
+	}
+	if err := addColumnIfMissing(ctx, db, "agents", "token_jti", "TEXT NOT NULL DEFAULT ''"); err != nil {
 		return err
 	}
 
@@ -189,7 +212,98 @@ func migrateState(ctx context.Context, db *sql.DB) error {
 		return err
 	}
 
+	// secrets is the daemon's keystore. Single-row use today
+	// (jwt_signing_key); kept generic so future per-secret rows
+	// (rotation keys, OIDC client secrets) slot in without another
+	// table. Value is a BLOB so binary keys round-trip cleanly.
+	if _, err := db.ExecContext(ctx, `
+		CREATE TABLE IF NOT EXISTS secrets (
+			name        TEXT PRIMARY KEY,
+			value       BLOB NOT NULL,
+			created_at  INTEGER NOT NULL
+		)
+	`); err != nil {
+		return err
+	}
+
+	// revoked_tokens is the JWT revocation list. JWTs are
+	// stateless-by-design; the only way to invalidate one before exp
+	// is to remember its jti and check on every validate. Populated
+	// from RemoveAgent (and future token-rotation flows). Boundedly
+	// growing — one row per ever-removed agent — so no GC needed at
+	// expected scale; if rows ever explode, a "revoked_at < ?" purge
+	// after the longest token TTL is safe.
+	if _, err := db.ExecContext(ctx, `
+		CREATE TABLE IF NOT EXISTS revoked_tokens (
+			jti         TEXT PRIMARY KEY,
+			revoked_at  INTEGER NOT NULL,
+			reason      TEXT NOT NULL DEFAULT ''
+		)
+	`); err != nil {
+		return err
+	}
+
 	return nil
+}
+
+// PutSecret upserts a named secret. Used by auth.LoadOrCreateSigningKey
+// to persist the JWT signing key on first boot. Caller responsible for
+// not logging the value.
+func (s *StateStore) PutSecret(ctx context.Context, name string, value []byte) error {
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO secrets (name, value, created_at) VALUES (?, ?, ?)
+		 ON CONFLICT(name) DO UPDATE SET value = excluded.value`,
+		name, value, time.Now().Unix(),
+	)
+	return err
+}
+
+// GetSecret reads a named secret. Returns (nil, nil) when the row
+// is absent — caller distinguishes "not yet generated" from a real
+// I/O error.
+func (s *StateStore) GetSecret(ctx context.Context, name string) ([]byte, error) {
+	var value []byte
+	err := s.db.QueryRowContext(ctx,
+		`SELECT value FROM secrets WHERE name = ?`, name,
+	).Scan(&value)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	return value, err
+}
+
+// RevokeToken adds a jti to the revocation list. Idempotent: re-revoking
+// an already-revoked jti is a no-op (the original revoked_at + reason
+// stay).
+func (s *StateStore) RevokeToken(ctx context.Context, jti, reason string) error {
+	if jti == "" {
+		return nil
+	}
+	_, err := s.db.ExecContext(ctx, `
+		INSERT INTO revoked_tokens (jti, revoked_at, reason) VALUES (?, ?, ?)
+		ON CONFLICT(jti) DO NOTHING`,
+		jti, time.Now().Unix(), reason,
+	)
+	return err
+}
+
+// IsRevoked reports whether jti has been revoked. Used by the JWT
+// validator on every TCP request — keep cheap.
+func (s *StateStore) IsRevoked(ctx context.Context, jti string) (bool, error) {
+	if jti == "" {
+		return false, nil
+	}
+	var found int
+	err := s.db.QueryRowContext(ctx,
+		`SELECT 1 FROM revoked_tokens WHERE jti = ?`, jti,
+	).Scan(&found)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return found == 1, nil
 }
 
 // dropColumnIfPresent inverts addColumnIfMissing: looks for `column`
@@ -303,10 +417,10 @@ func (s *StateStore) SaveAgent(ctx context.Context, a persistedAgent) error {
 	}
 
 	_, err = s.db.ExecContext(ctx,
-		`INSERT OR REPLACE INTO agents (id, name, agent_name, model, runtime, tag, status, created_at, mounts, labels_json)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		`INSERT OR REPLACE INTO agents (id, name, agent_name, model, runtime, tag, status, created_at, mounts, labels_json, token, token_jti)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		a.ID, a.Name, a.AgentName, a.Model, a.Runtime, a.Tag, a.Status,
-		a.CreatedAt, string(mounts), string(labels),
+		a.CreatedAt, string(mounts), string(labels), a.Token, a.TokenJTI,
 	)
 
 	return err

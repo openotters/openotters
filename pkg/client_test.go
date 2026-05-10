@@ -29,7 +29,7 @@ func TestConnect_HappyPath(t *testing.T) {
 	// grpc.NewClient is lazy: this constructs without dialing, so a
 	// non-existent socket path is fine for a smoke check that the
 	// constructor returns both a non-nil client and a closable conn.
-	c, conn, err := pkg.Connect("/tmp/openotters-nonexistent.sock")
+	c, conn, err := pkg.Connect("/tmp/openotters-nonexistent.sock", "")
 	if err != nil {
 		t.Fatalf("Connect: %v", err)
 	}
@@ -52,7 +52,7 @@ func TestConnect_RejectsObviouslyBadTarget(t *testing.T) {
 
 	// grpc.NewClient validates the target string. A bare scheme+empty
 	// authority should error out before any dial attempt.
-	_, _, err := pkg.Connect(strings.Repeat("\x00", 8))
+	_, _, err := pkg.Connect(strings.Repeat("\x00", 8), "")
 	if err == nil {
 		t.Fatal("expected error for invalid socket path, got nil")
 	}

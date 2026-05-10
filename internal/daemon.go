@@ -35,6 +35,7 @@ import (
 	"github.com/openotters/bin/pkg/bin"
 	daemonv1 "github.com/openotters/openotters/api/v1"
 	"github.com/openotters/openotters/internal/asyncjobs"
+	"github.com/openotters/openotters/internal/auth"
 )
 
 const (
@@ -66,6 +67,14 @@ type managedAgent struct {
 	// comment for reserved io.openotters.* keys. Persisted alongside
 	// the agent and surfaced on every ListAgents read.
 	labels map[string]string
+
+	// token is the agent's JWT — minted at CreateAgent, persisted
+	// via SaveAgent, injected into the spawn env as
+	// OTTERS_AGENT_TOKEN so the runtime can authenticate to the
+	// daemon's TCP endpoint. tokenJTI is the JWT's `jti` claim,
+	// used by Remove to revoke the token.
+	token    string
+	tokenJTI string
 
 	// Image / runtime / tools metadata captured at create time.
 	// Populated for agents created since the daemon started; left
@@ -264,21 +273,22 @@ func mountsToProto(ms []agentpkg.Mount) []*daemonv1.Mount {
 }
 
 type Daemon struct {
-	pool      *Pool
-	providers *ProviderRegistry
-	registry  *EmbeddedRegistry
-	state     *StateStore
-	logger    *zap.Logger
-	executor  string // "system" or "docker"; surfaced by Info().
-	logDir    string
-	agentsDir string
-	dataDir   string
-	runtime   string
-	socket    string
-	version   string
-	commit    string
-	buildDate string
-	catwalk   *catwalkCatalogue
+	pool       *Pool
+	providers  *ProviderRegistry
+	registry   *EmbeddedRegistry
+	state      *StateStore
+	logger     *zap.Logger
+	executor   string // "system" or "docker"; surfaced by Info().
+	logDir     string
+	agentsDir  string
+	dataDir    string
+	runtime    string
+	socket     string
+	signingKey []byte // HMAC key for agent token issuance
+	version    string
+	commit     string
+	buildDate  string
+	catwalk    *catwalkCatalogue
 
 	// Operator-tunable knobs surfaced by Info() for the dashboard.
 	// `shutdownTimeout` is informational here — serve.go owns the
@@ -304,6 +314,7 @@ type DaemonOption func(*daemonConfig)
 type daemonConfig struct {
 	localRuntime    string
 	socket          string
+	signingKey      []byte
 	version         string
 	commit          string
 	buildDate       string
@@ -337,6 +348,15 @@ func WithBuildInfo(version, commit, date string) DaemonOption {
 		c.buildDate = date
 	}
 }
+
+// WithSigningKey sets the HMAC key the daemon uses to mint per-agent
+// JWTs at CreateAgent. Same key is used by the JWT interceptor on
+// the TCP listener — so agent tokens validate against the same
+// secret that issues them.
+func WithSigningKey(key []byte) DaemonOption {
+	return func(c *daemonConfig) { c.signingKey = key }
+}
+
 
 // WithPoolMaxConcurrent caps the number of agents the underlying Pool
 // will run simultaneously. Forwarded to pool.WithMaxConcurrent only
@@ -556,6 +576,7 @@ func NewDaemon(
 		dataDir:         dataDir,
 		runtime:         cfg.localRuntime,
 		socket:          cfg.socket,
+		signingKey:      cfg.signingKey,
 		version:         cfg.version,
 		commit:          cfg.commit,
 		buildDate:       cfg.buildDate,
@@ -899,6 +920,8 @@ func (d *Daemon) Restore(ctx context.Context) error {
 			createdAt: pa.CreatedAt,
 			mounts:    mounts,
 			labels:    pa.Labels,
+			token:     pa.Token,
+			tokenJTI:  pa.TokenJTI,
 		}
 
 		agentOpts := []system.AgentOption{
@@ -914,7 +937,10 @@ func (d *Daemon) Restore(ctx context.Context) error {
 		}
 
 		if pa.Status != statusStopped {
-			d.pool.Add(id, ref, agentOpts, overrides...)
+			d.pool.Add(id, ref, agentOpts, AgentExtras{
+				DaemonSocket: d.socket,
+				AgentToken: pa.Token,
+			}, overrides...)
 
 			d.agents[pa.ID].status = statusRunning
 			restored++
@@ -1378,7 +1404,24 @@ func (d *Daemon) CreateAgent(
 		agentOpts = append(agentOpts, system.WithMounts(mounts))
 	}
 
-	d.pool.Add(id, ref, agentOpts, overrides...)
+	// Mint the agent's JWT BEFORE pool.Add so the token can be threaded
+	// into the spawn env as OTTERS_AGENT_TOKEN. Skip if the daemon
+	// was built without a signing key (defensive — every code path
+	// that constructs a Daemon goes through serve.go's
+	// LoadOrCreateSigningKey now, but tests may not).
+	var agentToken, agentJTI string
+	if len(d.signingKey) > 0 {
+		var tokErr error
+		agentToken, agentJTI, tokErr = auth.IssueAgent(d.signingKey, id.String())
+		if tokErr != nil {
+			return nil, fmt.Errorf("issuing agent token: %w", tokErr)
+		}
+	}
+
+	d.pool.Add(id, ref, agentOpts, AgentExtras{
+		DaemonSocket: d.socket,
+		AgentToken: agentToken,
+	}, overrides...)
 
 	// Provenance fields are populated lazily by hydrateProvenance the
 	// first time List() inspects this agent — the workspace is what
@@ -1393,6 +1436,8 @@ func (d *Daemon) CreateAgent(
 		createdAt: time.Now(),
 		mounts:    mounts,
 		labels:    req.GetLabels(),
+		token:     agentToken,
+		tokenJTI:  agentJTI,
 	}
 
 	if req.GetModel() != "" {
@@ -1412,6 +1457,8 @@ func (d *Daemon) CreateAgent(
 		CreatedAt: ma.createdAt,
 		Mounts:    mountsToPersisted(mounts),
 		Labels:    ma.labels,
+		Token:     ma.token,
+		TokenJTI:  ma.tokenJTI,
 	}); saveErr != nil {
 		d.logger.Warn("failed to persist agent", zap.Error(saveErr))
 	}
@@ -1582,6 +1629,19 @@ func (d *Daemon) Remove(ctx context.Context, ref string) error {
 		d.logger.Info("async-jobs cascaded with agent",
 			zap.Int64("rows", jobsRemoved),
 			zap.String("agent", ma.id.String()))
+	}
+
+	// Revoke the agent's JWT before deleting the agent row — the FK
+	// cascade only removes the agents row (and async_jobs), not the
+	// jti from the token's claims. Without this, a leaked token
+	// would remain valid until exp (10y) and let the holder dial
+	// the daemon as the deleted agent. Best-effort: a failure here
+	// just means the token still validates until exp; the agent
+	// is gone either way so it can't reach anything anyway.
+	if ma.tokenJTI != "" {
+		if revErr := d.state.RevokeToken(ctx, ma.tokenJTI, "agent removed"); revErr != nil {
+			d.logger.Warn("failed to revoke agent token", zap.Error(revErr))
+		}
 	}
 
 	if rmErr := d.state.RemoveAgent(ctx, ma.id.String()); rmErr != nil {

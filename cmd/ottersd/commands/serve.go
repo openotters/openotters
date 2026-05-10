@@ -18,6 +18,7 @@ import (
 
 	"github.com/openotters/openotters/api/v1/daemonv1connect"
 	"github.com/openotters/openotters/internal"
+	"github.com/openotters/openotters/internal/auth"
 	"github.com/openotters/openotters/internal/webui"
 )
 
@@ -30,7 +31,10 @@ type Serve struct {
 	NoUI            bool          `name:"no-ui" help:"Don't serve the embedded web UI on the TCP listener; only the Connect/gRPC API is reachable." default:"false"`
 	UIPath          string        `name:"ui-path" help:"Serve the web UI from this directory instead of the binary's embedded build. Useful for running a local Next.js export." default:""`
 	AllowedOrigins  []string      `help:"CORS Access-Control-Allow-Origin values for the TCP listener (repeatable)." default:"http://localhost:3000,http://localhost:3030"`
-	AuthToken       string        `help:"Bearer token required on the TCP listener when binding to a non-loopback address." default:""`
+	// --auth-token (legacy static bearer) was removed when JWT auth
+	// landed. Operator tokens are now minted at first daemon boot and
+	// stored in ~/.otters/credentials.json (mode 0600); see
+	// internal/auth/credentials.go.
 	MaxConcurrent   int           `help:"Maximum agents allowed to run concurrently in the pool." default:"10"`
 	BackoffBase     time.Duration `help:"Auto-restart backoff base delay for agents in init/pull/model_error. Schedule is base × 2^attempt, capped by --backoff-cap." default:"1s"`
 	BackoffCap      time.Duration `help:"Maximum delay between auto-restart attempts." default:"30s"`
@@ -115,8 +119,18 @@ func (d *Serve) Run(ctx context.Context, common *cmd.Commons, sqlite *cmd.SQLite
 		return fmt.Errorf("creating state store: %w", err)
 	}
 
+	// Load the JWT signing key before NewDaemon so it can be passed
+	// via WithSigningKey — CreateAgent uses it to mint per-agent
+	// tokens. Same key is used by the JWT interceptor on the TCP
+	// listener (constructed lower down) so issued tokens validate.
+	signingKey, err := auth.LoadOrCreateSigningKey(ctx, state)
+	if err != nil {
+		return fmt.Errorf("loading signing key: %w", err)
+	}
+
 	daemonOpts := []internal.DaemonOption{
 		internal.WithSocket(socketPath),
+		internal.WithSigningKey(signingKey),
 		internal.WithBuildInfo(
 			common.Version.Version(),
 			common.Version.Commit(),
@@ -154,6 +168,15 @@ func (d *Serve) Run(ctx context.Context, common *cmd.Commons, sqlite *cmd.SQLite
 		logger.Warn("async-jobs boot replay failed", zap.Error(jobsErr))
 	}
 
+	// JWT interceptor for the TCP listener — validates Bearer tokens
+	// against the signing key loaded above (same key the daemon used
+	// to mint per-agent JWTs at CreateAgent). Unix listener wraps
+	// with WithUnixTrust below to bypass validation.
+	jwtIcp := &auth.JWTInterceptor{
+		Key:       signingKey,
+		IsRevoked: func(jti string) (bool, error) { return state.IsRevoked(ctx, jti) },
+	}
+
 	// Single Connect-Go handler serves gRPC, gRPC-Web, and Connect from
 	// the same code path. The protocol is content-type-detected per
 	// request, so the CLI (gRPC over h2c) and the browser (Connect/JSON
@@ -167,10 +190,23 @@ func (d *Serve) Run(ctx context.Context, common *cmd.Commons, sqlite *cmd.SQLite
 	apiMux := http.NewServeMux()
 	apiMux.Handle(connectPath, connectHandler)
 
-	// h2c so gRPC clients (the CLI) can negotiate HTTP/2 cleartext over
-	// the Unix socket and (if enabled) the TCP listener without a TLS
-	// handshake.
-	unixRoot := h2c.NewHandler(apiMux, &http2.Server{})
+	// JWT auth is enforced on EVERY listener — including the unix
+	// socket. The agent's runtime reaches the daemon through the
+	// same socket (bind-mounted into the container by the executor),
+	// so there's no "trust by transport" path; every caller proves
+	// identity via Bearer JWT.
+	//
+	// Order matters: jwt.Wrap must be INSIDE h2c.NewHandler so the
+	// gRPC client's HTTP/2 upgrade happens before our middleware
+	// inspects headers — without this the failure response is
+	// HTTP/1.1 and the client errors with "frame too large" before
+	// surfacing the Unauthenticated.
+	apiHandler := jwtIcp.Wrap(apiMux)
+
+	// h2c so gRPC clients (the CLI) can negotiate HTTP/2 cleartext
+	// over the Unix socket and (if enabled) the TCP listener without
+	// a TLS handshake.
+	unixRoot := h2c.NewHandler(apiHandler, &http2.Server{})
 
 	lc := net.ListenConfig{}
 	unixL, err := lc.Listen(ctx, "unix", socketPath)
@@ -182,13 +218,26 @@ func (d *Serve) Run(ctx context.Context, common *cmd.Commons, sqlite *cmd.SQLite
 
 	logger.Info("daemon listening", zap.String("socket", socketPath))
 
+	// Bootstrap the operator token for the unix socket — the CLI's
+	// default dev flow (`task client:dev`) hits this URL, so the
+	// token MUST be written before the first CLI invocation.
+	socketURL := auth.SocketURL(socketPath)
+	if created, _, ensureErr := auth.EnsureOperatorToken(socketURL, signingKey); ensureErr != nil {
+		logger.Warn("operator-token bootstrap failed (unix)", zap.Error(ensureErr))
+	} else if created {
+		credPath, _ := auth.CredentialsPath()
+		logger.Info("operator token written",
+			zap.String("endpoint", socketURL),
+			zap.String("credentials", credPath))
+	}
+
 	// TCP listener — exposed by default so the embedded web UI works
 	// out of the box. Pass --no-http to disable; loopback-only by
 	// default so the listener stays inside the box without --auth-token.
 	var tcpSrv *http.Server
 
 	if !d.NoHTTP && d.HTTPAddr != "" {
-		srv, startErr := d.startTCPListener(ctx, logger, connectPath, connectHandler)
+		srv, startErr := d.startTCPListener(ctx, logger, connectPath, connectHandler, jwtIcp, signingKey)
 		if startErr != nil {
 			return startErr
 		}
@@ -237,13 +286,14 @@ func (d *Serve) startTCPListener(
 	logger *zap.Logger,
 	connectPath string,
 	connectHandler http.Handler,
+	jwtIcp *auth.JWTInterceptor,
+	signingKey []byte,
 ) (*http.Server, error) {
-	if !isLoopback(d.HTTPAddr) && d.AuthToken == "" {
-		return nil, fmt.Errorf(
-			"--http-addr %s binds to a non-loopback address; pass --auth-token to opt in",
-			d.HTTPAddr,
-		)
-	}
+	// JWT replaces the prior --auth-token static-bearer mechanism.
+	// Binding to non-loopback no longer requires a flag opt-in:
+	// the interceptor enforces a valid token on every request, so
+	// "exposed to the LAN" and "exposed to localhost" have the same
+	// auth surface.
 
 	// TCP mux: the API at its canonical Connect path, plus an
 	// `/api/...` alias so a same-origin browser can reach the daemon
@@ -252,21 +302,23 @@ func (d *Serve) startTCPListener(
 	// paths win in http.ServeMux's matching, so connectPath and
 	// `/api/<connectPath>` both beat `/`.
 	tcpMux := http.NewServeMux()
-	tcpMux.Handle(connectPath, connectHandler)
-	// StripPrefix lets the same Connect handler service requests
-	// arriving with the `/api` prefix — Connect routes by procedure
-	// name from the (stripped) URL path, identical to the canonical
-	// mount.
-	tcpMux.Handle("/api"+connectPath, http.StripPrefix("/api", connectHandler))
+	// JWT-wrap each Connect mount — but NOT the UI handler, which
+	// serves static assets that the browser fetches without an auth
+	// header. Browser → API requests still go through the proxied
+	// /api path, where the interceptor validates them.
+	//
+	// Same h2c-vs-jwt ordering rule as the unix listener: jwt INSIDE
+	// h2c so the HTTP/2 upgrade is established before middleware
+	// touches headers. tcpMux entries register the JWT-wrapped
+	// inner handler; the outer h2c wrap below covers the whole mux.
+	tcpMux.Handle(connectPath, jwtIcp.Wrap(connectHandler))
+	tcpMux.Handle("/api"+connectPath, jwtIcp.Wrap(http.StripPrefix("/api", connectHandler)))
 
 	if !d.NoUI {
 		tcpMux.Handle("/", webui.Handler(d.UIPath))
 	}
 
 	wrapped := h2c.NewHandler(tcpMux, &http2.Server{})
-	if d.AuthToken != "" {
-		wrapped = withAuthToken(wrapped, d.AuthToken)
-	}
 
 	wrapped = withCORS(wrapped, d.AllowedOrigins)
 	srv := &http.Server{Handler: wrapped, ReadHeaderTimeout: 30 * time.Second}
@@ -276,6 +328,21 @@ func (d *Serve) startTCPListener(
 	tcpL, err := lc.Listen(ctx, "tcp", d.HTTPAddr)
 	if err != nil {
 		return nil, fmt.Errorf("listening on %s: %w", d.HTTPAddr, err)
+	}
+
+	// Operator-token bootstrap: on first boot (or first time this
+	// HTTPAddr is seen), mint an operator token and write it to
+	// ~/.otters/credentials.json. Idempotent — existing entries are
+	// preserved across restarts. Logged at info so the operator
+	// notices the first-time write; subsequent boots are silent.
+	endpoint := publicURL(d.HTTPAddr)
+	if created, _, ensureErr := auth.EnsureOperatorToken(endpoint, signingKey); ensureErr != nil {
+		logger.Warn("operator-token bootstrap failed", zap.Error(ensureErr))
+	} else if created {
+		credPath, _ := auth.CredentialsPath()
+		logger.Info("operator token written",
+			zap.String("endpoint", endpoint),
+			zap.String("credentials", credPath))
 	}
 
 	go func() {
@@ -292,47 +359,19 @@ func (d *Serve) startTCPListener(
 	return srv, nil
 }
 
-// isLoopback reports whether addr binds exclusively to a loopback
-// interface. "127.x", "::1", and "localhost" qualify; "0.0.0.0", an
-// empty host, or any external IP do not. Used as the safety check for
-// the --auth-token requirement.
-func isLoopback(addr string) bool {
-	host, _, err := net.SplitHostPort(addr)
+// publicURL turns an --http-addr value (e.g. "127.0.0.1:5050") into
+// the URL agents and CLI clients should dial. Always http (no TLS in
+// v1). Empty host treated as 127.0.0.1 so a "":5050 binding still
+// produces a working URL for the credentials file.
+func publicURL(addr string) string {
+	host, port, err := net.SplitHostPort(addr)
 	if err != nil {
-		// No port means we can't parse — treat as non-loopback to fail
-		// safe.
-		return false
+		return "http://" + addr
 	}
-
 	if host == "" || host == "0.0.0.0" || host == "::" {
-		return false
+		host = "127.0.0.1"
 	}
-
-	if host == "localhost" {
-		return true
-	}
-
-	if ip := net.ParseIP(host); ip != nil {
-		return ip.IsLoopback()
-	}
-
-	return false
-}
-
-// withAuthToken rejects any request without `Authorization: Bearer
-// <token>`. Connect's protocol detection runs after the request body
-// is examined, so we intercept at the HTTP layer.
-func withAuthToken(next http.Handler, token string) http.Handler {
-	expected := "Bearer " + token
-
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Header.Get("Authorization") != expected {
-			http.Error(w, "unauthorized", http.StatusUnauthorized)
-			return
-		}
-
-		next.ServeHTTP(w, r)
-	})
+	return "http://" + host + ":" + port
 }
 
 // withCORS adds the minimum CORS dance the browser needs to call
