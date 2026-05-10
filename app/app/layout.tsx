@@ -22,7 +22,9 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
 						<AppSidebar />
 						<SidebarInset>
 							<Header />
-							<main className="flex-1 overflow-auto p-6">{children}</main>
+							<main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto overflow-x-hidden p-6">
+								{children}
+							</main>
 							<footer
 								aria-label="OpenOtters footer"
 								className="flex w-full items-center justify-between border-t border-dashed px-6 py-4 text-muted-foreground text-sm">

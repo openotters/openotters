@@ -25,13 +25,39 @@ import type { NextConfig } from "next"
 // Next.js dev session; the production build path is unchanged.
 const isProd = process.env.NODE_ENV === "production"
 
+// In dev, proxy `/api/*` to the daemon so the browser sees the API
+// as same-origin — no CORS preflight, no allowlist juggling when the
+// dev server falls through to :3001 because :3000 is busy.
+//
+// `API_URL` defaults to the dev daemon spawned by `task daemon:dev`
+// (127.0.0.1:5050). Override it to point at any other ottersd
+// instance, e.g. `API_URL=http://127.0.0.1:5500 task ui:dev` to talk
+// to the brew daemon. Only consulted in dev — production builds are
+// `output: "export"` and live behind the daemon's own listener.
+const apiURL = process.env.API_URL ?? "http://127.0.0.1:5050"
+
 const nextConfig: NextConfig = {
 	output: isProd ? "export" : undefined,
 	trailingSlash: true,
+	// Pages still resolve to `/foo/index.html` (we keep `trailingSlash`
+	// for the static export), but the dev server stops 308'ing requests
+	// to add a trailing slash. Required for the `/api/*` rewrite below
+	// — Connect RPC paths like `/api/.../GetInfo` must not be rewritten
+	// to `.../GetInfo/`, which the daemon's mux doesn't match.
+	skipTrailingSlashRedirect: true,
 	reactStrictMode: true,
 	poweredByHeader: false,
 	images: {
 		unoptimized: true,
+	},
+	async rewrites() {
+		if (isProd) return []
+		return [
+			{
+				source: "/api/:path*",
+				destination: `${apiURL.replace(/\/$/, "")}/api/:path*`,
+			},
+		]
 	},
 }
 

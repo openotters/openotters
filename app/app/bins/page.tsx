@@ -13,8 +13,11 @@ import {
 } from "lucide-react"
 import Link from "next/link"
 import { useMemo } from "react"
+import { toast } from "sonner"
 import { AddBinButton } from "@/components/add-bin-button"
+import { ConfirmDelete } from "@/components/confirm-delete"
 import { PageHeader } from "@/components/page-header"
+import { PullFromUrlButton } from "@/components/pull-from-url-button"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -52,8 +55,12 @@ export default function BinsPage() {
 	const queryClient = useQueryClient()
 	const { data, isLoading, error } = useQuery(listImages, {})
 	const remove = useMutation(removeImage, {
-		onSuccess: () => {
+		onSuccess: (_data, vars) => {
 			queryClient.invalidateQueries({ queryKey: ["openotters.daemon.v1.Runtime", "ListImages"] })
+			toast.success(`Removed ${vars.ref}`)
+		},
+		onError: (err, vars) => {
+			toast.error(`Remove failed: ${vars.ref}`, { description: err.message })
 		},
 	})
 
@@ -66,7 +73,12 @@ export default function BinsPage() {
 	return (
 		<div className="space-y-6">
 			<PageHeader
-				actions={<AddBinButton />}
+				actions={
+					<div className="flex items-center gap-2">
+						<PullFromUrlButton placeholder="ghcr.io/openotters/tools/jq:latest" />
+						<AddBinButton />
+					</div>
+				}
 				command="otters bin ls"
 				description={
 					<>
@@ -129,13 +141,29 @@ export default function BinsPage() {
 													Details
 												</Link>
 											</DropdownMenuItem>
-											<DropdownMenuItem
-												className="text-destructive"
-												disabled={remove.isPending}
-												onClick={() => remove.mutate({ ref: bin.ref })}>
-												<Trash2 className="mr-2 h-4 w-4" />
-												Remove
-											</DropdownMenuItem>
+											<ConfirmDelete
+												description={
+													<>
+														This removes <code className="font-mono text-xs">{bin.ref}</code>{" "}
+														and all tags pointing at the same digest.
+													</>
+												}
+												onConfirm={() => remove.mutate({ ref: bin.ref })}
+												pending={remove.isPending}
+												title="Delete bin?"
+												trigger={(open) => (
+													<DropdownMenuItem
+														className="text-destructive"
+														disabled={remove.isPending}
+														onSelect={(e) => {
+															e.preventDefault()
+															open()
+														}}>
+														<Trash2 className="mr-2 h-4 w-4" />
+														Remove
+													</DropdownMenuItem>
+												)}
+											/>
 										</DropdownMenuContent>
 									</DropdownMenu>
 								</div>

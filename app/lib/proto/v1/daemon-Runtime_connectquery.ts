@@ -95,6 +95,16 @@ export const promptObject = Runtime.method.promptObject;
 export const listSessionMessages = Runtime.method.listSessionMessages;
 
 /**
+ * @generated from rpc openotters.daemon.v1.Runtime.ListSessions
+ */
+export const listSessions = Runtime.method.listSessions;
+
+/**
+ * @generated from rpc openotters.daemon.v1.Runtime.DeleteSession
+ */
+export const deleteSession = Runtime.method.deleteSession;
+
+/**
  * @generated from rpc openotters.daemon.v1.Runtime.GetAgentLogs
  */
 export const getAgentLogs = Runtime.method.getAgentLogs;

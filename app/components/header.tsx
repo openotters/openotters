@@ -16,7 +16,22 @@ import {
 import { Separator } from "@/components/ui/separator"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 
-function formatSegment(segment: string): string {
+function decodeSegment(segment: string): string {
+	try {
+		return decodeURIComponent(segment)
+	} catch {
+		return segment
+	}
+}
+
+// Identifier segments are opaque values like an OCI ref or an agent
+// id — render them verbatim (mono font, no title-casing). Nav segments
+// like "images" or "agents-new" get the friendly title-case treatment.
+function isIdentifier(segment: string): boolean {
+	return /[/:.]/.test(segment)
+}
+
+function formatNavSegment(segment: string): string {
 	return segment
 		.split("-")
 		.map((word) => word.charAt(0).toUpperCase() + word.slice(1))
@@ -45,6 +60,12 @@ export function Header() {
 					{segments.map((segment, index) => {
 						const isLast = index === segments.length - 1
 						const href = `/${segments.slice(0, index + 1).join("/")}`
+						const decoded = decodeSegment(segment)
+						const identifier = isIdentifier(decoded)
+						const label = identifier ? decoded : formatNavSegment(decoded)
+						const className = identifier
+							? "max-w-[40ch] truncate font-mono text-sm"
+							: undefined
 						return (
 							<Fragment key={segment}>
 								<BreadcrumbSeparator>
@@ -52,10 +73,14 @@ export function Header() {
 								</BreadcrumbSeparator>
 								<BreadcrumbItem>
 									{isLast ? (
-										<BreadcrumbPage>{formatSegment(segment)}</BreadcrumbPage>
+										<BreadcrumbPage className={className} title={identifier ? decoded : undefined}>
+											{label}
+										</BreadcrumbPage>
 									) : (
 										<BreadcrumbLink asChild>
-											<Link href={href}>{formatSegment(segment)}</Link>
+											<Link className={className} href={href} title={identifier ? decoded : undefined}>
+												{label}
+											</Link>
 										</BreadcrumbLink>
 									)}
 								</BreadcrumbItem>

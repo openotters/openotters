@@ -9,7 +9,6 @@ import {
 	ExternalLink,
 	HardDrive,
 	Layers,
-	RefreshCw,
 	Terminal,
 	Trash2,
 	Upload,
@@ -17,6 +16,8 @@ import {
 import Link from "next/link"
 import { notFound, useRouter } from "next/navigation"
 import type { ReactNode } from "react"
+import { toast } from "sonner"
+import { ConfirmDelete } from "@/components/confirm-delete"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -33,7 +34,6 @@ import {
 	listImages,
 	pullAgentImage,
 	pushAgentImage,
-	refreshImage,
 	removeImage,
 } from "@/lib/proto/v1/daemon-Runtime_connectquery"
 
@@ -106,15 +106,45 @@ export function ArtifactDetailView({ ref, kind, extraSections }: ArtifactDetailV
 		queryClient.invalidateQueries({ queryKey: ["openotters.daemon.v1.Runtime", "DescribeImage"] })
 	}
 
-	const refresh = useMutation(refreshImage, { onSuccess: invalidateLists })
-	const pull = useMutation(pullAgentImage, { onSuccess: invalidateLists })
-	const push = useMutation(pushAgentImage)
+	const pull = useMutation(pullAgentImage, {
+		onMutate: (vars) => ({
+			toastId: toast.loading(`Pulling ${vars.ref}…`),
+		}),
+		onSuccess: (_data, vars, ctx) => {
+			invalidateLists()
+			toast.success(`Pulled ${vars.ref}`, { id: ctx?.toastId })
+		},
+		onError: (err, vars, ctx) => {
+			toast.error(`Pull failed: ${vars.ref}`, {
+				description: err.message,
+				id: ctx?.toastId,
+			})
+		},
+	})
+	const push = useMutation(pushAgentImage, {
+		onMutate: (vars) => ({
+			toastId: toast.loading(`Pushing ${vars.ref}…`),
+		}),
+		onSuccess: (_data, vars, ctx) => {
+			toast.success(`Pushed ${vars.ref}`, { id: ctx?.toastId })
+		},
+		onError: (err, vars, ctx) => {
+			toast.error(`Push failed: ${vars.ref}`, {
+				description: err.message,
+				id: ctx?.toastId,
+			})
+		},
+	})
 	const remove = useMutation(removeImage, {
 		onSuccess: (_data, vars) => {
 			invalidateLists()
+			toast.success(`Removed ${vars.ref}`)
 			if (vars.ref === ref) {
 				router.push(cfg.listingHref)
 			}
+		},
+		onError: (err, vars) => {
+			toast.error(`Remove failed: ${vars.ref}`, { description: err.message })
 		},
 	})
 
@@ -161,14 +191,6 @@ export function ArtifactDetailView({ ref, kind, extraSections }: ArtifactDetailV
 						<p className="truncate font-mono text-muted-foreground text-sm">{artifact.digest}</p>
 					</div>
 				</div>
-				<Button
-					disabled={refresh.isPending}
-					onClick={() => refresh.mutate({ ref: artifact.ref })}
-					size="sm"
-					variant="outline">
-					<RefreshCw className={`mr-2 h-4 w-4 ${refresh.isPending ? "animate-spin" : ""}`} />
-					Refresh
-				</Button>
 			</div>
 
 			{artifact.description && (
@@ -251,16 +273,32 @@ export function ArtifactDetailView({ ref, kind, extraSections }: ArtifactDetailV
 										<Upload className={`h-4 w-4 ${pushPending ? "animate-pulse" : ""}`} />
 										<span className="sr-only">Push</span>
 									</Button>
-									<Button
-										className="text-destructive hover:text-destructive"
-										disabled={removePending}
-										onClick={() => remove.mutate({ ref: v.ref })}
-										size="sm"
-										title={`Delete ${v.ref} from local registry`}
-										variant="outline">
-										<Trash2 className="h-4 w-4" />
-										<span className="sr-only">Delete</span>
-									</Button>
+									<ConfirmDelete
+										description={
+											<>
+												This removes <code className="font-mono text-xs">{v.ref}</code> from
+												the local registry.{" "}
+												{v.digest === artifact.digest && versions.some((other) => other.ref !== v.ref && other.digest === v.digest) ? (
+													<>Other tags pointing at the same digest will be untagged too.</>
+												) : null}
+											</>
+										}
+										onConfirm={() => remove.mutate({ ref: v.ref })}
+										pending={removePending}
+										title={`Delete ${parseRefTag(v.ref) || v.ref}?`}
+										trigger={(open) => (
+											<Button
+												className="text-destructive hover:text-destructive"
+												disabled={removePending}
+												onClick={open}
+												size="sm"
+												title={`Delete ${v.ref} from local registry`}
+												variant="outline">
+												<Trash2 className="h-4 w-4" />
+												<span className="sr-only">Delete</span>
+											</Button>
+										)}
+									/>
 								</div>
 							</div>
 						)

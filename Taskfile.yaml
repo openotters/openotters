@@ -47,12 +47,17 @@ tasks:
       Override the daemon URL with OTTERSD_URL=... on the command line
       (e.g. `OTTERSD_URL=http://127.0.0.1:5500 task ui:dev` to point
       at the brew daemon instead).
+
+      The Next.js dev server proxies `/api/*` to OTTERSD_URL, so the
+      browser always talks to the UI's own origin — no CORS dance,
+      no allowlist tweak when dev falls through to :3001 because
+      :3000 is busy.
     vars:
       WEB_APP_DIR: '{{.WEB_APP_DIR | default "./app"}}'
       OTTERSD_URL: '{{.OTTERSD_URL | default "http://127.0.0.1:5050"}}'
     cmds:
       - test -d "{{.WEB_APP_DIR}}" || (echo "Web app not found at {{.WEB_APP_DIR}}; set WEB_APP_DIR or restore the directory" && exit 1)
-      - cd "{{.WEB_APP_DIR}}" && NEXT_PUBLIC_OTTERSD_URL={{.OTTERSD_URL}} npm run dev
+      - cd "{{.WEB_APP_DIR}}" && API_URL={{.OTTERSD_URL}} npm run dev
 
   daemon:dev:
     desc: |

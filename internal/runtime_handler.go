@@ -308,6 +308,36 @@ func (h *runtimeHandler) ListSessionMessages(
 	return connect.NewResponse(&daemonv1.ListSessionMessagesResponse{Messages: out}), nil
 }
 
+func (h *runtimeHandler) ListSessions(
+	ctx context.Context, req *connect.Request[daemonv1.ListSessionsRequest],
+) (*connect.Response[daemonv1.ListSessionsResponse], error) {
+	sessions, err := h.daemon.ListSessions(ctx, req.Msg.GetRef())
+	if err != nil {
+		return nil, err
+	}
+
+	out := make([]*daemonv1.SessionInfo, len(sessions))
+	for i, s := range sessions {
+		out[i] = &daemonv1.SessionInfo{
+			Id:           s.ID,
+			MessageCount: int32(s.MessageCount), //nolint:gosec // caller-bounded
+			LastActive:   s.LastActive.Unix(),
+		}
+	}
+
+	return connect.NewResponse(&daemonv1.ListSessionsResponse{Sessions: out}), nil
+}
+
+func (h *runtimeHandler) DeleteSession(
+	ctx context.Context, req *connect.Request[daemonv1.DeleteSessionRequest],
+) (*connect.Response[daemonv1.DeleteSessionResponse], error) {
+	if err := h.daemon.DeleteSession(ctx, req.Msg.GetRef(), req.Msg.GetSessionId()); err != nil {
+		return nil, err
+	}
+
+	return connect.NewResponse(&daemonv1.DeleteSessionResponse{}), nil
+}
+
 func (h *runtimeHandler) GetAgentLogs(
 	_ context.Context, req *connect.Request[daemonv1.GetAgentLogsRequest],
 ) (*connect.Response[daemonv1.GetAgentLogsResponse], error) {

@@ -24,6 +24,8 @@ service Runtime {
   rpc PromptObject(PromptObjectRequest) returns (PromptObjectResponse);
   rpc ChatStreamWithAgent(ChatStreamRequest) returns (stream ChatStreamEvent);
   rpc ListSessionMessages(ListSessionMessagesRequest) returns (ListSessionMessagesResponse);
+  rpc ListSessions(ListSessionsRequest) returns (ListSessionsResponse);
+  rpc DeleteSession(DeleteSessionRequest) returns (DeleteSessionResponse);
   rpc GetAgentLogs(GetAgentLogsRequest) returns (GetAgentLogsResponse);
   rpc ListModels(ListModelsRequest) returns (ListModelsResponse);
   rpc ListProviders(ListProvidersRequest) returns (ListProvidersResponse);
@@ -389,6 +391,27 @@ message SessionMessage {
 message ListSessionMessagesResponse {
   repeated SessionMessage messages = 1;
 }
+
+message ListSessionsRequest {
+  string ref = 1;
+}
+
+message SessionInfo {
+  string id            = 1;
+  int32  message_count = 2;
+  int64  last_active   = 3;
+}
+
+message ListSessionsResponse {
+  repeated SessionInfo sessions = 1;
+}
+
+message DeleteSessionRequest {
+  string ref        = 1;
+  string session_id = 2;
+}
+
+message DeleteSessionResponse {}
 
 // Provider mirrors internal.ProviderConfig — the on-disk shape of an
 // entry in ~/.otters/providers.yaml. api_key may be a plain value or

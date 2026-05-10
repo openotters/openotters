@@ -1,5 +1,9 @@
-import { MessageSquare, MoreVertical, Pencil, Bot, Terminal, Trash2 } from "lucide-react"
+import { useMutation } from "@connectrpc/connect-query"
+import { useQueryClient } from "@tanstack/react-query"
+import { MessageSquare, MoreVertical, Bot, Settings, Terminal, Trash2 } from "lucide-react"
 import Link from "next/link"
+import { toast } from "sonner"
+import { ConfirmDelete } from "@/components/confirm-delete"
 import { StatusBadge } from "@/components/status-badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -11,6 +15,7 @@ import {
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import type { AgentInfo } from "@/lib/proto/v1/daemon_pb"
+import { removeAgent } from "@/lib/proto/v1/daemon-Runtime_connectquery"
 
 interface AgentCardProps {
 	agent: AgentInfo
@@ -25,6 +30,19 @@ function createdAtDate(unixSec: bigint): Date {
 export function AgentCard({ agent }: AgentCardProps) {
 	const basePath = `/agents/${agent.name}`
 	const tools = agent.tools
+	const queryClient = useQueryClient()
+
+	const remove = useMutation(removeAgent, {
+		onSuccess: () => {
+			queryClient.invalidateQueries({
+				queryKey: ["openotters.daemon.v1.Runtime", "ListAgents"],
+			})
+			toast.success(`Removed agent ${agent.name}`)
+		},
+		onError: (err) => {
+			toast.error(`Failed to remove ${agent.name}`, { description: err.message })
+		},
+	})
 
 	return (
 		<Card className="group relative transition-colors hover:bg-muted/50">
@@ -52,8 +70,8 @@ export function AgentCard({ agent }: AgentCardProps) {
 					<DropdownMenuContent align="end">
 						<DropdownMenuItem asChild>
 							<Link href={basePath}>
-								<Pencil className="mr-2 h-4 w-4" />
-								Edit
+								<Settings className="mr-2 h-4 w-4" />
+								Details
 							</Link>
 						</DropdownMenuItem>
 						<DropdownMenuItem asChild>
@@ -63,10 +81,30 @@ export function AgentCard({ agent }: AgentCardProps) {
 							</Link>
 						</DropdownMenuItem>
 						<DropdownMenuSeparator />
-						<DropdownMenuItem className="text-destructive focus:text-destructive">
-							<Trash2 className="mr-2 h-4 w-4" />
-							Delete
-						</DropdownMenuItem>
+						<ConfirmDelete
+							description={
+								<>
+									This stops and removes agent{" "}
+									<code className="font-mono text-xs">{agent.name}</code>. The image stays
+									in the registry; only this instance is deleted.
+								</>
+							}
+							onConfirm={() => remove.mutate({ ref: agent.name })}
+							pending={remove.isPending}
+							title="Delete agent?"
+							trigger={(open) => (
+								<DropdownMenuItem
+									className="text-destructive focus:text-destructive"
+									disabled={remove.isPending}
+									onSelect={(e) => {
+										e.preventDefault()
+										open()
+									}}>
+									<Trash2 className="mr-2 h-4 w-4" />
+									Delete
+								</DropdownMenuItem>
+							)}
+						/>
 					</DropdownMenuContent>
 				</DropdownMenu>
 			</CardHeader>

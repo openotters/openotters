@@ -38,6 +38,8 @@ const (
 	Runtime_PromptObject_FullMethodName        = "/openotters.daemon.v1.Runtime/PromptObject"
 	Runtime_ChatStreamWithAgent_FullMethodName = "/openotters.daemon.v1.Runtime/ChatStreamWithAgent"
 	Runtime_ListSessionMessages_FullMethodName = "/openotters.daemon.v1.Runtime/ListSessionMessages"
+	Runtime_ListSessions_FullMethodName        = "/openotters.daemon.v1.Runtime/ListSessions"
+	Runtime_DeleteSession_FullMethodName       = "/openotters.daemon.v1.Runtime/DeleteSession"
 	Runtime_GetAgentLogs_FullMethodName        = "/openotters.daemon.v1.Runtime/GetAgentLogs"
 	Runtime_ListModels_FullMethodName          = "/openotters.daemon.v1.Runtime/ListModels"
 	Runtime_ListProviders_FullMethodName       = "/openotters.daemon.v1.Runtime/ListProviders"
@@ -69,6 +71,8 @@ type RuntimeClient interface {
 	PromptObject(ctx context.Context, in *PromptObjectRequest, opts ...grpc.CallOption) (*PromptObjectResponse, error)
 	ChatStreamWithAgent(ctx context.Context, in *ChatStreamRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[ChatStreamEvent], error)
 	ListSessionMessages(ctx context.Context, in *ListSessionMessagesRequest, opts ...grpc.CallOption) (*ListSessionMessagesResponse, error)
+	ListSessions(ctx context.Context, in *ListSessionsRequest, opts ...grpc.CallOption) (*ListSessionsResponse, error)
+	DeleteSession(ctx context.Context, in *DeleteSessionRequest, opts ...grpc.CallOption) (*DeleteSessionResponse, error)
 	GetAgentLogs(ctx context.Context, in *GetAgentLogsRequest, opts ...grpc.CallOption) (*GetAgentLogsResponse, error)
 	ListModels(ctx context.Context, in *ListModelsRequest, opts ...grpc.CallOption) (*ListModelsResponse, error)
 	ListProviders(ctx context.Context, in *ListProvidersRequest, opts ...grpc.CallOption) (*ListProvidersResponse, error)
@@ -284,6 +288,26 @@ func (c *runtimeClient) ListSessionMessages(ctx context.Context, in *ListSession
 	return out, nil
 }
 
+func (c *runtimeClient) ListSessions(ctx context.Context, in *ListSessionsRequest, opts ...grpc.CallOption) (*ListSessionsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListSessionsResponse)
+	err := c.cc.Invoke(ctx, Runtime_ListSessions_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *runtimeClient) DeleteSession(ctx context.Context, in *DeleteSessionRequest, opts ...grpc.CallOption) (*DeleteSessionResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(DeleteSessionResponse)
+	err := c.cc.Invoke(ctx, Runtime_DeleteSession_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *runtimeClient) GetAgentLogs(ctx context.Context, in *GetAgentLogsRequest, opts ...grpc.CallOption) (*GetAgentLogsResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(GetAgentLogsResponse)
@@ -367,6 +391,8 @@ type RuntimeServer interface {
 	PromptObject(context.Context, *PromptObjectRequest) (*PromptObjectResponse, error)
 	ChatStreamWithAgent(*ChatStreamRequest, grpc.ServerStreamingServer[ChatStreamEvent]) error
 	ListSessionMessages(context.Context, *ListSessionMessagesRequest) (*ListSessionMessagesResponse, error)
+	ListSessions(context.Context, *ListSessionsRequest) (*ListSessionsResponse, error)
+	DeleteSession(context.Context, *DeleteSessionRequest) (*DeleteSessionResponse, error)
 	GetAgentLogs(context.Context, *GetAgentLogsRequest) (*GetAgentLogsResponse, error)
 	ListModels(context.Context, *ListModelsRequest) (*ListModelsResponse, error)
 	ListProviders(context.Context, *ListProvidersRequest) (*ListProvidersResponse, error)
@@ -439,6 +465,12 @@ func (UnimplementedRuntimeServer) ChatStreamWithAgent(*ChatStreamRequest, grpc.S
 }
 func (UnimplementedRuntimeServer) ListSessionMessages(context.Context, *ListSessionMessagesRequest) (*ListSessionMessagesResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListSessionMessages not implemented")
+}
+func (UnimplementedRuntimeServer) ListSessions(context.Context, *ListSessionsRequest) (*ListSessionsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListSessions not implemented")
+}
+func (UnimplementedRuntimeServer) DeleteSession(context.Context, *DeleteSessionRequest) (*DeleteSessionResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method DeleteSession not implemented")
 }
 func (UnimplementedRuntimeServer) GetAgentLogs(context.Context, *GetAgentLogsRequest) (*GetAgentLogsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetAgentLogs not implemented")
@@ -814,6 +846,42 @@ func _Runtime_ListSessionMessages_Handler(srv interface{}, ctx context.Context, 
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Runtime_ListSessions_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListSessionsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(RuntimeServer).ListSessions(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Runtime_ListSessions_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(RuntimeServer).ListSessions(ctx, req.(*ListSessionsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Runtime_DeleteSession_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DeleteSessionRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(RuntimeServer).DeleteSession(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Runtime_DeleteSession_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(RuntimeServer).DeleteSession(ctx, req.(*DeleteSessionRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _Runtime_GetAgentLogs_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(GetAgentLogsRequest)
 	if err := dec(in); err != nil {
@@ -1000,6 +1068,14 @@ var Runtime_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ListSessionMessages",
 			Handler:    _Runtime_ListSessionMessages_Handler,
+		},
+		{
+			MethodName: "ListSessions",
+			Handler:    _Runtime_ListSessions_Handler,
+		},
+		{
+			MethodName: "DeleteSession",
+			Handler:    _Runtime_DeleteSession_Handler,
 		},
 		{
 			MethodName: "GetAgentLogs",

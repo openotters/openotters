@@ -3,7 +3,9 @@ package internal
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -1537,6 +1539,50 @@ func (d *Daemon) ListSessionMessages(
 	return reader.ListSessionMessages(ctx, sessionID, limit)
 }
 
+// ListSessions enumerates the live agent's session log. Returns an
+// empty slice (not an error) for agents that don't implement
+// SessionLister, so the dashboard can render "no history yet" on
+// older agents without surfacing an error toast.
+func (d *Daemon) ListSessions(ctx context.Context, ref string) ([]agentpkg.SessionInfo, error) {
+	ma, err := d.resolve(ref)
+	if err != nil {
+		return nil, err
+	}
+
+	a, ok := d.pool.Get(ma.id)
+	if !ok || a == nil {
+		return nil, fmt.Errorf("agent %q is not running", ma.name)
+	}
+
+	lister, ok := a.(agentpkg.SessionLister)
+	if !ok {
+		return []agentpkg.SessionInfo{}, nil
+	}
+
+	return lister.ListSessions(ctx)
+}
+
+// DeleteSession removes a single session from the live agent's session
+// store. Idempotent on the runtime side.
+func (d *Daemon) DeleteSession(ctx context.Context, ref, sessionID string) error {
+	ma, err := d.resolve(ref)
+	if err != nil {
+		return err
+	}
+
+	a, ok := d.pool.Get(ma.id)
+	if !ok || a == nil {
+		return fmt.Errorf("agent %q is not running", ma.name)
+	}
+
+	deleter, ok := a.(agentpkg.SessionDeleter)
+	if !ok {
+		return fmt.Errorf("agent %q does not support session deletion", ma.name)
+	}
+
+	return deleter.DeleteSession(ctx, sessionID)
+}
+
 // ChatStreamWithAgent invokes the agent's StreamPrompter and forwards every
 // event to cb as it arrives. Callers (the gRPC stream handler) translate cb
 // invocations into wire events.
@@ -1740,12 +1786,36 @@ func (d *Daemon) upsertImagesFromTags(ctx context.Context, tags []string, kindHi
 			}
 		}
 
+		// Last resort for first-time pulls on docker: ask the
+		// upstream registry directly via ORAS. Bypasses the docker
+		// daemon's manifest-blob restriction, so bins / agents
+		// pulled via the dashboard's "Pull from URL" button land
+		// classified instead of as "unknown".
+		if kind == "" {
+			if k, kErr := d.fetchRemoteManifestKind(ctx, tag); kErr == nil {
+				kind = k
+			} else {
+				d.logger.Debug("fetch remote manifest kind",
+					zap.String("ref", tag), zap.Error(kErr))
+			}
+		}
+
+		// Docker's ImageInspect returns Created=null for OCI
+		// artifacts whose config blob has a custom mediatype (our
+		// agent images), so info.CreatedUnix lands as 0 and the UI
+		// renders 1970. Fall back to "now" — the moment we ingested
+		// the artifact is the closest stable approximation we have.
+		createdUnix := info.CreatedUnix
+		if createdUnix == 0 {
+			createdUnix = time.Now().Unix()
+		}
+
 		if upsertErr := d.state.UpsertImage(ctx, PersistedImage{
 			Ref:          tag,
 			Digest:       info.Digest,
 			ArtifactType: kind,
 			Size:         info.Size,
-			CreatedUnix:  info.CreatedUnix,
+			CreatedUnix:  createdUnix,
 			Description:  info.Description,
 			Source:       info.Source,
 		}); upsertErr != nil {
@@ -1856,6 +1926,55 @@ func qualifyForEmbeddedRegistry(tag, embeddedAddr string) spec.Reference {
 		Name: embeddedAddr + "/" + ref.Name,
 		Tag:  ref.Tag,
 	}
+}
+
+// fetchRemoteManifestKind talks directly to the upstream registry via
+// ORAS, bypassing the executor backend, and returns the manifest's
+// `artifactType` field (empty when absent). The docker executor can't
+// surface this for OCI artifacts whose config blob has a custom
+// mediatype, but the registry itself always knows — the manifest is
+// just JSON. Used to classify first-time docker pulls of bins and
+// agents from a remote ref like ghcr.io/...
+func (d *Daemon) fetchRemoteManifestKind(ctx context.Context, ref string) (string, error) {
+	parsed := spec.ParseReference(ref)
+	if parsed.Name == "" {
+		return "", fmt.Errorf("ref %s has no registry portion", ref)
+	}
+
+	repo, err := agentoci.NewRemoteRepository(parsed)
+	if err != nil {
+		return "", fmt.Errorf("repo for %s: %w", ref, err)
+	}
+
+	tag := parsed.Tag
+	if tag == "" {
+		tag = defaultTag
+	}
+
+	desc, err := repo.Resolve(ctx, tag)
+	if err != nil {
+		return "", fmt.Errorf("resolve %s: %w", ref, err)
+	}
+
+	rc, err := repo.Fetch(ctx, desc)
+	if err != nil {
+		return "", fmt.Errorf("fetch manifest %s: %w", ref, err)
+	}
+	defer func() { _ = rc.Close() }()
+
+	body, err := io.ReadAll(rc)
+	if err != nil {
+		return "", fmt.Errorf("read manifest %s: %w", ref, err)
+	}
+
+	var manifest struct {
+		ArtifactType string `json:"artifactType"`
+	}
+	if uErr := json.Unmarshal(body, &manifest); uErr != nil {
+		return "", fmt.Errorf("unmarshal manifest %s: %w", ref, uErr)
+	}
+
+	return manifest.ArtifactType, nil
 }
 
 // pushImage copies srcRef from store into the embedded registry at

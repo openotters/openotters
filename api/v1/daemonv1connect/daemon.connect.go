@@ -73,6 +73,10 @@ const (
 	// RuntimeListSessionMessagesProcedure is the fully-qualified name of the Runtime's
 	// ListSessionMessages RPC.
 	RuntimeListSessionMessagesProcedure = "/openotters.daemon.v1.Runtime/ListSessionMessages"
+	// RuntimeListSessionsProcedure is the fully-qualified name of the Runtime's ListSessions RPC.
+	RuntimeListSessionsProcedure = "/openotters.daemon.v1.Runtime/ListSessions"
+	// RuntimeDeleteSessionProcedure is the fully-qualified name of the Runtime's DeleteSession RPC.
+	RuntimeDeleteSessionProcedure = "/openotters.daemon.v1.Runtime/DeleteSession"
 	// RuntimeGetAgentLogsProcedure is the fully-qualified name of the Runtime's GetAgentLogs RPC.
 	RuntimeGetAgentLogsProcedure = "/openotters.daemon.v1.Runtime/GetAgentLogs"
 	// RuntimeListModelsProcedure is the fully-qualified name of the Runtime's ListModels RPC.
@@ -108,6 +112,8 @@ type RuntimeClient interface {
 	PromptObject(context.Context, *connect.Request[v1.PromptObjectRequest]) (*connect.Response[v1.PromptObjectResponse], error)
 	ChatStreamWithAgent(context.Context, *connect.Request[v1.ChatStreamRequest]) (*connect.ServerStreamForClient[v1.ChatStreamEvent], error)
 	ListSessionMessages(context.Context, *connect.Request[v1.ListSessionMessagesRequest]) (*connect.Response[v1.ListSessionMessagesResponse], error)
+	ListSessions(context.Context, *connect.Request[v1.ListSessionsRequest]) (*connect.Response[v1.ListSessionsResponse], error)
+	DeleteSession(context.Context, *connect.Request[v1.DeleteSessionRequest]) (*connect.Response[v1.DeleteSessionResponse], error)
 	GetAgentLogs(context.Context, *connect.Request[v1.GetAgentLogsRequest]) (*connect.Response[v1.GetAgentLogsResponse], error)
 	ListModels(context.Context, *connect.Request[v1.ListModelsRequest]) (*connect.Response[v1.ListModelsResponse], error)
 	ListProviders(context.Context, *connect.Request[v1.ListProvidersRequest]) (*connect.Response[v1.ListProvidersResponse], error)
@@ -241,6 +247,18 @@ func NewRuntimeClient(httpClient connect.HTTPClient, baseURL string, opts ...con
 			connect.WithSchema(runtimeMethods.ByName("ListSessionMessages")),
 			connect.WithClientOptions(opts...),
 		),
+		listSessions: connect.NewClient[v1.ListSessionsRequest, v1.ListSessionsResponse](
+			httpClient,
+			baseURL+RuntimeListSessionsProcedure,
+			connect.WithSchema(runtimeMethods.ByName("ListSessions")),
+			connect.WithClientOptions(opts...),
+		),
+		deleteSession: connect.NewClient[v1.DeleteSessionRequest, v1.DeleteSessionResponse](
+			httpClient,
+			baseURL+RuntimeDeleteSessionProcedure,
+			connect.WithSchema(runtimeMethods.ByName("DeleteSession")),
+			connect.WithClientOptions(opts...),
+		),
 		getAgentLogs: connect.NewClient[v1.GetAgentLogsRequest, v1.GetAgentLogsResponse](
 			httpClient,
 			baseURL+RuntimeGetAgentLogsProcedure,
@@ -301,6 +319,8 @@ type runtimeClient struct {
 	promptObject        *connect.Client[v1.PromptObjectRequest, v1.PromptObjectResponse]
 	chatStreamWithAgent *connect.Client[v1.ChatStreamRequest, v1.ChatStreamEvent]
 	listSessionMessages *connect.Client[v1.ListSessionMessagesRequest, v1.ListSessionMessagesResponse]
+	listSessions        *connect.Client[v1.ListSessionsRequest, v1.ListSessionsResponse]
+	deleteSession       *connect.Client[v1.DeleteSessionRequest, v1.DeleteSessionResponse]
 	getAgentLogs        *connect.Client[v1.GetAgentLogsRequest, v1.GetAgentLogsResponse]
 	listModels          *connect.Client[v1.ListModelsRequest, v1.ListModelsResponse]
 	listProviders       *connect.Client[v1.ListProvidersRequest, v1.ListProvidersResponse]
@@ -404,6 +424,16 @@ func (c *runtimeClient) ListSessionMessages(ctx context.Context, req *connect.Re
 	return c.listSessionMessages.CallUnary(ctx, req)
 }
 
+// ListSessions calls openotters.daemon.v1.Runtime.ListSessions.
+func (c *runtimeClient) ListSessions(ctx context.Context, req *connect.Request[v1.ListSessionsRequest]) (*connect.Response[v1.ListSessionsResponse], error) {
+	return c.listSessions.CallUnary(ctx, req)
+}
+
+// DeleteSession calls openotters.daemon.v1.Runtime.DeleteSession.
+func (c *runtimeClient) DeleteSession(ctx context.Context, req *connect.Request[v1.DeleteSessionRequest]) (*connect.Response[v1.DeleteSessionResponse], error) {
+	return c.deleteSession.CallUnary(ctx, req)
+}
+
 // GetAgentLogs calls openotters.daemon.v1.Runtime.GetAgentLogs.
 func (c *runtimeClient) GetAgentLogs(ctx context.Context, req *connect.Request[v1.GetAgentLogsRequest]) (*connect.Response[v1.GetAgentLogsResponse], error) {
 	return c.getAgentLogs.CallUnary(ctx, req)
@@ -455,6 +485,8 @@ type RuntimeHandler interface {
 	PromptObject(context.Context, *connect.Request[v1.PromptObjectRequest]) (*connect.Response[v1.PromptObjectResponse], error)
 	ChatStreamWithAgent(context.Context, *connect.Request[v1.ChatStreamRequest], *connect.ServerStream[v1.ChatStreamEvent]) error
 	ListSessionMessages(context.Context, *connect.Request[v1.ListSessionMessagesRequest]) (*connect.Response[v1.ListSessionMessagesResponse], error)
+	ListSessions(context.Context, *connect.Request[v1.ListSessionsRequest]) (*connect.Response[v1.ListSessionsResponse], error)
+	DeleteSession(context.Context, *connect.Request[v1.DeleteSessionRequest]) (*connect.Response[v1.DeleteSessionResponse], error)
 	GetAgentLogs(context.Context, *connect.Request[v1.GetAgentLogsRequest]) (*connect.Response[v1.GetAgentLogsResponse], error)
 	ListModels(context.Context, *connect.Request[v1.ListModelsRequest]) (*connect.Response[v1.ListModelsResponse], error)
 	ListProviders(context.Context, *connect.Request[v1.ListProvidersRequest]) (*connect.Response[v1.ListProvidersResponse], error)
@@ -584,6 +616,18 @@ func NewRuntimeHandler(svc RuntimeHandler, opts ...connect.HandlerOption) (strin
 		connect.WithSchema(runtimeMethods.ByName("ListSessionMessages")),
 		connect.WithHandlerOptions(opts...),
 	)
+	runtimeListSessionsHandler := connect.NewUnaryHandler(
+		RuntimeListSessionsProcedure,
+		svc.ListSessions,
+		connect.WithSchema(runtimeMethods.ByName("ListSessions")),
+		connect.WithHandlerOptions(opts...),
+	)
+	runtimeDeleteSessionHandler := connect.NewUnaryHandler(
+		RuntimeDeleteSessionProcedure,
+		svc.DeleteSession,
+		connect.WithSchema(runtimeMethods.ByName("DeleteSession")),
+		connect.WithHandlerOptions(opts...),
+	)
 	runtimeGetAgentLogsHandler := connect.NewUnaryHandler(
 		RuntimeGetAgentLogsProcedure,
 		svc.GetAgentLogs,
@@ -660,6 +704,10 @@ func NewRuntimeHandler(svc RuntimeHandler, opts ...connect.HandlerOption) (strin
 			runtimeChatStreamWithAgentHandler.ServeHTTP(w, r)
 		case RuntimeListSessionMessagesProcedure:
 			runtimeListSessionMessagesHandler.ServeHTTP(w, r)
+		case RuntimeListSessionsProcedure:
+			runtimeListSessionsHandler.ServeHTTP(w, r)
+		case RuntimeDeleteSessionProcedure:
+			runtimeDeleteSessionHandler.ServeHTTP(w, r)
 		case RuntimeGetAgentLogsProcedure:
 			runtimeGetAgentLogsHandler.ServeHTTP(w, r)
 		case RuntimeListModelsProcedure:
@@ -755,6 +803,14 @@ func (UnimplementedRuntimeHandler) ChatStreamWithAgent(context.Context, *connect
 
 func (UnimplementedRuntimeHandler) ListSessionMessages(context.Context, *connect.Request[v1.ListSessionMessagesRequest]) (*connect.Response[v1.ListSessionMessagesResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("openotters.daemon.v1.Runtime.ListSessionMessages is not implemented"))
+}
+
+func (UnimplementedRuntimeHandler) ListSessions(context.Context, *connect.Request[v1.ListSessionsRequest]) (*connect.Response[v1.ListSessionsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("openotters.daemon.v1.Runtime.ListSessions is not implemented"))
+}
+
+func (UnimplementedRuntimeHandler) DeleteSession(context.Context, *connect.Request[v1.DeleteSessionRequest]) (*connect.Response[v1.DeleteSessionResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("openotters.daemon.v1.Runtime.DeleteSession is not implemented"))
 }
 
 func (UnimplementedRuntimeHandler) GetAgentLogs(context.Context, *connect.Request[v1.GetAgentLogsRequest]) (*connect.Response[v1.GetAgentLogsResponse], error) {

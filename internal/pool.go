@@ -403,6 +403,20 @@ func (p *Pool) runLoop(
 		status := a.Status()
 
 		if runErr == nil || !isErrorStatus(status) {
+			// agentfile's docker Agent.Run defers
+			// status.Set(StatusStopped) unconditionally, which masks
+			// init / pull / model errors as a clean exit. Without
+			// this log, a failed start looks identical to a clean
+			// run/exit and the operator has nothing to debug. When
+			// runErr is set we still emit it; status alone tells us
+			// the loop was about to retry vs. exit.
+			if runErr != nil {
+				p.logger.Warn("pool: agent run returned with error",
+					zap.String("id", id.String()), zap.String("ref", ref),
+					zap.String("status", status.String()),
+					zap.Error(runErr))
+			}
+
 			return
 		}
 

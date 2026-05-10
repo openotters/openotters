@@ -57,12 +57,12 @@ export function CliInstructionsDialog({
 }: CliInstructionsDialogProps) {
 	return (
 		<Dialog onOpenChange={onOpenChange} open={open}>
-			<DialogContent className="max-w-2xl overflow-hidden">
-				<DialogHeader>
+			<DialogContent className="flex max-h-[90vh] max-w-2xl flex-col gap-0 overflow-hidden p-0">
+				<DialogHeader className="border-b px-6 pt-6 pb-4">
 					<DialogTitle>{title}</DialogTitle>
 					<DialogDescription>{description}</DialogDescription>
 				</DialogHeader>
-				<div className="space-y-4">
+				<div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-6 py-4">
 					{intro && <div className="text-muted-foreground text-sm">{intro}</div>}
 					<ol className="space-y-4">
 						{steps.map((step, index) => (

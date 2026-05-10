@@ -2,9 +2,11 @@
 
 import { useMutation, useQuery } from "@connectrpc/connect-query"
 import { useQueryClient } from "@tanstack/react-query"
-import { ArrowLeft, Bot, MessageSquare, Pause, Play, ScrollText, Terminal, Trash2 } from "lucide-react"
+import { ArrowLeft, Bot, ChevronRight, History, MessageSquare, Pause, Play, ScrollText, Terminal, Trash2 } from "lucide-react"
 import Link from "next/link"
 import { notFound, useRouter } from "next/navigation"
+import { toast } from "sonner"
+import { ConfirmDelete } from "@/components/confirm-delete"
 import { StatusBadge } from "@/components/status-badge"
 import { useRouteParams } from "@/lib/use-route-params"
 import { Badge } from "@/components/ui/badge"
@@ -14,8 +16,10 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { Separator } from "@/components/ui/separator"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
+	deleteSession,
 	getAgentLogs,
 	listAgents,
+	listSessions,
 	removeAgent,
 	startAgent,
 	stopAgent,
@@ -37,15 +41,35 @@ export default function AgentDetailPage() {
 		{ ref: agentName, tailLines: 200n },
 		{ refetchInterval: 5_000, enabled: agentName !== "" },
 	)
+	const sessions = useQuery(
+		listSessions,
+		{ ref: agentName },
+		{ enabled: agentName !== "", refetchInterval: 10_000 },
+	)
 
 	const invalidate = () =>
 		queryClient.invalidateQueries({ queryKey: ["openotters.daemon.v1.Runtime", "ListAgents"] })
 	const start = useMutation(startAgent, { onSuccess: invalidate })
 	const stop = useMutation(stopAgent, { onSuccess: invalidate })
 	const remove = useMutation(removeAgent, {
-		onSuccess: () => {
+		onSuccess: (_data, vars) => {
 			invalidate()
+			toast.success(`Removed agent ${vars.ref}`)
 			router.push("/agents")
+		},
+		onError: (err, vars) => {
+			toast.error(`Remove failed: ${vars.ref}`, { description: err.message })
+		},
+	})
+	const removeSession = useMutation(deleteSession, {
+		onSuccess: (_data, vars) => {
+			queryClient.invalidateQueries({
+				queryKey: ["openotters.daemon.v1.Runtime", "ListSessions"],
+			})
+			toast.success(`Deleted session ${vars.sessionId}`)
+		},
+		onError: (err, vars) => {
+			toast.error(`Delete failed: ${vars.sessionId}`, { description: err.message })
 		},
 	})
 
@@ -76,12 +100,14 @@ export default function AgentDetailPage() {
 						<Bot className="h-6 w-6 text-primary" />
 					</div>
 					<div>
-						<h1 className="font-semibold text-2xl tracking-tight">{agent.name}</h1>
+						<div className="flex items-center gap-2">
+							<h1 className="font-semibold text-2xl tracking-tight">{agent.name}</h1>
+							<StatusBadge status={agent.status} />
+						</div>
 						<p className="font-mono text-muted-foreground text-sm">{agent.model}</p>
 					</div>
 				</div>
 				<div className="flex items-center gap-2">
-					<StatusBadge status={agent.status} />
 					<Button asChild size="sm" variant="outline">
 						<Link href={`/agents/${agent.name}/chat`}>
 							<MessageSquare className="mr-2 h-4 w-4" />
@@ -107,15 +133,29 @@ export default function AgentDetailPage() {
 							Start
 						</Button>
 					)}
-					<Button
-						className="text-destructive hover:text-destructive"
-						disabled={remove.isPending}
-						onClick={() => remove.mutate({ ref: agent.name })}
-						size="sm"
-						variant="outline">
-						<Trash2 className="mr-2 h-4 w-4" />
-						Delete
-					</Button>
+					<ConfirmDelete
+						description={
+							<>
+								This stops and removes agent{" "}
+								<code className="font-mono text-xs">{agent.name}</code>. The image stays in
+								the registry; only this instance is deleted.
+							</>
+						}
+						onConfirm={() => remove.mutate({ ref: agent.name })}
+						pending={remove.isPending}
+						title="Delete agent?"
+						trigger={(open) => (
+							<Button
+								className="text-destructive hover:text-destructive"
+								disabled={remove.isPending}
+								onClick={open}
+								size="sm"
+								variant="outline">
+								<Trash2 className="mr-2 h-4 w-4" />
+								Delete
+							</Button>
+						)}
+					/>
 				</div>
 			</div>
 
@@ -134,6 +174,15 @@ export default function AgentDetailPage() {
 							<TabsTrigger className="gap-2" value="logs">
 								<ScrollText className="h-4 w-4" />
 								Logs
+							</TabsTrigger>
+							<TabsTrigger className="gap-2" value="history">
+								<History className="h-4 w-4" />
+								History
+								{sessions.data?.sessions && sessions.data.sessions.length > 0 && (
+									<Badge className="ml-1" variant="secondary">
+										{sessions.data.sessions.length}
+									</Badge>
+								)}
 							</TabsTrigger>
 						</TabsList>
 
@@ -235,6 +284,98 @@ export default function AgentDetailPage() {
 													: new TextDecoder().decode(logs.data?.content ?? new Uint8Array())}
 										</pre>
 									</ScrollArea>
+								</CardContent>
+							</Card>
+						</TabsContent>
+
+						<TabsContent className="space-y-4 pt-4" value="history">
+							<Card>
+								<CardHeader>
+									<CardTitle>Chat history</CardTitle>
+									<CardDescription>
+										Past sessions persisted by the runtime. Click any session to resume the
+										conversation.
+									</CardDescription>
+								</CardHeader>
+								<CardContent>
+									{sessions.isLoading && (
+										<p className="text-muted-foreground text-sm">Loading sessions…</p>
+									)}
+									{sessions.error && (
+										<p className="text-destructive text-sm">
+											Failed to fetch sessions: {sessions.error.message}
+										</p>
+									)}
+									{!sessions.isLoading &&
+										!sessions.error &&
+										(sessions.data?.sessions.length ?? 0) === 0 && (
+											<p className="text-muted-foreground text-sm">
+												No sessions yet. Start a chat to see entries here.
+											</p>
+										)}
+									{sessions.data && sessions.data.sessions.length > 0 && (
+										<ul className="divide-y rounded-md border">
+											{[...sessions.data.sessions]
+												.sort((a, b) => Number(b.lastActive - a.lastActive))
+												.map((s) => (
+													<li className="flex items-center gap-2 pr-2" key={s.id}>
+														<Link
+															className="flex flex-1 items-center gap-3 px-3 py-2 hover:bg-muted/50"
+															href={`/agents/${agent.name}/chat/${encodeURIComponent(s.id)}`}>
+															<MessageSquare className="h-4 w-4 shrink-0 text-muted-foreground" />
+															<div className="min-w-0 flex-1">
+																<p className="truncate font-mono text-sm">{s.id}</p>
+																<p className="text-muted-foreground text-xs">
+																	{s.messageCount} message
+																	{s.messageCount === 1 ? "" : "s"} ·{" "}
+																	{new Date(Number(s.lastActive) * 1000).toLocaleString("en-US", {
+																		month: "short",
+																		day: "numeric",
+																		hour: "2-digit",
+																		minute: "2-digit",
+																	})}
+																</p>
+															</div>
+															<ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+														</Link>
+														<ConfirmDelete
+															description={
+																<>
+																	Delete session{" "}
+																	<code className="font-mono text-xs">{s.id}</code>? The
+																	conversation history will be lost.
+																</>
+															}
+															onConfirm={() =>
+																removeSession.mutate({
+																	ref: agent.name,
+																	sessionId: s.id,
+																})
+															}
+															pending={
+																removeSession.isPending &&
+																removeSession.variables?.sessionId === s.id
+															}
+															title="Delete session?"
+															trigger={(open) => (
+																<Button
+																	aria-label={`Delete session ${s.id}`}
+																	className="text-muted-foreground hover:text-destructive"
+																	disabled={
+																		removeSession.isPending &&
+																		removeSession.variables?.sessionId === s.id
+																	}
+																	onClick={open}
+																	size="icon"
+																	variant="ghost">
+																	<Trash2 className="h-4 w-4" />
+																</Button>
+															)}
+														/>
+													</li>
+												))}
+										</ul>
+									)}
 								</CardContent>
 							</Card>
 						</TabsContent>

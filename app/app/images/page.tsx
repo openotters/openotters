@@ -15,8 +15,11 @@ import {
 } from "lucide-react"
 import Link from "next/link"
 import { useMemo, useState } from "react"
+import { toast } from "sonner"
 import { CliInstructionsDialog } from "@/components/cli-instructions-dialog"
+import { ConfirmDelete } from "@/components/confirm-delete"
 import { PageHeader } from "@/components/page-header"
+import { PullFromUrlButton } from "@/components/pull-from-url-button"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -67,12 +70,25 @@ export default function ImagesPage() {
 	const { data, isLoading, error } = useQuery(listImages, {})
 
 	const remove = useMutation(removeImage, {
-		onSuccess: () => {
+		onSuccess: (_data, vars) => {
 			queryClient.invalidateQueries({ queryKey: ["openotters.daemon.v1.Runtime", "ListImages"] })
+			toast.success(`Removed ${vars.ref}`)
+		},
+		onError: (err, vars) => {
+			toast.error(`Remove failed: ${vars.ref}`, { description: err.message })
 		},
 	})
 
-	const pull = useMutation(pullAgentImage)
+	const pull = useMutation(pullAgentImage, {
+		onMutate: (vars) => ({ toastId: toast.loading(`Pulling ${vars.ref}…`) }),
+		onSuccess: (_data, vars, ctx) => {
+			queryClient.invalidateQueries({ queryKey: ["openotters.daemon.v1.Runtime", "ListImages"] })
+			toast.success(`Pulled ${vars.ref}`, { id: ctx?.toastId })
+		},
+		onError: (err, vars, ctx) => {
+			toast.error(`Pull failed: ${vars.ref}`, { description: err.message, id: ctx?.toastId })
+		},
+	})
 
 	const groups = useMemo(() => {
 		const all = data?.images ?? []
@@ -84,10 +100,13 @@ export default function ImagesPage() {
 		<div className="space-y-6">
 			<PageHeader
 				actions={
-					<Button onClick={() => setBuildOpen(true)}>
-						<Plus className="mr-2 h-4 w-4" />
-						Build Image
-					</Button>
+					<div className="flex items-center gap-2">
+						<PullFromUrlButton placeholder="ghcr.io/myorg/my-agent:latest" />
+						<Button onClick={() => setBuildOpen(true)}>
+							<Plus className="mr-2 h-4 w-4" />
+							Build Image
+						</Button>
+					</div>
 				}
 				command="otters image ls"
 				description="Built agent images in the embedded registry."
@@ -182,13 +201,30 @@ export default function ImagesPage() {
 													Re-pull
 												</DropdownMenuItem>
 												<DropdownMenuSeparator />
-												<DropdownMenuItem
-													className="text-destructive"
-													disabled={remove.isPending}
-													onClick={() => remove.mutate({ ref: image.ref })}>
-													<Trash2 className="mr-2 h-4 w-4" />
-													Delete image
-												</DropdownMenuItem>
+												<ConfirmDelete
+													description={
+														<>
+															This removes{" "}
+															<code className="font-mono text-xs">{image.ref}</code> and all
+															tags pointing at the same digest.
+														</>
+													}
+													onConfirm={() => remove.mutate({ ref: image.ref })}
+													pending={remove.isPending}
+													title="Delete image?"
+													trigger={(open) => (
+														<DropdownMenuItem
+															className="text-destructive"
+															disabled={remove.isPending}
+															onSelect={(e) => {
+																e.preventDefault()
+																open()
+															}}>
+															<Trash2 className="mr-2 h-4 w-4" />
+															Delete image
+														</DropdownMenuItem>
+													)}
+												/>
 											</DropdownMenuContent>
 										</DropdownMenu>
 									</div>
