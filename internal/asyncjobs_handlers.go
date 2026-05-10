@@ -18,7 +18,73 @@ import (
 
 	daemonv1 "github.com/openotters/openotters/api/v1"
 	"github.com/openotters/openotters/internal/asyncjobs"
+	"github.com/openotters/openotters/internal/auth"
 )
+
+// scopedAgentID returns the agent_id the JWT pins this caller to,
+// or "" for operator tokens (admin scope). Agent-scoped tokens
+// always carry AgentRef in the validated claims.
+func scopedAgentID(ctx context.Context) string {
+	if claims := auth.ClaimsFromContext(ctx); claims != nil {
+		return claims.AgentRef
+	}
+	return ""
+}
+
+// assertOwnedBy verifies the caller can see jobs belonging to
+// `agentID`. Operator tokens see everything (no claim → empty
+// scope). Agent-scoped tokens only see their own agent's jobs;
+// cross-agent reads return CodeNotFound so existence isn't leaked
+// (would otherwise be PermissionDenied — but that confirms the row
+// exists, which is itself information).
+func assertOwnedBy(ctx context.Context, agentID string) *connect.Error {
+	scope := scopedAgentID(ctx)
+	if scope == "" || scope == agentID {
+		return nil
+	}
+	return connect.NewError(connect.CodeNotFound, asyncjobs.ErrNotFound)
+}
+
+// assertJobInScope loads a job and runs assertOwnedBy on its
+// agent_id. Used by Cancel which doesn't otherwise need the row's
+// content — just need to make sure the caller is allowed to touch
+// it. Returns CodeNotFound when the job doesn't exist OR isn't in
+// the caller's scope (uniform response so existence isn't leaked).
+func (h *runtimeHandler) assertJobInScope(ctx context.Context, jobID string) *connect.Error {
+	if jobID == "" {
+		return connect.NewError(connect.CodeInvalidArgument, errors.New("job_id is required"))
+	}
+	store := asyncjobs.NewStore(h.daemon.state.db)
+	j, err := store.Get(ctx, jobID)
+	if errors.Is(err, asyncjobs.ErrNotFound) {
+		return connect.NewError(connect.CodeNotFound, err)
+	}
+	if err != nil {
+		return connect.NewError(connect.CodeInternal, err)
+	}
+	return assertOwnedBy(ctx, j.AgentID)
+}
+
+// boundAgentRef is the per-handler scoping helper. Agent-scoped
+// tokens (those carrying AgentRef in claims) ALWAYS get pinned to
+// their own agent — the request's agent_ref / agent_id field is
+// ignored. Operator tokens (admin) pass through whatever the request
+// asks for. This is what prevents agent A from submitting jobs as
+// agent B even if it forges agent_ref in the wire request.
+//
+// Returns (effectiveID, true) when the request should proceed with
+// `effectiveID` as the canonical agent identity. Returns ("", false)
+// when neither the JWT nor the request supplied one — caller maps
+// that to InvalidArgument.
+func boundAgentRef(ctx context.Context, fromRequest string) (string, bool) {
+	if claims := auth.ClaimsFromContext(ctx); claims != nil && claims.AgentRef != "" {
+		return claims.AgentRef, true
+	}
+	if fromRequest != "" {
+		return fromRequest, true
+	}
+	return "", false
+}
 
 // watchPollInterval is how often WatchAsyncJob polls the row. Tight
 // enough that operators see status flips quickly; loose enough that
@@ -30,8 +96,8 @@ const watchPollInterval = 250 * time.Millisecond
 func (h *runtimeHandler) SubmitAsyncJob(
 	ctx context.Context, req *connect.Request[daemonv1.SubmitAsyncJobRequest],
 ) (*connect.Response[daemonv1.SubmitAsyncJobResponse], error) {
-	ref := req.Msg.GetAgentRef()
-	if ref == "" {
+	ref, ok := boundAgentRef(ctx, req.Msg.GetAgentRef())
+	if !ok {
 		return nil, connect.NewError(connect.CodeInvalidArgument,
 			errors.New("agent_ref is required"))
 	}
@@ -121,9 +187,13 @@ func (h *runtimeHandler) validateAgentBin(agentIDStr, bin string) *connect.Error
 }
 
 func (h *runtimeHandler) CancelAsyncJob(
-	_ context.Context, req *connect.Request[daemonv1.CancelAsyncJobRequest],
+	ctx context.Context, req *connect.Request[daemonv1.CancelAsyncJobRequest],
 ) (*connect.Response[daemonv1.CancelAsyncJobResponse], error) {
-	err := h.daemon.AsyncJobs().Cancel(req.Msg.GetJobId())
+	jobID := req.Msg.GetJobId()
+	if scopeErr := h.assertJobInScope(ctx, jobID); scopeErr != nil {
+		return nil, scopeErr
+	}
+	err := h.daemon.AsyncJobs().Cancel(jobID)
 	if errors.Is(err, asyncjobs.ErrNotRunning) {
 		return nil, connect.NewError(connect.CodeFailedPrecondition, err)
 	}
@@ -144,6 +214,12 @@ func (h *runtimeHandler) GetAsyncJob(
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
+	// Agent-scoped tokens only see their own jobs. Map cross-agent
+	// reads to NotFound so existence isn't leaked across the
+	// boundary.
+	if scopeErr := assertOwnedBy(ctx, j.AgentID); scopeErr != nil {
+		return nil, scopeErr
+	}
 	return connect.NewResponse(&daemonv1.GetAsyncJobResponse{Job: jobToProto(j)}), nil
 }
 
@@ -157,10 +233,21 @@ func (h *runtimeHandler) ListAsyncJobs(
 		filter.Statuses = []asyncjobs.Status{asyncjobs.Status(s)}
 	}
 
+	// Agent-scoped tokens get pinned to their own agent_id — request
+	// filter is honored as far as it MATCHES the bound agent
+	// (operator can ask for "my agent X" but it's always going to be
+	// X). Operator tokens fall through with whatever the request sets.
+	scopeAgent := scopedAgentID(ctx)
+	requestedAgent := req.Msg.GetAgentId()
+	effectiveAgent := requestedAgent
+	if scopeAgent != "" {
+		effectiveAgent = scopeAgent
+	}
+
 	var jobs []*asyncjobs.Job
 	var err error
-	if agent := req.Msg.GetAgentId(); agent != "" {
-		jobs, err = store.ListByAgent(ctx, agent, filter)
+	if effectiveAgent != "" {
+		jobs, err = store.ListByAgent(ctx, effectiveAgent, filter)
 	} else {
 		jobs, err = store.ListAll(ctx, filter)
 	}
@@ -208,6 +295,11 @@ func (h *runtimeHandler) WatchAsyncJob(
 	}
 	if err != nil {
 		return connect.NewError(connect.CodeInternal, err)
+	}
+	// Same scope check as Get — agent-scoped tokens watching another
+	// agent's job get NotFound, no info leak.
+	if scopeErr := assertOwnedBy(ctx, current.AgentID); scopeErr != nil {
+		return scopeErr
 	}
 	if sendErr := stream.Send(&daemonv1.WatchAsyncJobResponse{Job: jobToProto(current)}); sendErr != nil {
 		return sendErr
