@@ -19,15 +19,14 @@ import (
 )
 
 // AgentExtras carries per-agent runtime injection that is independent
-// of the underlying executor backend — the daemon's host-side socket
-// path and the agent's JWT. Each backend translates DaemonSocket
-// into the form its runtime sees (system: unix://<host-path>; docker:
-// bind-mounted into the container, runtime sees a fixed in-container
-// path). Kept executor-agnostic so callers don't have to know which
-// backend is active.
+// of the underlying executor backend — the URL the runtime should
+// dial to reach the daemon, and the agent's JWT. The URL form
+// differs by backend (system: unix://<host-path>; docker:
+// http://host.docker.internal:<port>) — daemon.go computes the
+// right value via agentReachableURL and hands it through here.
 type AgentExtras struct {
-	DaemonSocket string
-	AgentToken   string
+	DaemonURL  string
+	AgentToken string
 }
 
 const (
@@ -314,11 +313,9 @@ func (p *Pool) createAgent(
 	agentOpts []system.AgentOption, extras AgentExtras, overrides []spec.Override,
 ) (agentpkg.Agent, error) {
 	if sp, ok := p.provider.(*system.Provider); ok {
-		// Append backend-native options for the extras shared across
-		// providers — keeps the daemon's call site executor-agnostic.
 		opts := agentOpts
-		if extras.DaemonSocket != "" {
-			opts = append(opts, system.WithDaemonSocket(extras.DaemonSocket))
+		if extras.DaemonURL != "" {
+			opts = append(opts, system.WithDaemonURL(extras.DaemonURL))
 		}
 		if extras.AgentToken != "" {
 			opts = append(opts, system.WithAgentToken(extras.AgentToken))
@@ -328,8 +325,8 @@ func (p *Pool) createAgent(
 
 	if dp, ok := p.provider.(*docker.Provider); ok {
 		var dockerOpts []docker.AgentOption
-		if extras.DaemonSocket != "" {
-			dockerOpts = append(dockerOpts, docker.WithDaemonSocket(extras.DaemonSocket))
+		if extras.DaemonURL != "" {
+			dockerOpts = append(dockerOpts, docker.WithDaemonURL(extras.DaemonURL))
 		}
 		if extras.AgentToken != "" {
 			dockerOpts = append(dockerOpts, docker.WithAgentToken(extras.AgentToken))

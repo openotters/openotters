@@ -128,9 +128,19 @@ func (d *Serve) Run(ctx context.Context, common *cmd.Commons, sqlite *cmd.SQLite
 		return fmt.Errorf("loading signing key: %w", err)
 	}
 
+	// publicURL is the daemon's TCP endpoint — needed by the docker
+	// executor to point its agents at the right host:port.
+	// auto-rewritten 127.0.0.1 → host.docker.internal at spawn
+	// time inside Daemon.agentReachableURL.
+	var daemonPublicURL string
+	if !d.NoHTTP && d.HTTPAddr != "" {
+		daemonPublicURL = publicURL(d.HTTPAddr)
+	}
+
 	daemonOpts := []internal.DaemonOption{
 		internal.WithSocket(socketPath),
 		internal.WithSigningKey(signingKey),
+		internal.WithPublicURL(daemonPublicURL),
 		internal.WithBuildInfo(
 			common.Version.Version(),
 			common.Version.Commit(),

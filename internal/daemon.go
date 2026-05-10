@@ -285,6 +285,7 @@ type Daemon struct {
 	runtime    string
 	socket     string
 	signingKey []byte // HMAC key for agent token issuance
+	publicURL  string // TCP URL agents reach the daemon at (docker only)
 	version    string
 	commit     string
 	buildDate  string
@@ -314,6 +315,7 @@ type DaemonOption func(*daemonConfig)
 type daemonConfig struct {
 	localRuntime    string
 	socket          string
+	publicURL       string
 	signingKey      []byte
 	version         string
 	commit          string
@@ -355,6 +357,17 @@ func WithBuildInfo(version, commit, date string) DaemonOption {
 // secret that issues them.
 func WithSigningKey(key []byte) DaemonOption {
 	return func(c *daemonConfig) { c.signingKey = key }
+}
+
+// WithPublicURL sets the TCP URL the daemon binds (e.g.
+// http://127.0.0.1:5500). Docker-executor agents need this to dial
+// the daemon from inside their container — system agents go through
+// the unix socket directly, so the URL is unused for them. The
+// value is rewritten 127.0.0.1 → host.docker.internal at agent
+// spawn time so the same URL works on macOS Docker Desktop and
+// Linux Docker (with an ExtraHosts mapping).
+func WithPublicURL(url string) DaemonOption {
+	return func(c *daemonConfig) { c.publicURL = url }
 }
 
 
@@ -577,6 +590,7 @@ func NewDaemon(
 		runtime:         cfg.localRuntime,
 		socket:          cfg.socket,
 		signingKey:      cfg.signingKey,
+		publicURL:       cfg.publicURL,
 		version:         cfg.version,
 		commit:          cfg.commit,
 		buildDate:       cfg.buildDate,
@@ -600,6 +614,39 @@ func NewDaemon(
 	)
 
 	return d
+}
+
+// agentReachableURL returns the URL form an agent's runtime should
+// dial to reach this daemon. Two backends, two transports:
+//
+//   - system: agents are host subprocesses sharing the host
+//     filesystem, so a unix socket bind-mount is unnecessary —
+//     hand them the daemon's socket path directly as
+//     unix://<path>. The chrooted runtime can dial it (chroot is
+//     billy-rooted, not a real syscall chroot).
+//   - docker: bind-mounting the daemon's unix socket into a Linux
+//     container fails on Docker Desktop / Colima
+//     ("operation not supported" — macOS unix-socket files don't
+//     traverse virtiofs cleanly). Use TCP via host.docker.internal
+//     instead. publicURL is the daemon's bound TCP URL; rewrite
+//     127.0.0.1 → host.docker.internal so it resolves from inside
+//     the container.
+//
+// Empty when the daemon doesn't have the relevant transport
+// configured (e.g. system without --socket-path, docker with
+// --no-http). Agents created with empty URL silently lack
+// daemon-callback capability.
+func (d *Daemon) agentReachableURL() string {
+	if d.executor == executorDocker {
+		if d.publicURL == "" {
+			return ""
+		}
+		return strings.ReplaceAll(d.publicURL, "127.0.0.1", "host.docker.internal")
+	}
+	if d.socket == "" {
+		return ""
+	}
+	return auth.SocketURL(d.socket)
 }
 
 // Get implements asyncjobs.AgentLookup so the async-jobs Pool can
@@ -938,7 +985,7 @@ func (d *Daemon) Restore(ctx context.Context) error {
 
 		if pa.Status != statusStopped {
 			d.pool.Add(id, ref, agentOpts, AgentExtras{
-				DaemonSocket: d.socket,
+				DaemonURL: d.agentReachableURL(),
 				AgentToken: pa.Token,
 			}, overrides...)
 
@@ -1419,7 +1466,7 @@ func (d *Daemon) CreateAgent(
 	}
 
 	d.pool.Add(id, ref, agentOpts, AgentExtras{
-		DaemonSocket: d.socket,
+		DaemonURL: d.agentReachableURL(),
 		AgentToken: agentToken,
 	}, overrides...)
 

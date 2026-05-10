@@ -1023,6 +1023,8 @@ github.com/openotters/agentfile v1.0.0-alpha.25 h1:9b41z4Oorc3nWqOntSNWLbwuOtE7a
 github.com/openotters/agentfile v1.0.0-alpha.25/go.mod h1:e+M+ZukgHT4pR+kJHleu2BCudDo+tcYdUFh1ktuTzkc=
 github.com/openotters/agentfile v1.0.0-alpha.26 h1:4WanciMmA2u9gbf0jIqfPScSajxOG26YkvBJDjuTzwU=
 github.com/openotters/agentfile v1.0.0-alpha.26/go.mod h1:e+M+ZukgHT4pR+kJHleu2BCudDo+tcYdUFh1ktuTzkc=
+github.com/openotters/agentfile v1.0.0-alpha.27 h1:qaqjm7m/nLmGILn2aEVUJCU1HxLwkZG67n/cM3Qaeoo=
+github.com/openotters/agentfile v1.0.0-alpha.27/go.mod h1:e+M+ZukgHT4pR+kJHleu2BCudDo+tcYdUFh1ktuTzkc=
 github.com/openotters/bin v1.0.0-alpha.7 h1:ltKcQ5h2ZoPIfxJGRcJ3hjaVrrKCHSDuftcl0M8w/o8=
 github.com/openotters/bin v1.0.0-alpha.7/go.mod h1:2oSKBQ71cP0E78sXwO5Rk8kCov+1lZWIEn7NXAwR3pI=
 github.com/opentracing/opentracing-go v1.2.0 h1:uEJPy/1a5RIPAJ0Ov+OIO8OxWu77jEv+1B0VhjKrZUs=
