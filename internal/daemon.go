@@ -1647,7 +1647,7 @@ func (d *Daemon) DeleteSession(ctx context.Context, ref, sessionID string) error
 // event to cb as it arrives. Callers (the gRPC stream handler) translate cb
 // invocations into wire events.
 func (d *Daemon) ChatStreamWithAgent(
-	ctx context.Context, ref, sessionID, prompt string, cb func(agentpkg.PromptEvent),
+	ctx context.Context, ref, sessionID, prompt string, regenerate bool, cb func(agentpkg.PromptEvent),
 ) error {
 	ma, err := d.resolve(ref)
 	if err != nil {
@@ -1664,7 +1664,11 @@ func (d *Daemon) ChatStreamWithAgent(
 		return fmt.Errorf("agent %q does not support streaming chat", ma.name)
 	}
 
-	return streamer.PromptStream(ctx, agentpkg.PromptRequest{SessionID: sessionID, Prompt: prompt}, cb)
+	return streamer.PromptStream(ctx, agentpkg.PromptRequest{
+		SessionID:  sessionID,
+		Prompt:     prompt,
+		Regenerate: regenerate,
+	}, cb)
 }
 
 func (d *Daemon) nameExists(name string) bool {

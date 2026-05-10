@@ -274,7 +274,11 @@ func (h *runtimeHandler) ChatStreamWithAgent(
 	stream *connect.ServerStream[daemonv1.ChatStreamEvent],
 ) error {
 	return h.daemon.ChatStreamWithAgent(
-		ctx, req.Msg.GetRef(), req.Msg.GetSessionId(), req.Msg.GetPrompt(),
+		ctx,
+		req.Msg.GetRef(),
+		req.Msg.GetSessionId(),
+		req.Msg.GetPrompt(),
+		req.Msg.GetRegenerate(),
 		func(ev agentpkg.PromptEvent) {
 			_ = stream.Send(&daemonv1.ChatStreamEvent{
 				Type:    ev.Type,
@@ -299,9 +303,11 @@ func (h *runtimeHandler) ListSessionMessages(
 	out := make([]*daemonv1.SessionMessage, len(msgs))
 	for i, m := range msgs {
 		out[i] = &daemonv1.SessionMessage{
-			Role:      m.Role,
-			Content:   m.Content,
-			CreatedAt: m.CreatedAt.Unix(),
+			Role:         m.Role,
+			Content:      m.Content,
+			CreatedAt:    m.CreatedAt.Unix(),
+			BranchesJson: m.BranchesJSON,
+			ActiveBranch: int32(m.ActiveBranch), //nolint:gosec // small int, daemon-bounded
 		}
 	}
 

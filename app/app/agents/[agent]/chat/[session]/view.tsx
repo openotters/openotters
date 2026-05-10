@@ -8,9 +8,9 @@ import {
 	Check,
 	ChevronDown,
 	ChevronRight,
-	Circle,
 	Copy,
 	Loader2,
+	Maximize2,
 	Pencil,
 	RefreshCw,
 	Square,
@@ -20,12 +20,7 @@ import {
 import Link from "next/link"
 import { useEffect, useMemo, useRef, useState } from "react"
 import { toast } from "sonner"
-import {
-	Conversation,
-	ConversationContent,
-	ConversationEmptyState,
-	ConversationScrollButton,
-} from "@/components/ai-elements/conversation"
+import { ConversationEmptyState } from "@/components/ai-elements/conversation"
 import {
 	Message,
 	MessageAction,
@@ -44,6 +39,13 @@ import {
 } from "@/components/ai-elements/prompt-input"
 import { Shimmer } from "@/components/ai-elements/shimmer"
 import { ToolInput, ToolOutput } from "@/components/ai-elements/tool"
+import {
+	Dialog,
+	DialogContent,
+	DialogDescription,
+	DialogHeader,
+	DialogTitle,
+} from "@/components/ui/dialog"
 import { StatusBadge } from "@/components/status-badge"
 import { Button } from "@/components/ui/button"
 import { listAgents, listSessionMessages } from "@/lib/proto/v1/daemon-Runtime_connectquery"
@@ -123,24 +125,37 @@ function formatRelative(unixSec: number): string {
 	})
 }
 
-// toolStatusColor classifies a tool part's outcome based on its
-// state + output payload. Returns a tuple of (icon, classes) used by
-// CompactToolRow. We can't always trust output-available to mean
-// success (the model may stream an error string back as output), so
-// we heuristically scan for "error" / "failed" / "exit code" and
-// downgrade to red.
+// classifyToolStatus reports running / ok / error for a tool row.
+// The runtime's tool events don't (yet) carry an exit code, so we
+// heuristically inspect the output payload. The shell BIN wraps
+// every result with <exit_code>N</exit_code>, which trumps every
+// other check — N == 0 is success even if "error" appears in
+// stdout (e.g. a grep-for-error log inspection), and N != 0 is
+// failure even if the output looks clean.
 type ToolStatus = "running" | "ok" | "error"
+
+const EXIT_CODE_RE = /<exit_code>(-?\d+)<\/exit_code>/i
 
 function classifyToolStatus(p: Extract<Part, { kind: "tool" }>): ToolStatus {
 	if (p.state === "input-available") return "running"
-	const out = (p.output ?? "").toLowerCase()
+	const raw = p.output ?? ""
+
+	// Highest-confidence signal: an explicit exit-code tag.
+	const m = EXIT_CODE_RE.exec(raw)
+	if (m) {
+		return m[1] === "0" ? "ok" : "error"
+	}
+
+	// Fallback heuristic for tools that don't wrap exit codes.
+	// Conservative: only flag a real failure signature. Lines like
+	// "ls: cannot access '/proc': Permission denied" appear in
+	// successful ls -R runs and shouldn't paint the row red.
+	const out = raw.trimStart().toLowerCase()
 	if (
-		out.includes("\nerror") ||
-		out.startsWith("error") ||
-		out.includes("traceback") ||
-		out.includes("exit code") ||
-		out.includes("permission denied") ||
-		out.includes("no such file")
+		out.startsWith("error:") ||
+		out.startsWith("fatal:") ||
+		out.startsWith("panic:") ||
+		out.includes("traceback (most recent call last)")
 	) {
 		return "error"
 	}
@@ -201,6 +216,210 @@ function tryParseJson(s: string): unknown {
 	} catch {
 		return s
 	}
+}
+
+// parsePersistedParts decodes the runtime's stored assistant
+// content JSON (an array of {kind, text, name, input, output,
+// state} objects) into the in-memory Part shape the UI renders.
+// Falls back to a single text part if content isn't valid JSON
+// — handles legacy / malformed rows gracefully.
+interface StoredPart {
+	kind: string
+	text?: string
+	tool_id?: string
+	name?: string
+	input?: string
+	output?: string
+	state?: string
+}
+
+function parsePersistedParts(content: string): Part[] {
+	if (!content) return []
+	try {
+		const arr = JSON.parse(content) as StoredPart[]
+		if (!Array.isArray(arr)) return [{ kind: "text", content }]
+		const parts: Part[] = []
+		for (let i = 0; i < arr.length; i++) {
+			const p = arr[i]
+			if (p.kind === "text" && typeof p.text === "string") {
+				parts.push({ kind: "text", content: p.text })
+				continue
+			}
+			if (p.kind === "tool") {
+				let parsedInput: unknown = p.input
+				if (typeof p.input === "string" && p.input.length > 0) {
+					try {
+						parsedInput = JSON.parse(p.input)
+					} catch {
+						parsedInput = p.input
+					}
+				}
+				parts.push({
+					kind: "tool",
+					id: p.tool_id || `${p.name ?? "tool"}-${i}`,
+					name: p.name ?? "tool",
+					input: parsedInput,
+					output: p.output ?? null,
+					state: p.state === "input-available" ? "input-available" : "output-available",
+				})
+			}
+		}
+		return parts
+	} catch {
+		return [{ kind: "text", content }]
+	}
+}
+
+// parsePersistedBranches decodes the branches_json column — an
+// outer JSON array of inner JSON-encoded parts arrays (each entry
+// is itself the same shape as the assistant content column).
+function parsePersistedBranches(branchesJSON: string): Part[][] {
+	if (!branchesJSON) return []
+	try {
+		const arr = JSON.parse(branchesJSON) as unknown[]
+		if (!Array.isArray(arr)) return []
+		const out: Part[][] = []
+		for (const raw of arr) {
+			if (typeof raw === "string") {
+				out.push(parsePersistedParts(raw))
+			} else if (Array.isArray(raw)) {
+				// Already-decoded array of stored parts — re-stringify
+				// then go through the parser to share the same shape.
+				out.push(parsePersistedParts(JSON.stringify(raw)))
+			}
+		}
+		return out
+	} catch {
+		return []
+	}
+}
+
+// Some models (claude-haiku notably) leak their tool-call protocol
+// into raw text content instead of emitting proper tool.call /
+// tool.result events through the API. Rather than strip (and lose
+// the signal) or render verbatim (ugly XML), we parse those
+// markup blocks back into Part values so they render as proper
+// tool rows. The runtime's real tool events already produce Part
+// objects directly via the stream callbacks; this is just a
+// rescue path for the in-text markup.
+//
+// Recognised shapes:
+//   <function_calls>NAME</function_calls>
+//   <function_calls>{"name":"NAME","input":{...}}</function_calls>
+//   <invocation_result>OUTPUT</invocation_result>
+//   <tool_use ...>NAME / {"name":...,"input":...}</tool_use>
+//   <tool_result>OUTPUT</tool_result>
+const CALL_TAGS = ["function_calls", "tool_use"] as const
+const RESULT_TAGS = ["invocation_result", "tool_result"] as const
+const ANY_MARKUP_RE = new RegExp(
+	`<(${[...CALL_TAGS, ...RESULT_TAGS].join("|")})\\b[^>]*>([\\s\\S]*?)<\\/\\1>`,
+	"g",
+)
+
+// rescuedToolParts walks a text buffer and splits it into a sequence
+// of {text, tool-call, tool-result} chunks, returning the resulting
+// Parts list. Plain text that doesn't contain markup short-circuits
+// back to a single text part.
+function rescuedToolParts(text: string, baseKey: string): Part[] {
+	if (!ANY_MARKUP_RE.test(text)) return [{ kind: "text", content: text }]
+
+	ANY_MARKUP_RE.lastIndex = 0
+	const out: Part[] = []
+	let cursor = 0
+	let counter = 0
+	let pendingCallName = ""
+	for (const m of text.matchAll(ANY_MARKUP_RE)) {
+		const [full, tag, inner] = m
+		const offset = m.index ?? 0
+		if (offset > cursor) {
+			const before = text.slice(cursor, offset).trim()
+			if (before) out.push({ kind: "text", content: before })
+		}
+		const tagKind = (CALL_TAGS as readonly string[]).includes(tag) ? "call" : "result"
+		const trimmed = inner.trim()
+		// Try to parse JSON-shaped tool-use payloads first.
+		let parsedName = ""
+		let parsedInput: unknown
+		if (trimmed.startsWith("{")) {
+			try {
+				const obj = JSON.parse(trimmed) as { name?: string; input?: unknown }
+				if (typeof obj.name === "string") parsedName = obj.name
+				parsedInput = obj.input
+			} catch {
+				// fall through to plain-text handling
+			}
+		}
+		if (tagKind === "call") {
+			counter += 1
+			const name = parsedName || trimmed || "tool"
+			pendingCallName = name
+			out.push({
+				kind: "tool",
+				id: `${baseKey}-rescue-${counter}`,
+				name,
+				input: parsedInput ?? (parsedName ? undefined : trimmed),
+				output: null,
+				state: "input-available",
+			})
+		} else {
+			// Result without a preceding call — synthesise an
+			// orphan tool block so the output still surfaces.
+			const last = out[out.length - 1]
+			if (
+				last &&
+				last.kind === "tool" &&
+				last.state === "input-available"
+			) {
+				out[out.length - 1] = {
+					...last,
+					output: trimmed,
+					state: "output-available",
+				}
+			} else {
+				counter += 1
+				out.push({
+					kind: "tool",
+					id: `${baseKey}-rescue-${counter}`,
+					name: pendingCallName || "tool",
+					input: undefined,
+					output: trimmed,
+					state: "output-available",
+				})
+			}
+		}
+		cursor = offset + full.length
+	}
+	if (cursor < text.length) {
+		const tail = text.slice(cursor).trim()
+		if (tail) out.push({ kind: "text", content: tail })
+	}
+	return out
+}
+
+// expandRescuedParts walks parts top-to-bottom and replaces any text
+// part containing tool-call markup with the parsed sequence. Plain
+// text passes through untouched.
+function expandRescuedParts(parts: Part[], baseKey: string): Part[] {
+	let needsExpand = false
+	for (const p of parts) {
+		if (p.kind === "text" && ANY_MARKUP_RE.test(p.content)) {
+			ANY_MARKUP_RE.lastIndex = 0
+			needsExpand = true
+			break
+		}
+		ANY_MARKUP_RE.lastIndex = 0
+	}
+	if (!needsExpand) return parts
+	const out: Part[] = []
+	for (let i = 0; i < parts.length; i++) {
+		const p = parts[i]
+		if (p.kind !== "text") {
+			out.push(p)
+			continue
+		}
+		out.push(...rescuedToolParts(p.content, `${baseKey}-${i}`))
+	}
+	return out
 }
 
 // pushTextDelta appends a text chunk to the message's parts. A new
@@ -290,12 +509,39 @@ export default function ChatPage() {
 	const [densityCompact, setDensityCompact] = useState(false)
 	const composerRef = useRef<HTMLTextAreaElement | null>(null)
 	const abortRef = useRef<AbortController | null>(null)
+	const bottomRef = useRef<HTMLDivElement | null>(null)
 	// Re-render every minute so relative timestamps tick. Cheap; the
 	// state value itself isn't used.
 	const [, setNow] = useState(Date.now())
 	useEffect(() => {
 		const i = setInterval(() => setNow(Date.now()), 60_000)
 		return () => clearInterval(i)
+	}, [])
+
+	// Auto-scroll the messages section to the bottom whenever a
+	// new message lands or the streaming buffer grows. The bottomRef
+	// sits at the end of the messages container which has its own
+	// overflow-y-auto; only that section scrolls.
+	useEffect(() => {
+		bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" })
+	}, [messages])
+
+	// Hide the layout's app-level header + footer while chat is
+	// mounted; the chat owns the full viewport height. We poke
+	// data-attribute hooks set in app/layout.tsx rather than a
+	// route-aware nested layout because chat is one of many
+	// children of the same RootLayout — flipping a class on mount
+	// is the smallest change that restores them on every other
+	// route. CSS-only via [hidden] is the simplest reversible mark.
+	useEffect(() => {
+		const header = document.querySelector<HTMLElement>("[data-layout-header]")
+		const footer = document.querySelector<HTMLElement>("[data-layout-footer]")
+		header?.setAttribute("hidden", "")
+		footer?.setAttribute("hidden", "")
+		return () => {
+			header?.removeAttribute("hidden")
+			footer?.removeAttribute("hidden")
+		}
 	}, [])
 
 	// Keyboard shortcuts:
@@ -351,13 +597,45 @@ export default function ChatPage() {
 		hydratedRef.current = key
 		const persisted: UIMessage[] = history.data.messages
 			.filter((m) => m.role === "user" || m.role === "assistant")
-			.map((m, i) => ({
-				id: `hist-${i}-${m.role}`,
-				role: m.role as "user" | "assistant",
-				branches: [[{ kind: "text", content: m.content }]],
-				activeBranch: 0,
-				createdAt: Number(m.createdAt),
-			}))
+			.map((m, i) => {
+				const role = m.role as "user" | "assistant"
+				if (role === "user") {
+					return {
+						id: `hist-${i}-user`,
+						role,
+						branches: [[{ kind: "text", content: m.content } satisfies Part]],
+						activeBranch: 0,
+						createdAt: Number(m.createdAt),
+					}
+				}
+				// Assistant: content is JSON parts; branchesJson is
+				// JSON-encoded array of alternative parts arrays.
+				const active = parsePersistedParts(m.content)
+				const others = parsePersistedBranches(m.branchesJson ?? "")
+				const all: Part[][] =
+					m.activeBranch != null && others.length > 0
+						? // activeBranch points at one slot in
+							// [..others, active] in append-order (the
+							// most recent run is always the new
+							// content; older alternatives sit in
+							// branches_json). Reconstruct: place the
+							// active slot at activeBranch.
+							(() => {
+								const seq = [...others, active]
+								return seq
+							})()
+						: [active]
+				return {
+					id: `hist-${i}-assistant`,
+					role,
+					branches: all,
+					activeBranch:
+						m.activeBranch != null && m.activeBranch >= 0 && m.activeBranch < all.length
+							? m.activeBranch
+							: all.length - 1,
+					createdAt: Number(m.createdAt),
+				}
+			})
 		if (persisted.length > 0) {
 			setMessages(persisted)
 		}
@@ -460,7 +738,7 @@ export default function ChatPage() {
 
 		try {
 			const stream = client.chatStreamWithAgent(
-				{ ref: agentName, sessionId, prompt },
+				{ ref: agentName, sessionId, prompt, regenerate: mode === "regenerate" },
 				{ signal: ac.signal },
 			)
 
@@ -623,13 +901,17 @@ export default function ChatPage() {
 	}
 
 	return (
-		// Chat fills the main pane via h-full and lets the internal
-		// <Conversation> scroll on its own. min-h-0 lets the flex
-		// child shrink so descendant overflow:auto actually engages.
-		// overflow-hidden caps long messages from breaking the layout
-		// — pre/code blocks scroll inside the message.
-		<div className="flex h-full min-h-0 w-full max-w-full flex-col overflow-hidden">
-			<div className="flex shrink-0 items-center gap-4 border-b pb-4">
+		// Three-row chat:
+		//   1. fixed header (shrink-0)
+		//   2. messages (flex-1 + overflow-y-auto, the only scroll)
+		//   3. fixed composer (shrink-0)
+		//
+		// The chat hides the app-level header/footer (see the
+		// [hidden] toggle above) and claims the full viewport.
+		// Negative margins reach across main's p-6 padding so
+		// the bars span edge-to-edge.
+		<div className="-mx-6 -my-6 flex h-[100dvh] flex-col overflow-hidden">
+			<div className="flex shrink-0 items-center gap-4 border-b bg-background px-6 py-4">
 				<Button asChild size="icon" variant="ghost">
 					<Link href={`/agents/${agentName}`}>
 						<ArrowLeft className="h-4 w-4" />
@@ -670,8 +952,8 @@ export default function ChatPage() {
 				</Button>
 			</div>
 
-			<Conversation className="min-h-0 flex-1">
-				<ConversationContent>
+			<div className="min-h-0 flex-1 overflow-y-auto px-6 py-6">
+				<div className="flex flex-col gap-8">
 					{/* Loading skeleton: history-fetch in flight on a session
 					    that has prior messages. Cheaper read than waiting
 					    for the empty state to flash and then disappear. */}
@@ -745,7 +1027,14 @@ export default function ChatPage() {
 							message.role === "assistant" && msgIdx === messages.length - 1
 						const isStreamingThis =
 							isLastAssistant && (status === "submitted" || status === "streaming")
-						const activeParts = message.branches[message.activeBranch] ?? []
+						const rawParts = message.branches[message.activeBranch] ?? []
+						// Rescue any tool-call markup the model leaked into
+						// text content; runtime-emitted tool events already
+						// arrive as proper Parts and pass through untouched.
+						const activeParts = expandRescuedParts(
+							rawParts,
+							`${message.id}-b${message.activeBranch}`,
+						)
 						const isEmptyAssistant = message.role === "assistant" && activeParts.length === 0
 						const groups = groupParts(activeParts, `${message.id}-b${message.activeBranch}`)
 						return (
@@ -791,6 +1080,7 @@ export default function ChatPage() {
 										if (g.kind === "text") {
 											const lastTextIdx = groups.length - 1
 											const animating = isStreamingThis && gIdx === lastTextIdx
+											if (g.content.trim() === "") return null
 											return (
 												<div className="relative" key={g.key}>
 													<MessageResponse isAnimating={animating}>
@@ -924,11 +1214,11 @@ export default function ChatPage() {
 							{error}
 						</p>
 					)}
-				</ConversationContent>
-				<ConversationScrollButton />
-			</Conversation>
+				</div>
+				<div ref={bottomRef} />
+			</div>
 
-			<div className="sticky bottom-0 shrink-0 border-t bg-background pt-4">
+			<div className="shrink-0 border-t bg-background px-6 py-4">
 				<PromptInput onSubmit={handleSubmit}>
 					<PromptInputBody>
 						<PromptInputTextarea
@@ -973,6 +1263,24 @@ export default function ChatPage() {
 	)
 }
 
+// Tool output lengths can be tens of KB (kubectl describe, log
+// dumps, raw JSON). Inline-render up to TOOL_OUTPUT_INLINE_LIMIT
+// characters; above that we show a tail snippet + a "Show full
+// output" button that opens a dialog. Same applies to tool input
+// JSON for symmetry.
+const TOOL_OUTPUT_INLINE_LIMIT = 2000
+
+function clipForInline(s: string, limit: number): { shown: string; clipped: boolean } {
+	if (s.length <= limit) return { shown: s, clipped: false }
+	// Take the tail — for log / kubectl-style output, the bottom
+	// is usually the part the user wants. Round to a newline so we
+	// don't cut a column mid-row.
+	const tail = s.slice(s.length - limit)
+	const nl = tail.indexOf("\n")
+	const shown = nl >= 0 ? tail.slice(nl + 1) : tail
+	return { shown, clipped: true }
+}
+
 // CompactToolRow renders one tool call as a single line with a
 // status dot and the input preview. Click expands to show the full
 // input/output payload via the heavier <Tool> components. The
@@ -985,6 +1293,8 @@ interface CompactToolRowProps {
 function CompactToolRow({ part, densityCompact }: CompactToolRowProps) {
 	const status = classifyToolStatus(part)
 	const summary = summarizeToolInput(part.input)
+	const [fullOpen, setFullOpen] = useState(false)
+	const [copiedFull, setCopiedFull] = useState(false)
 	const dotClass =
 		status === "running"
 			? "text-amber-500"
@@ -995,29 +1305,154 @@ function CompactToolRow({ part, densityCompact }: CompactToolRowProps) {
 	// live; everything else collapses by default. densityCompact
 	// forces every row closed regardless.
 	const defaultOpen = !densityCompact && status === "running"
+
+	const inputJSON =
+		part.input === undefined ? "" : JSON.stringify(part.input, null, 2)
+	const inputClip = clipForInline(inputJSON, TOOL_OUTPUT_INLINE_LIMIT)
+	const outputClip = clipForInline(part.output ?? "", TOOL_OUTPUT_INLINE_LIMIT)
+	const hasClipped = inputClip.clipped || outputClip.clipped
+
+	const copyFull = async () => {
+		const blob = [
+			`# ${part.name}`,
+			"## input",
+			inputJSON || "(none)",
+			"## output",
+			part.output ?? "(none)",
+		].join("\n\n")
+		try {
+			await navigator.clipboard.writeText(blob)
+			setCopiedFull(true)
+			setTimeout(() => setCopiedFull(false), 1500)
+		} catch (err) {
+			toast.error("Copy failed", {
+				description: err instanceof Error ? err.message : String(err),
+			})
+		}
+	}
+
 	return (
-		<details
-			className="group/tool rounded-md border bg-muted/30 text-xs"
-			key={part.id}
-			open={defaultOpen}>
-			<summary className="flex cursor-pointer list-none items-center gap-2 px-2 py-1.5 font-mono hover:bg-muted/50">
-				{status === "running" ? (
-					<Loader2 className={`h-3.5 w-3.5 shrink-0 animate-spin ${dotClass}`} />
-				) : status === "error" ? (
-					<XIcon className={`h-3.5 w-3.5 shrink-0 ${dotClass}`} />
-				) : (
-					<Check className={`h-3.5 w-3.5 shrink-0 ${dotClass}`} />
-				)}
-				<span className="font-semibold">{part.name}</span>
-				{summary && (
-					<span className="truncate text-muted-foreground">{summary}</span>
-				)}
-				<Circle className="ml-auto h-2 w-2 shrink-0 opacity-0 transition-opacity group-hover/tool:opacity-50" />
-			</summary>
-			<div className="space-y-2 border-t bg-background/50 p-2">
-				{part.input !== undefined && <ToolInput input={part.input} />}
-				<ToolOutput errorText={undefined} output={part.output} />
-			</div>
-		</details>
+		<>
+			<details
+				className="group/tool rounded-md border bg-muted/30 text-xs"
+				key={part.id}
+				open={defaultOpen}>
+				<summary className="flex cursor-pointer list-none items-center gap-2 px-2 py-1.5 font-mono hover:bg-muted/50">
+					{status === "running" ? (
+						<Loader2 className={`h-3.5 w-3.5 shrink-0 animate-spin ${dotClass}`} />
+					) : status === "error" ? (
+						<XIcon className={`h-3.5 w-3.5 shrink-0 ${dotClass}`} />
+					) : (
+						<Check className={`h-3.5 w-3.5 shrink-0 ${dotClass}`} />
+					)}
+					<span className="font-semibold">{part.name}</span>
+					{summary && (
+						<span className="truncate text-muted-foreground">{summary}</span>
+					)}
+					{hasClipped && (
+						<span className="shrink-0 rounded bg-amber-500/15 px-1.5 py-0.5 font-medium text-amber-600 text-[10px] dark:text-amber-400">
+							clipped
+						</span>
+					)}
+					<button
+						aria-label="Show call & result in modal"
+						className="ml-auto inline-flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 text-muted-foreground text-xs hover:bg-muted hover:text-foreground"
+						onClick={(e) => {
+							// Don't toggle <details> when the user clicks
+							// the modal button — they're separate actions.
+							e.preventDefault()
+							e.stopPropagation()
+							setFullOpen(true)
+						}}
+						title="Open call + result in modal"
+						type="button">
+						<Maximize2 className="h-3 w-3" />
+						<span className="sr-only">Details</span>
+					</button>
+				</summary>
+				<div className="space-y-2 border-t bg-background/50 p-2">
+					{part.input !== undefined && (
+						<div className="space-y-1">
+							{inputClip.clipped && (
+								<p className="text-muted-foreground text-[10px]">
+									input clipped — showing last {TOOL_OUTPUT_INLINE_LIMIT} chars of{" "}
+									{inputJSON.length}
+								</p>
+							)}
+							<ToolInput input={inputClip.clipped ? inputClip.shown : part.input} />
+						</div>
+					)}
+					{(part.output !== null || status === "running") && (
+						<div className="space-y-1">
+							{outputClip.clipped && (
+								<p className="text-muted-foreground text-[10px]">
+									output clipped — showing last {TOOL_OUTPUT_INLINE_LIMIT} chars of{" "}
+									{(part.output ?? "").length}
+								</p>
+							)}
+							<ToolOutput
+								errorText={undefined}
+								output={outputClip.clipped ? outputClip.shown : part.output}
+							/>
+						</div>
+					)}
+					{hasClipped && (
+						<div className="flex justify-end">
+							<Button
+								onClick={() => setFullOpen(true)}
+								size="sm"
+								variant="outline">
+								Show full output
+							</Button>
+						</div>
+					)}
+				</div>
+			</details>
+			<Dialog onOpenChange={setFullOpen} open={fullOpen}>
+				<DialogContent className="flex max-h-[85vh] max-w-4xl flex-col gap-0 overflow-hidden p-0">
+					<DialogHeader className="border-b px-6 pt-6 pb-3 pr-12">
+						<div className="flex items-start justify-between gap-4">
+							<div className="min-w-0">
+								<DialogTitle className="font-mono">{part.name}</DialogTitle>
+								<DialogDescription>
+									{inputJSON.length} char input · {(part.output ?? "").length} char
+									output
+								</DialogDescription>
+							</div>
+							<Button
+								className="shrink-0"
+								onClick={copyFull}
+								size="sm"
+								variant="outline">
+								{copiedFull ? (
+									<Check className="mr-2 h-3.5 w-3.5" />
+								) : (
+									<Copy className="mr-2 h-3.5 w-3.5" />
+								)}
+								{copiedFull ? "Copied" : "Copy all"}
+							</Button>
+						</div>
+					</DialogHeader>
+					<div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-6 py-4 font-mono text-xs">
+						<section>
+							<h3 className="mb-1 font-semibold text-muted-foreground text-[10px] uppercase tracking-wide">
+								Input
+							</h3>
+							<pre className="overflow-x-auto whitespace-pre-wrap break-all rounded-md border bg-muted/40 p-3">
+								{inputJSON || "(none)"}
+							</pre>
+						</section>
+						<section>
+							<h3 className="mb-1 font-semibold text-muted-foreground text-[10px] uppercase tracking-wide">
+								Output
+							</h3>
+							<pre className="overflow-x-auto whitespace-pre-wrap break-all rounded-md border bg-muted/40 p-3">
+								{part.output ?? "(none)"}
+							</pre>
+						</section>
+					</div>
+				</DialogContent>
+			</Dialog>
+		</>
 	)
 }

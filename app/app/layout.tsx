@@ -21,13 +21,16 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
 						<SidebarProvider>
 						<AppSidebar />
 						<SidebarInset>
-							<Header />
+							<div data-layout-header>
+								<Header />
+							</div>
 							<main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto overflow-x-hidden p-6">
 								{children}
 							</main>
 							<footer
 								aria-label="OpenOtters footer"
-								className="flex w-full items-center justify-between border-t border-dashed px-6 py-4 text-muted-foreground text-sm">
+								className="flex w-full items-center justify-between border-t border-dashed px-6 py-4 text-muted-foreground text-sm"
+								data-layout-footer>
 								<p>
 									<span>© {new Date().getFullYear()} </span>
 									<a className="font-medium text-foreground hover:underline" href="/">
