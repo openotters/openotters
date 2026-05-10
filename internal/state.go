@@ -25,6 +25,10 @@ type persistedAgent struct {
 	Status    string
 	CreatedAt time.Time
 	Mounts    []persistedMount
+	// Labels — see api/v1/daemon.proto's "labels (shared semantics)"
+	// comment for the reserved io.openotters.* keys. Stored as JSON
+	// in the agents.labels_json column.
+	Labels map[string]string
 }
 
 type StateStore struct {
@@ -58,6 +62,14 @@ func migrateState(ctx context.Context, db *sql.DB) error {
 	// mounts was added later; guard against ALTER failing on a second
 	// run by checking PRAGMA table_info.
 	if err := addColumnIfMissing(ctx, db, "agents", "mounts", "TEXT NOT NULL DEFAULT '[]'"); err != nil {
+		return err
+	}
+
+	// labels_json — arbitrary user-supplied key=value metadata
+	// attached at CreateAgent time. Filterable via ListAgents'
+	// label_selector field. See api/v1/daemon.proto for the
+	// reserved io.openotters.* keys.
+	if err := addColumnIfMissing(ctx, db, "agents", "labels_json", "TEXT NOT NULL DEFAULT '{}'"); err != nil {
 		return err
 	}
 
@@ -97,7 +109,136 @@ func migrateState(ctx context.Context, db *sql.DB) error {
 		return err
 	}
 
+	// async_jobs is the daemon-owned record of every async BIN call
+	// dispatched against an agent's spawn env. The pool reads /
+	// writes status lines here; the boot path replays pending and
+	// orphans abandoned-running rows. Cascade keeps the table
+	// honest when an agent is removed — provided the daemon is run
+	// with --sqlite-foreign-key, which the orchestrator should set.
+	// (Belt-and-braces app-level cleanup also runs from the agent
+	// removal path so the table stays sane regardless of the flag.)
+	//
+	// Jobs are attached to the agent only — there is no session_id
+	// column. Submitters that want to associate a job with a chat
+	// session set the io.openotters.session-id label, and the same
+	// label-selector path on ListAsyncJobs filters on it. See the
+	// proto's standard-labels comment for the full reserved set.
+	if _, err := db.ExecContext(ctx, `
+		CREATE TABLE IF NOT EXISTS async_jobs (
+			id            TEXT PRIMARY KEY,
+			agent_id      TEXT NOT NULL,
+			bin           TEXT NOT NULL,
+			args_json     TEXT NOT NULL DEFAULT '[]',
+			stdin         TEXT NOT NULL DEFAULT '',
+			labels_json   TEXT NOT NULL DEFAULT '{}',
+			status        TEXT NOT NULL CHECK (status IN
+			                ('pending','running','done','error','cancelled','orphaned')),
+			handle        TEXT NOT NULL DEFAULT '',
+			exit_code     INTEGER,
+			stdout        TEXT NOT NULL DEFAULT '',
+			stderr        TEXT NOT NULL DEFAULT '',
+			error         TEXT NOT NULL DEFAULT '',
+			created_at    INTEGER NOT NULL,
+			started_at    INTEGER,
+			finished_at   INTEGER,
+			FOREIGN KEY (agent_id) REFERENCES agents(id) ON DELETE CASCADE
+		);
+	`); err != nil {
+		return err
+	}
+
+	// Idempotent ADD COLUMN for daemons whose async_jobs table
+	// pre-dates labels. Cheap PRAGMA inspection; wins over forcing
+	// dev users to wipe their state DB just to start the daemon.
+	if err := addColumnIfMissing(ctx, db,
+		"async_jobs", "labels_json", "TEXT NOT NULL DEFAULT '{}'",
+	); err != nil {
+		return err
+	}
+
+	// Idempotent DROP COLUMN for daemons whose async_jobs table
+	// pre-dates the session-detachment refactor (jobs were attached
+	// to a session via a NOT NULL session_id column; now they're
+	// attached to the agent only and the relationship — if any — is
+	// expressed via the io.openotters.session-id label). Same
+	// rationale as the labels_json add: dev iteration trumps the
+	// "no retro-compat" purity since wiping the state DB to start
+	// the daemon is friction that shouldn't be necessary.
+	if err := dropColumnIfPresent(ctx, db, "async_jobs", "session_id"); err != nil {
+		return err
+	}
+
+	if _, err := db.ExecContext(ctx,
+		`CREATE INDEX IF NOT EXISTS idx_async_jobs_agent ON async_jobs(agent_id, status)`,
+	); err != nil {
+		return err
+	}
+
+	if _, err := db.ExecContext(ctx,
+		`CREATE INDEX IF NOT EXISTS idx_async_jobs_status ON async_jobs(status, created_at)`,
+	); err != nil {
+		return err
+	}
+
+	// The sessions index table existed solely to resolve session-id
+	// → agent-id at SubmitAsyncJob time, back when jobs were attached
+	// to sessions. With jobs now attached to agents directly (the
+	// session relationship is just a label), the table has no other
+	// callers. Drop it on upgrade; new installs never create it.
+	if _, err := db.ExecContext(ctx, `DROP TABLE IF EXISTS sessions`); err != nil {
+		return err
+	}
+
 	return nil
+}
+
+// dropColumnIfPresent inverts addColumnIfMissing: looks for `column`
+// in `table` via PRAGMA table_info, and runs ALTER TABLE DROP COLUMN
+// only when it's there. SQLite's DROP COLUMN has been supported
+// since 3.35; modernc.org/sqlite tracks recent versions, so this
+// works without the temp-table dance. Used for forward-only schema
+// cleanups like the session_id removal — fresh installs never had
+// the column, upgrades shed it on first boot.
+func dropColumnIfPresent(ctx context.Context, db *sql.DB, table, column string) error {
+	rows, err := db.QueryContext(ctx, "PRAGMA table_info("+table+")")
+	if err != nil {
+		return fmt.Errorf("inspecting %s schema: %w", table, err)
+	}
+	defer rows.Close()
+
+	found := false
+	for rows.Next() {
+		var (
+			cid      int
+			name     string
+			colType  string
+			notnull  int
+			dflt     sql.NullString
+			isPKPart int
+		)
+
+		if scanErr := rows.Scan(&cid, &name, &colType, &notnull, &dflt, &isPKPart); scanErr != nil {
+			return fmt.Errorf("scanning %s schema: %w", table, scanErr)
+		}
+
+		if name == column {
+			found = true
+			break
+		}
+	}
+
+	if err = rows.Err(); err != nil {
+		return fmt.Errorf("iterating %s schema: %w", table, err)
+	}
+
+	if !found {
+		return nil
+	}
+
+	_, err = db.ExecContext(ctx,
+		fmt.Sprintf("ALTER TABLE %s DROP COLUMN %s", table, column),
+	)
+	return err
 }
 
 // addColumnIfMissing is a small helper for schema migrations that only
@@ -152,10 +293,20 @@ func (s *StateStore) SaveAgent(ctx context.Context, a persistedAgent) error {
 		mounts = []byte("[]")
 	}
 
+	labels, err := json.Marshal(a.Labels)
+	if err != nil {
+		return fmt.Errorf("encoding labels: %w", err)
+	}
+
+	if len(a.Labels) == 0 {
+		labels = []byte("{}")
+	}
+
 	_, err = s.db.ExecContext(ctx,
-		`INSERT OR REPLACE INTO agents (id, name, agent_name, model, runtime, tag, status, created_at, mounts)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		a.ID, a.Name, a.AgentName, a.Model, a.Runtime, a.Tag, a.Status, a.CreatedAt, string(mounts),
+		`INSERT OR REPLACE INTO agents (id, name, agent_name, model, runtime, tag, status, created_at, mounts, labels_json)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		a.ID, a.Name, a.AgentName, a.Model, a.Runtime, a.Tag, a.Status,
+		a.CreatedAt, string(mounts), string(labels),
 	)
 
 	return err
@@ -312,7 +463,7 @@ func (s *StateStore) ReplaceAllImages(ctx context.Context, imgs []PersistedImage
 
 func (s *StateStore) ListAgents(ctx context.Context) ([]persistedAgent, error) {
 	rows, err := s.db.QueryContext(ctx,
-		"SELECT id, name, agent_name, model, runtime, tag, status, created_at, mounts FROM agents ORDER BY created_at ASC",
+		"SELECT id, name, agent_name, model, runtime, tag, status, created_at, mounts, labels_json FROM agents ORDER BY created_at ASC",
 	)
 	if err != nil {
 		return nil, fmt.Errorf("querying agents: %w", err)
@@ -325,11 +476,12 @@ func (s *StateStore) ListAgents(ctx context.Context) ([]persistedAgent, error) {
 		var (
 			a      persistedAgent
 			mounts string
+			labels string
 		)
 
 		if err = rows.Scan(
 			&a.ID, &a.Name, &a.AgentName, &a.Model, &a.Runtime,
-			&a.Tag, &a.Status, &a.CreatedAt, &mounts,
+			&a.Tag, &a.Status, &a.CreatedAt, &mounts, &labels,
 		); err != nil {
 			return nil, fmt.Errorf("scanning agent: %w", err)
 		}
@@ -337,6 +489,11 @@ func (s *StateStore) ListAgents(ctx context.Context) ([]persistedAgent, error) {
 		if mounts != "" && mounts != "[]" {
 			if err = json.Unmarshal([]byte(mounts), &a.Mounts); err != nil {
 				return nil, fmt.Errorf("decoding mounts for %s: %w", a.ID, err)
+			}
+		}
+		if labels != "" && labels != "{}" {
+			if err = json.Unmarshal([]byte(labels), &a.Labels); err != nil {
+				return nil, fmt.Errorf("decoding labels for %s: %w", a.ID, err)
 			}
 		}
 

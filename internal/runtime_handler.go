@@ -197,10 +197,10 @@ func (h *runtimeHandler) CreateAgent(
 }
 
 func (h *runtimeHandler) ListAgents(
-	_ context.Context, _ *connect.Request[daemonv1.ListAgentsRequest],
+	_ context.Context, req *connect.Request[daemonv1.ListAgentsRequest],
 ) (*connect.Response[daemonv1.ListAgentsResponse], error) {
 	return connect.NewResponse(&daemonv1.ListAgentsResponse{
-		Agents: h.daemon.List(),
+		Agents: h.daemon.List(req.Msg.GetLabelSelector()),
 	}), nil
 }
 

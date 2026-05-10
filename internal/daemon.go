@@ -34,6 +34,7 @@ import (
 	afstore "github.com/openotters/agentfile/store"
 	"github.com/openotters/bin/pkg/bin"
 	daemonv1 "github.com/openotters/openotters/api/v1"
+	"github.com/openotters/openotters/internal/asyncjobs"
 )
 
 const (
@@ -61,6 +62,10 @@ type managedAgent struct {
 	status    string
 	createdAt time.Time
 	mounts    []agentpkg.Mount
+	// labels — see api/v1/daemon.proto's "labels (shared semantics)"
+	// comment for reserved io.openotters.* keys. Persisted alongside
+	// the agent and surfaced on every ListAgents read.
+	labels map[string]string
 
 	// Image / runtime / tools metadata captured at create time.
 	// Populated for agents created since the daemon started; left
@@ -286,6 +291,11 @@ type Daemon struct {
 	shutdownTimeout time.Duration
 
 	agents map[string]*managedAgent
+
+	// asyncJobs dispatches BIN jobs against an agent's spawn env;
+	// completions land in the agent's session as synthetic turns.
+	// Constructed in NewDaemon, replayed on Boot, drained on shutdown.
+	asyncJobs *asyncjobs.Pool
 }
 
 // DaemonOption configures the Daemon at construction time.
@@ -534,7 +544,7 @@ func NewDaemon(
 		poolOpts = append(poolOpts, WithBackoffCap(cfg.backoffCap))
 	}
 
-	return &Daemon{
+	d := &Daemon{
 		pool:            NewPool(provider, poolOpts...),
 		providers:       providers,
 		registry:        reg,
@@ -556,7 +566,31 @@ func NewDaemon(
 		catwalk:         newCatwalkCatalogue(),
 		agents:          make(map[string]*managedAgent),
 	}
+
+	// Async-jobs Pool: dispatcher + Store. The pool persists status
+	// transitions to the row; observers (agent runtime, operator CLI,
+	// UI) read via GetAsyncJob / ListAsyncJobs RPCs and decide on
+	// their own watch strategy. The daemon itself never pushes
+	// completion anywhere.
+	d.asyncJobs = asyncjobs.NewPool(
+		asyncjobs.NewStore(state.db),
+		d, // daemon implements asyncjobs.AgentLookup via pool.Get
+		daemonLogger,
+	)
+
+	return d
 }
+
+// Get implements asyncjobs.AgentLookup so the async-jobs Pool can
+// resolve a job's agent UUID to a running Agent. Returns false when
+// the agent is stopped/removed/unknown.
+func (d *Daemon) Get(id uuid.UUID) (agentpkg.Agent, bool) {
+	return d.pool.Get(id)
+}
+
+// AsyncJobs exposes the async-jobs Pool to the gRPC handlers and to
+// the serve loop's Boot / Shutdown calls.
+func (d *Daemon) AsyncJobs() *asyncjobs.Pool { return d.asyncJobs }
 
 // Info returns a snapshot of the daemon's runtime coordinates for
 // display by `otters info`. Cheap — everything is in-memory.
@@ -864,6 +898,7 @@ func (d *Daemon) Restore(ctx context.Context) error {
 			status:    pa.Status,
 			createdAt: pa.CreatedAt,
 			mounts:    mounts,
+			labels:    pa.Labels,
 		}
 
 		agentOpts := []system.AgentOption{
@@ -1357,6 +1392,7 @@ func (d *Daemon) CreateAgent(
 		status:    statusCreated,
 		createdAt: time.Now(),
 		mounts:    mounts,
+		labels:    req.GetLabels(),
 	}
 
 	if req.GetModel() != "" {
@@ -1375,6 +1411,7 @@ func (d *Daemon) CreateAgent(
 		Status:    statusCreated,
 		CreatedAt: ma.createdAt,
 		Mounts:    mountsToPersisted(mounts),
+		Labels:    ma.labels,
 	}); saveErr != nil {
 		d.logger.Warn("failed to persist agent", zap.Error(saveErr))
 	}
@@ -1430,10 +1467,17 @@ func (d *Daemon) hydrateProvenance(ma *managedAgent) {
 	}
 }
 
-func (d *Daemon) List() []*daemonv1.AgentInfo {
+// List returns every agent the daemon knows about. labelSelector
+// drops any agent that doesn't have all the requested key=value
+// pairs (logical AND, missing keys never match). Filter is applied
+// in-memory: there's no SQL query — d.agents IS the live state.
+func (d *Daemon) List(labelSelector map[string]string) []*daemonv1.AgentInfo {
 	infos := make([]*daemonv1.AgentInfo, 0, len(d.agents))
 
 	for _, ma := range d.agents {
+		if !labelsMatch(ma.labels, labelSelector) {
+			continue
+		}
 		d.hydrateProvenance(ma)
 
 		status := ma.status
@@ -1471,10 +1515,28 @@ func (d *Daemon) List() []*daemonv1.AgentInfo {
 			RuntimeRef:    ma.runtimeRef,
 			RuntimeDigest: ma.runtimeDigest,
 			Tools:         tools,
+			Labels:        ma.labels,
 		})
 	}
 
 	return infos
+}
+
+// labelsMatch reports whether `have` contains every key=value in
+// `want`. Empty `want` matches everything. Empty `have` only
+// matches an empty `want`. Used by Daemon.List for the in-memory
+// agent label-selector filter; the asyncjobs store applies an
+// equivalent filter in SQL.
+func labelsMatch(have, want map[string]string) bool {
+	if len(want) == 0 {
+		return true
+	}
+	for k, v := range want {
+		if have[k] != v {
+			return false
+		}
+	}
+	return true
 }
 
 func (d *Daemon) Stop(ctx context.Context, ref string) error {
@@ -1509,6 +1571,18 @@ func (d *Daemon) Remove(ctx context.Context, ref string) error {
 	}
 
 	delete(d.agents, ma.id.String())
+
+	// Drop async-jobs for the agent first — belt-and-braces for hosts
+	// running without --sqlite-foreign-key (the FK cascade in
+	// migrateState handles the rest, but only when enforcement is on).
+	if jobsRemoved, jobsErr := asyncjobs.NewStore(d.state.db).
+		DeleteByAgent(ctx, ma.id.String()); jobsErr != nil {
+		d.logger.Warn("async-jobs remove failed", zap.Error(jobsErr))
+	} else if jobsRemoved > 0 {
+		d.logger.Info("async-jobs cascaded with agent",
+			zap.Int64("rows", jobsRemoved),
+			zap.String("agent", ma.id.String()))
+	}
 
 	if rmErr := d.state.RemoveAgent(ctx, ma.id.String()); rmErr != nil {
 		d.logger.Warn("failed to persist removal", zap.Error(rmErr))

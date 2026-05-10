@@ -46,6 +46,11 @@ const (
 	Runtime_AddProvider_FullMethodName         = "/openotters.daemon.v1.Runtime/AddProvider"
 	Runtime_UpdateProvider_FullMethodName      = "/openotters.daemon.v1.Runtime/UpdateProvider"
 	Runtime_RemoveProvider_FullMethodName      = "/openotters.daemon.v1.Runtime/RemoveProvider"
+	Runtime_SubmitAsyncJob_FullMethodName      = "/openotters.daemon.v1.Runtime/SubmitAsyncJob"
+	Runtime_CancelAsyncJob_FullMethodName      = "/openotters.daemon.v1.Runtime/CancelAsyncJob"
+	Runtime_GetAsyncJob_FullMethodName         = "/openotters.daemon.v1.Runtime/GetAsyncJob"
+	Runtime_ListAsyncJobs_FullMethodName       = "/openotters.daemon.v1.Runtime/ListAsyncJobs"
+	Runtime_WatchAsyncJob_FullMethodName       = "/openotters.daemon.v1.Runtime/WatchAsyncJob"
 )
 
 // RuntimeClient is the client API for Runtime service.
@@ -79,6 +84,24 @@ type RuntimeClient interface {
 	AddProvider(ctx context.Context, in *AddProviderRequest, opts ...grpc.CallOption) (*AddProviderResponse, error)
 	UpdateProvider(ctx context.Context, in *UpdateProviderRequest, opts ...grpc.CallOption) (*UpdateProviderResponse, error)
 	RemoveProvider(ctx context.Context, in *RemoveProviderRequest, opts ...grpc.CallOption) (*RemoveProviderResponse, error)
+	// ── async jobs ────────────────────────────────────────────────────
+	// Submit a BIN job to run against the agent's spawn env. Jobs are
+	// attached to the agent — not to a session. The daemon does not
+	// push results anywhere on completion: observers (agent runtime,
+	// operator CLI, UI) read via GetAsyncJob / WatchAsyncJob and
+	// decide their own watch strategy.
+	SubmitAsyncJob(ctx context.Context, in *SubmitAsyncJobRequest, opts ...grpc.CallOption) (*SubmitAsyncJobResponse, error)
+	CancelAsyncJob(ctx context.Context, in *CancelAsyncJobRequest, opts ...grpc.CallOption) (*CancelAsyncJobResponse, error)
+	GetAsyncJob(ctx context.Context, in *GetAsyncJobRequest, opts ...grpc.CallOption) (*GetAsyncJobResponse, error)
+	ListAsyncJobs(ctx context.Context, in *ListAsyncJobsRequest, opts ...grpc.CallOption) (*ListAsyncJobsResponse, error)
+	// Server-streaming watch: emits the current AsyncJob immediately,
+	// then again on every material change (status, handle, exit_code,
+	// stdout, stderr, error, started_at, finished_at), then closes the
+	// stream when the job reaches a terminal status. NotFound at start
+	// when the job doesn't exist. Implemented as a server-side poll
+	// (~250 ms) — observers see at most ~250 ms latency from a status
+	// flip to the corresponding stream message.
+	WatchAsyncJob(ctx context.Context, in *WatchAsyncJobRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[WatchAsyncJobResponse], error)
 }
 
 type runtimeClient struct {
@@ -368,6 +391,65 @@ func (c *runtimeClient) RemoveProvider(ctx context.Context, in *RemoveProviderRe
 	return out, nil
 }
 
+func (c *runtimeClient) SubmitAsyncJob(ctx context.Context, in *SubmitAsyncJobRequest, opts ...grpc.CallOption) (*SubmitAsyncJobResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SubmitAsyncJobResponse)
+	err := c.cc.Invoke(ctx, Runtime_SubmitAsyncJob_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *runtimeClient) CancelAsyncJob(ctx context.Context, in *CancelAsyncJobRequest, opts ...grpc.CallOption) (*CancelAsyncJobResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CancelAsyncJobResponse)
+	err := c.cc.Invoke(ctx, Runtime_CancelAsyncJob_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *runtimeClient) GetAsyncJob(ctx context.Context, in *GetAsyncJobRequest, opts ...grpc.CallOption) (*GetAsyncJobResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetAsyncJobResponse)
+	err := c.cc.Invoke(ctx, Runtime_GetAsyncJob_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *runtimeClient) ListAsyncJobs(ctx context.Context, in *ListAsyncJobsRequest, opts ...grpc.CallOption) (*ListAsyncJobsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListAsyncJobsResponse)
+	err := c.cc.Invoke(ctx, Runtime_ListAsyncJobs_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *runtimeClient) WatchAsyncJob(ctx context.Context, in *WatchAsyncJobRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[WatchAsyncJobResponse], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &Runtime_ServiceDesc.Streams[1], Runtime_WatchAsyncJob_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[WatchAsyncJobRequest, WatchAsyncJobResponse]{ClientStream: stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type Runtime_WatchAsyncJobClient = grpc.ServerStreamingClient[WatchAsyncJobResponse]
+
 // RuntimeServer is the server API for Runtime service.
 // All implementations must embed UnimplementedRuntimeServer
 // for forward compatibility.
@@ -399,6 +481,24 @@ type RuntimeServer interface {
 	AddProvider(context.Context, *AddProviderRequest) (*AddProviderResponse, error)
 	UpdateProvider(context.Context, *UpdateProviderRequest) (*UpdateProviderResponse, error)
 	RemoveProvider(context.Context, *RemoveProviderRequest) (*RemoveProviderResponse, error)
+	// ── async jobs ────────────────────────────────────────────────────
+	// Submit a BIN job to run against the agent's spawn env. Jobs are
+	// attached to the agent — not to a session. The daemon does not
+	// push results anywhere on completion: observers (agent runtime,
+	// operator CLI, UI) read via GetAsyncJob / WatchAsyncJob and
+	// decide their own watch strategy.
+	SubmitAsyncJob(context.Context, *SubmitAsyncJobRequest) (*SubmitAsyncJobResponse, error)
+	CancelAsyncJob(context.Context, *CancelAsyncJobRequest) (*CancelAsyncJobResponse, error)
+	GetAsyncJob(context.Context, *GetAsyncJobRequest) (*GetAsyncJobResponse, error)
+	ListAsyncJobs(context.Context, *ListAsyncJobsRequest) (*ListAsyncJobsResponse, error)
+	// Server-streaming watch: emits the current AsyncJob immediately,
+	// then again on every material change (status, handle, exit_code,
+	// stdout, stderr, error, started_at, finished_at), then closes the
+	// stream when the job reaches a terminal status. NotFound at start
+	// when the job doesn't exist. Implemented as a server-side poll
+	// (~250 ms) — observers see at most ~250 ms latency from a status
+	// flip to the corresponding stream message.
+	WatchAsyncJob(*WatchAsyncJobRequest, grpc.ServerStreamingServer[WatchAsyncJobResponse]) error
 	mustEmbedUnimplementedRuntimeServer()
 }
 
@@ -489,6 +589,21 @@ func (UnimplementedRuntimeServer) UpdateProvider(context.Context, *UpdateProvide
 }
 func (UnimplementedRuntimeServer) RemoveProvider(context.Context, *RemoveProviderRequest) (*RemoveProviderResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method RemoveProvider not implemented")
+}
+func (UnimplementedRuntimeServer) SubmitAsyncJob(context.Context, *SubmitAsyncJobRequest) (*SubmitAsyncJobResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method SubmitAsyncJob not implemented")
+}
+func (UnimplementedRuntimeServer) CancelAsyncJob(context.Context, *CancelAsyncJobRequest) (*CancelAsyncJobResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method CancelAsyncJob not implemented")
+}
+func (UnimplementedRuntimeServer) GetAsyncJob(context.Context, *GetAsyncJobRequest) (*GetAsyncJobResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetAsyncJob not implemented")
+}
+func (UnimplementedRuntimeServer) ListAsyncJobs(context.Context, *ListAsyncJobsRequest) (*ListAsyncJobsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListAsyncJobs not implemented")
+}
+func (UnimplementedRuntimeServer) WatchAsyncJob(*WatchAsyncJobRequest, grpc.ServerStreamingServer[WatchAsyncJobResponse]) error {
+	return status.Error(codes.Unimplemented, "method WatchAsyncJob not implemented")
 }
 func (UnimplementedRuntimeServer) mustEmbedUnimplementedRuntimeServer() {}
 func (UnimplementedRuntimeServer) testEmbeddedByValue()                 {}
@@ -990,6 +1105,89 @@ func _Runtime_RemoveProvider_Handler(srv interface{}, ctx context.Context, dec f
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Runtime_SubmitAsyncJob_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SubmitAsyncJobRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(RuntimeServer).SubmitAsyncJob(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Runtime_SubmitAsyncJob_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(RuntimeServer).SubmitAsyncJob(ctx, req.(*SubmitAsyncJobRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Runtime_CancelAsyncJob_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CancelAsyncJobRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(RuntimeServer).CancelAsyncJob(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Runtime_CancelAsyncJob_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(RuntimeServer).CancelAsyncJob(ctx, req.(*CancelAsyncJobRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Runtime_GetAsyncJob_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetAsyncJobRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(RuntimeServer).GetAsyncJob(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Runtime_GetAsyncJob_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(RuntimeServer).GetAsyncJob(ctx, req.(*GetAsyncJobRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Runtime_ListAsyncJobs_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListAsyncJobsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(RuntimeServer).ListAsyncJobs(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Runtime_ListAsyncJobs_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(RuntimeServer).ListAsyncJobs(ctx, req.(*ListAsyncJobsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Runtime_WatchAsyncJob_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(WatchAsyncJobRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(RuntimeServer).WatchAsyncJob(m, &grpc.GenericServerStream[WatchAsyncJobRequest, WatchAsyncJobResponse]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type Runtime_WatchAsyncJobServer = grpc.ServerStreamingServer[WatchAsyncJobResponse]
+
 // Runtime_ServiceDesc is the grpc.ServiceDesc for Runtime service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -1101,11 +1299,32 @@ var Runtime_ServiceDesc = grpc.ServiceDesc{
 			MethodName: "RemoveProvider",
 			Handler:    _Runtime_RemoveProvider_Handler,
 		},
+		{
+			MethodName: "SubmitAsyncJob",
+			Handler:    _Runtime_SubmitAsyncJob_Handler,
+		},
+		{
+			MethodName: "CancelAsyncJob",
+			Handler:    _Runtime_CancelAsyncJob_Handler,
+		},
+		{
+			MethodName: "GetAsyncJob",
+			Handler:    _Runtime_GetAsyncJob_Handler,
+		},
+		{
+			MethodName: "ListAsyncJobs",
+			Handler:    _Runtime_ListAsyncJobs_Handler,
+		},
 	},
 	Streams: []grpc.StreamDesc{
 		{
 			StreamName:    "ChatStreamWithAgent",
 			Handler:       _Runtime_ChatStreamWithAgent_Handler,
+			ServerStreams: true,
+		},
+		{
+			StreamName:    "WatchAsyncJob",
+			Handler:       _Runtime_WatchAsyncJob_Handler,
 			ServerStreams: true,
 		},
 	},

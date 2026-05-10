@@ -32,7 +32,49 @@ service Runtime {
   rpc AddProvider(AddProviderRequest) returns (AddProviderResponse);
   rpc UpdateProvider(UpdateProviderRequest) returns (UpdateProviderResponse);
   rpc RemoveProvider(RemoveProviderRequest) returns (RemoveProviderResponse);
+
+  // ── labels (shared semantics) ─────────────────────────────────────
+  // Both agents and jobs accept arbitrary string labels at creation /
+  // submit time, and both expose a label_selector filter on their
+  // List RPC. The daemon stores label values verbatim and never
+  // validates them.
+  //
+  // Standard labels (the io.openotters.* namespace is reserved —
+  // future daemon versions may attach interpretation):
+  //
+  //   io.openotters.session-id   Chat session a job was originated
+  //                              from. Jobs only — agents have many
+  //                              sessions over their lifetime, so
+  //                              this label has no defined meaning
+  //                              when set on an agent.
+  //   io.openotters.origin       What triggered the create / submit:
+  //                              cli | chat | agent-tool | scheduler
+  //                              | webhook | external. Applies to
+  //                              both agents and jobs.
+  //
+  // Non-reserved keys (anything outside io.openotters.*) are stored
+  // and filterable but otherwise opaque.
+
+  // ── async jobs ────────────────────────────────────────────────────
+  // Submit a BIN job to run against the agent's spawn env. Jobs are
+  // attached to the agent — not to a session. The daemon does not
+  // push results anywhere on completion: observers (agent runtime,
+  // operator CLI, UI) read via GetAsyncJob / WatchAsyncJob and
+  // decide their own watch strategy.
+  rpc SubmitAsyncJob(SubmitAsyncJobRequest) returns (SubmitAsyncJobResponse);
+  rpc CancelAsyncJob(CancelAsyncJobRequest) returns (CancelAsyncJobResponse);
+  rpc GetAsyncJob(GetAsyncJobRequest)       returns (GetAsyncJobResponse);
+  rpc ListAsyncJobs(ListAsyncJobsRequest)   returns (ListAsyncJobsResponse);
+  // Server-streaming watch: emits the current AsyncJob immediately,
+  // then again on every material change (status, handle, exit_code,
+  // stdout, stderr, error, started_at, finished_at), then closes the
+  // stream when the job reaches a terminal status. NotFound at start
+  // when the job doesn't exist. Implemented as a server-side poll
+  // (~250 ms) — observers see at most ~250 ms latency from a status
+  // flip to the corresponding stream message.
+  rpc WatchAsyncJob(WatchAsyncJobRequest) returns (stream WatchAsyncJobResponse);
 }
+
 
 message ListModelsRequest {}
 
@@ -288,6 +330,8 @@ message CreateAgentRequest {
   // HOME, *_API_KEY, OTTERS_AGENT_ROOT, etc.) are rejected by
   // spec.Validate before the agent starts.
   repeated EnvOverride envs = 6;
+  // Labels — see service-level "labels (shared semantics)" comment.
+  map<string, string> labels = 7;
 }
 
 message EnvOverride {
@@ -301,7 +345,12 @@ message CreateAgentResponse {
   string status = 3;
 }
 
-message ListAgentsRequest {}
+message ListAgentsRequest {
+  // label_selector — every key=value pair must match (logical AND).
+  // Empty map = no label filter. Compares against labels stored at
+  // CreateAgent time; missing keys never match.
+  map<string, string> label_selector = 1;
+}
 
 message AgentInfo {
   string id = 1;
@@ -325,6 +374,9 @@ message AgentInfo {
   string runtime_digest = 12;
   // BIN directives from the agent's Agentfile.
   repeated AgentTool tools = 13;
+  // Labels attached at CreateAgent time. Same shape and reserved
+  // namespace as job labels — see the service-level comment.
+  map<string, string> labels = 14;
 }
 
 message ListAgentsResponse {
@@ -473,3 +525,66 @@ message RemoveProviderRequest {
 }
 
 message RemoveProviderResponse {}
+
+// ── async jobs ──────────────────────────────────────────────────────
+
+message SubmitAsyncJobRequest {
+  // agent_ref is the agent name OR UUID (same resolution as
+  // ChatWithAgent's `ref`). The agent must be running.
+  string  agent_ref  = 1;
+  string  bin        = 2;
+  repeated string args = 3;
+  string  stdin      = 4;
+  // labels are arbitrary metadata attached to the job. See the
+  // service-level comment for standard io.openotters.* keys. The
+  // daemon stores them verbatim and exposes them on every read; it
+  // never validates or interprets the values.
+  map<string, string> labels = 5;
+}
+
+message SubmitAsyncJobResponse {
+  string job_id = 1;
+}
+
+message CancelAsyncJobRequest  { string job_id = 1; }
+message CancelAsyncJobResponse {}
+
+message GetAsyncJobRequest  { string job_id = 1; }
+message GetAsyncJobResponse { AsyncJob job = 1; }
+
+message WatchAsyncJobRequest  { string job_id = 1; }
+message WatchAsyncJobResponse { AsyncJob job = 1; }
+
+message ListAsyncJobsRequest {
+  string agent_id = 1;             // empty = all agents
+  string status   = 2;             // empty = all statuses
+  // label_selector — every key=value pair must match (logical AND).
+  // Empty map = no label filter. Compares against the labels stored
+  // at submit time; non-existent keys never match.
+  map<string, string> label_selector = 3;
+}
+message ListAsyncJobsResponse {
+  repeated AsyncJob jobs = 1;
+}
+
+message AsyncJob {
+  string  id           = 1;
+  string  agent_id     = 2;
+  // field 3 reserved — was `session_id` before jobs were detached
+  // from sessions and migrated to a label (io.openotters.session-id).
+  reserved 3;
+  reserved "session_id";
+  string  bin          = 4;
+  repeated string args = 5;
+  string  stdin        = 6;
+  string  status       = 7;        // 'pending'|'running'|'done'|'error'|'cancelled'|'orphaned'
+  string  handle       = 8;        // PID (system) or container ID (docker); empty when not yet known
+  int32   exit_code    = 9;
+  string  stdout       = 10;
+  string  stderr       = 11;
+  string  error        = 12;
+  int64   created_at   = 13;       // unix seconds
+  int64   started_at   = 14;
+  int64   finished_at  = 15;
+  map<string, string> labels = 16;
+}

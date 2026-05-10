@@ -107,6 +107,9 @@ func (f *fakeAgent) Stop(_ context.Context) error                      { return 
 func (f *fakeAgent) Remove(_ context.Context) error                    { return nil }
 func (f *fakeAgent) Status() agentpkg.Status                           { return f.tracker.Get() }
 func (f *fakeAgent) SubscribeStatus() (<-chan agentpkg.Status, func()) { return f.tracker.Subscribe() }
+func (f *fakeAgent) Exec(_ context.Context, _ string, _ []string, _ string) agentpkg.ExecResult {
+	return agentpkg.ExecResult{}
+}
 
 func (f *fakeAgent) nextOutcome() fakeOutcome {
 	f.mu.Lock()

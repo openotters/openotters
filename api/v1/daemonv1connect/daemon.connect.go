@@ -89,6 +89,16 @@ const (
 	RuntimeUpdateProviderProcedure = "/openotters.daemon.v1.Runtime/UpdateProvider"
 	// RuntimeRemoveProviderProcedure is the fully-qualified name of the Runtime's RemoveProvider RPC.
 	RuntimeRemoveProviderProcedure = "/openotters.daemon.v1.Runtime/RemoveProvider"
+	// RuntimeSubmitAsyncJobProcedure is the fully-qualified name of the Runtime's SubmitAsyncJob RPC.
+	RuntimeSubmitAsyncJobProcedure = "/openotters.daemon.v1.Runtime/SubmitAsyncJob"
+	// RuntimeCancelAsyncJobProcedure is the fully-qualified name of the Runtime's CancelAsyncJob RPC.
+	RuntimeCancelAsyncJobProcedure = "/openotters.daemon.v1.Runtime/CancelAsyncJob"
+	// RuntimeGetAsyncJobProcedure is the fully-qualified name of the Runtime's GetAsyncJob RPC.
+	RuntimeGetAsyncJobProcedure = "/openotters.daemon.v1.Runtime/GetAsyncJob"
+	// RuntimeListAsyncJobsProcedure is the fully-qualified name of the Runtime's ListAsyncJobs RPC.
+	RuntimeListAsyncJobsProcedure = "/openotters.daemon.v1.Runtime/ListAsyncJobs"
+	// RuntimeWatchAsyncJobProcedure is the fully-qualified name of the Runtime's WatchAsyncJob RPC.
+	RuntimeWatchAsyncJobProcedure = "/openotters.daemon.v1.Runtime/WatchAsyncJob"
 )
 
 // RuntimeClient is a client for the openotters.daemon.v1.Runtime service.
@@ -120,6 +130,24 @@ type RuntimeClient interface {
 	AddProvider(context.Context, *connect.Request[v1.AddProviderRequest]) (*connect.Response[v1.AddProviderResponse], error)
 	UpdateProvider(context.Context, *connect.Request[v1.UpdateProviderRequest]) (*connect.Response[v1.UpdateProviderResponse], error)
 	RemoveProvider(context.Context, *connect.Request[v1.RemoveProviderRequest]) (*connect.Response[v1.RemoveProviderResponse], error)
+	// ── async jobs ────────────────────────────────────────────────────
+	// Submit a BIN job to run against the agent's spawn env. Jobs are
+	// attached to the agent — not to a session. The daemon does not
+	// push results anywhere on completion: observers (agent runtime,
+	// operator CLI, UI) read via GetAsyncJob / WatchAsyncJob and
+	// decide their own watch strategy.
+	SubmitAsyncJob(context.Context, *connect.Request[v1.SubmitAsyncJobRequest]) (*connect.Response[v1.SubmitAsyncJobResponse], error)
+	CancelAsyncJob(context.Context, *connect.Request[v1.CancelAsyncJobRequest]) (*connect.Response[v1.CancelAsyncJobResponse], error)
+	GetAsyncJob(context.Context, *connect.Request[v1.GetAsyncJobRequest]) (*connect.Response[v1.GetAsyncJobResponse], error)
+	ListAsyncJobs(context.Context, *connect.Request[v1.ListAsyncJobsRequest]) (*connect.Response[v1.ListAsyncJobsResponse], error)
+	// Server-streaming watch: emits the current AsyncJob immediately,
+	// then again on every material change (status, handle, exit_code,
+	// stdout, stderr, error, started_at, finished_at), then closes the
+	// stream when the job reaches a terminal status. NotFound at start
+	// when the job doesn't exist. Implemented as a server-side poll
+	// (~250 ms) — observers see at most ~250 ms latency from a status
+	// flip to the corresponding stream message.
+	WatchAsyncJob(context.Context, *connect.Request[v1.WatchAsyncJobRequest]) (*connect.ServerStreamForClient[v1.WatchAsyncJobResponse], error)
 }
 
 // NewRuntimeClient constructs a client for the openotters.daemon.v1.Runtime service. By default, it
@@ -295,6 +323,36 @@ func NewRuntimeClient(httpClient connect.HTTPClient, baseURL string, opts ...con
 			connect.WithSchema(runtimeMethods.ByName("RemoveProvider")),
 			connect.WithClientOptions(opts...),
 		),
+		submitAsyncJob: connect.NewClient[v1.SubmitAsyncJobRequest, v1.SubmitAsyncJobResponse](
+			httpClient,
+			baseURL+RuntimeSubmitAsyncJobProcedure,
+			connect.WithSchema(runtimeMethods.ByName("SubmitAsyncJob")),
+			connect.WithClientOptions(opts...),
+		),
+		cancelAsyncJob: connect.NewClient[v1.CancelAsyncJobRequest, v1.CancelAsyncJobResponse](
+			httpClient,
+			baseURL+RuntimeCancelAsyncJobProcedure,
+			connect.WithSchema(runtimeMethods.ByName("CancelAsyncJob")),
+			connect.WithClientOptions(opts...),
+		),
+		getAsyncJob: connect.NewClient[v1.GetAsyncJobRequest, v1.GetAsyncJobResponse](
+			httpClient,
+			baseURL+RuntimeGetAsyncJobProcedure,
+			connect.WithSchema(runtimeMethods.ByName("GetAsyncJob")),
+			connect.WithClientOptions(opts...),
+		),
+		listAsyncJobs: connect.NewClient[v1.ListAsyncJobsRequest, v1.ListAsyncJobsResponse](
+			httpClient,
+			baseURL+RuntimeListAsyncJobsProcedure,
+			connect.WithSchema(runtimeMethods.ByName("ListAsyncJobs")),
+			connect.WithClientOptions(opts...),
+		),
+		watchAsyncJob: connect.NewClient[v1.WatchAsyncJobRequest, v1.WatchAsyncJobResponse](
+			httpClient,
+			baseURL+RuntimeWatchAsyncJobProcedure,
+			connect.WithSchema(runtimeMethods.ByName("WatchAsyncJob")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -327,6 +385,11 @@ type runtimeClient struct {
 	addProvider         *connect.Client[v1.AddProviderRequest, v1.AddProviderResponse]
 	updateProvider      *connect.Client[v1.UpdateProviderRequest, v1.UpdateProviderResponse]
 	removeProvider      *connect.Client[v1.RemoveProviderRequest, v1.RemoveProviderResponse]
+	submitAsyncJob      *connect.Client[v1.SubmitAsyncJobRequest, v1.SubmitAsyncJobResponse]
+	cancelAsyncJob      *connect.Client[v1.CancelAsyncJobRequest, v1.CancelAsyncJobResponse]
+	getAsyncJob         *connect.Client[v1.GetAsyncJobRequest, v1.GetAsyncJobResponse]
+	listAsyncJobs       *connect.Client[v1.ListAsyncJobsRequest, v1.ListAsyncJobsResponse]
+	watchAsyncJob       *connect.Client[v1.WatchAsyncJobRequest, v1.WatchAsyncJobResponse]
 }
 
 // GetInfo calls openotters.daemon.v1.Runtime.GetInfo.
@@ -464,6 +527,31 @@ func (c *runtimeClient) RemoveProvider(ctx context.Context, req *connect.Request
 	return c.removeProvider.CallUnary(ctx, req)
 }
 
+// SubmitAsyncJob calls openotters.daemon.v1.Runtime.SubmitAsyncJob.
+func (c *runtimeClient) SubmitAsyncJob(ctx context.Context, req *connect.Request[v1.SubmitAsyncJobRequest]) (*connect.Response[v1.SubmitAsyncJobResponse], error) {
+	return c.submitAsyncJob.CallUnary(ctx, req)
+}
+
+// CancelAsyncJob calls openotters.daemon.v1.Runtime.CancelAsyncJob.
+func (c *runtimeClient) CancelAsyncJob(ctx context.Context, req *connect.Request[v1.CancelAsyncJobRequest]) (*connect.Response[v1.CancelAsyncJobResponse], error) {
+	return c.cancelAsyncJob.CallUnary(ctx, req)
+}
+
+// GetAsyncJob calls openotters.daemon.v1.Runtime.GetAsyncJob.
+func (c *runtimeClient) GetAsyncJob(ctx context.Context, req *connect.Request[v1.GetAsyncJobRequest]) (*connect.Response[v1.GetAsyncJobResponse], error) {
+	return c.getAsyncJob.CallUnary(ctx, req)
+}
+
+// ListAsyncJobs calls openotters.daemon.v1.Runtime.ListAsyncJobs.
+func (c *runtimeClient) ListAsyncJobs(ctx context.Context, req *connect.Request[v1.ListAsyncJobsRequest]) (*connect.Response[v1.ListAsyncJobsResponse], error) {
+	return c.listAsyncJobs.CallUnary(ctx, req)
+}
+
+// WatchAsyncJob calls openotters.daemon.v1.Runtime.WatchAsyncJob.
+func (c *runtimeClient) WatchAsyncJob(ctx context.Context, req *connect.Request[v1.WatchAsyncJobRequest]) (*connect.ServerStreamForClient[v1.WatchAsyncJobResponse], error) {
+	return c.watchAsyncJob.CallServerStream(ctx, req)
+}
+
 // RuntimeHandler is an implementation of the openotters.daemon.v1.Runtime service.
 type RuntimeHandler interface {
 	GetInfo(context.Context, *connect.Request[v1.GetInfoRequest]) (*connect.Response[v1.GetInfoResponse], error)
@@ -493,6 +581,24 @@ type RuntimeHandler interface {
 	AddProvider(context.Context, *connect.Request[v1.AddProviderRequest]) (*connect.Response[v1.AddProviderResponse], error)
 	UpdateProvider(context.Context, *connect.Request[v1.UpdateProviderRequest]) (*connect.Response[v1.UpdateProviderResponse], error)
 	RemoveProvider(context.Context, *connect.Request[v1.RemoveProviderRequest]) (*connect.Response[v1.RemoveProviderResponse], error)
+	// ── async jobs ────────────────────────────────────────────────────
+	// Submit a BIN job to run against the agent's spawn env. Jobs are
+	// attached to the agent — not to a session. The daemon does not
+	// push results anywhere on completion: observers (agent runtime,
+	// operator CLI, UI) read via GetAsyncJob / WatchAsyncJob and
+	// decide their own watch strategy.
+	SubmitAsyncJob(context.Context, *connect.Request[v1.SubmitAsyncJobRequest]) (*connect.Response[v1.SubmitAsyncJobResponse], error)
+	CancelAsyncJob(context.Context, *connect.Request[v1.CancelAsyncJobRequest]) (*connect.Response[v1.CancelAsyncJobResponse], error)
+	GetAsyncJob(context.Context, *connect.Request[v1.GetAsyncJobRequest]) (*connect.Response[v1.GetAsyncJobResponse], error)
+	ListAsyncJobs(context.Context, *connect.Request[v1.ListAsyncJobsRequest]) (*connect.Response[v1.ListAsyncJobsResponse], error)
+	// Server-streaming watch: emits the current AsyncJob immediately,
+	// then again on every material change (status, handle, exit_code,
+	// stdout, stderr, error, started_at, finished_at), then closes the
+	// stream when the job reaches a terminal status. NotFound at start
+	// when the job doesn't exist. Implemented as a server-side poll
+	// (~250 ms) — observers see at most ~250 ms latency from a status
+	// flip to the corresponding stream message.
+	WatchAsyncJob(context.Context, *connect.Request[v1.WatchAsyncJobRequest], *connect.ServerStream[v1.WatchAsyncJobResponse]) error
 }
 
 // NewRuntimeHandler builds an HTTP handler from the service implementation. It returns the path on
@@ -664,6 +770,36 @@ func NewRuntimeHandler(svc RuntimeHandler, opts ...connect.HandlerOption) (strin
 		connect.WithSchema(runtimeMethods.ByName("RemoveProvider")),
 		connect.WithHandlerOptions(opts...),
 	)
+	runtimeSubmitAsyncJobHandler := connect.NewUnaryHandler(
+		RuntimeSubmitAsyncJobProcedure,
+		svc.SubmitAsyncJob,
+		connect.WithSchema(runtimeMethods.ByName("SubmitAsyncJob")),
+		connect.WithHandlerOptions(opts...),
+	)
+	runtimeCancelAsyncJobHandler := connect.NewUnaryHandler(
+		RuntimeCancelAsyncJobProcedure,
+		svc.CancelAsyncJob,
+		connect.WithSchema(runtimeMethods.ByName("CancelAsyncJob")),
+		connect.WithHandlerOptions(opts...),
+	)
+	runtimeGetAsyncJobHandler := connect.NewUnaryHandler(
+		RuntimeGetAsyncJobProcedure,
+		svc.GetAsyncJob,
+		connect.WithSchema(runtimeMethods.ByName("GetAsyncJob")),
+		connect.WithHandlerOptions(opts...),
+	)
+	runtimeListAsyncJobsHandler := connect.NewUnaryHandler(
+		RuntimeListAsyncJobsProcedure,
+		svc.ListAsyncJobs,
+		connect.WithSchema(runtimeMethods.ByName("ListAsyncJobs")),
+		connect.WithHandlerOptions(opts...),
+	)
+	runtimeWatchAsyncJobHandler := connect.NewServerStreamHandler(
+		RuntimeWatchAsyncJobProcedure,
+		svc.WatchAsyncJob,
+		connect.WithSchema(runtimeMethods.ByName("WatchAsyncJob")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/openotters.daemon.v1.Runtime/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case RuntimeGetInfoProcedure:
@@ -720,6 +856,16 @@ func NewRuntimeHandler(svc RuntimeHandler, opts ...connect.HandlerOption) (strin
 			runtimeUpdateProviderHandler.ServeHTTP(w, r)
 		case RuntimeRemoveProviderProcedure:
 			runtimeRemoveProviderHandler.ServeHTTP(w, r)
+		case RuntimeSubmitAsyncJobProcedure:
+			runtimeSubmitAsyncJobHandler.ServeHTTP(w, r)
+		case RuntimeCancelAsyncJobProcedure:
+			runtimeCancelAsyncJobHandler.ServeHTTP(w, r)
+		case RuntimeGetAsyncJobProcedure:
+			runtimeGetAsyncJobHandler.ServeHTTP(w, r)
+		case RuntimeListAsyncJobsProcedure:
+			runtimeListAsyncJobsHandler.ServeHTTP(w, r)
+		case RuntimeWatchAsyncJobProcedure:
+			runtimeWatchAsyncJobHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -835,4 +981,24 @@ func (UnimplementedRuntimeHandler) UpdateProvider(context.Context, *connect.Requ
 
 func (UnimplementedRuntimeHandler) RemoveProvider(context.Context, *connect.Request[v1.RemoveProviderRequest]) (*connect.Response[v1.RemoveProviderResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("openotters.daemon.v1.Runtime.RemoveProvider is not implemented"))
+}
+
+func (UnimplementedRuntimeHandler) SubmitAsyncJob(context.Context, *connect.Request[v1.SubmitAsyncJobRequest]) (*connect.Response[v1.SubmitAsyncJobResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("openotters.daemon.v1.Runtime.SubmitAsyncJob is not implemented"))
+}
+
+func (UnimplementedRuntimeHandler) CancelAsyncJob(context.Context, *connect.Request[v1.CancelAsyncJobRequest]) (*connect.Response[v1.CancelAsyncJobResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("openotters.daemon.v1.Runtime.CancelAsyncJob is not implemented"))
+}
+
+func (UnimplementedRuntimeHandler) GetAsyncJob(context.Context, *connect.Request[v1.GetAsyncJobRequest]) (*connect.Response[v1.GetAsyncJobResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("openotters.daemon.v1.Runtime.GetAsyncJob is not implemented"))
+}
+
+func (UnimplementedRuntimeHandler) ListAsyncJobs(context.Context, *connect.Request[v1.ListAsyncJobsRequest]) (*connect.Response[v1.ListAsyncJobsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("openotters.daemon.v1.Runtime.ListAsyncJobs is not implemented"))
+}
+
+func (UnimplementedRuntimeHandler) WatchAsyncJob(context.Context, *connect.Request[v1.WatchAsyncJobRequest], *connect.ServerStream[v1.WatchAsyncJobResponse]) error {
+	return connect.NewError(connect.CodeUnimplemented, errors.New("openotters.daemon.v1.Runtime.WatchAsyncJob is not implemented"))
 }

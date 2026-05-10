@@ -147,6 +147,13 @@ func (d *Serve) Run(ctx context.Context, common *cmd.Commons, sqlite *cmd.SQLite
 		logger.Warn("failed to restore agents", zap.Error(restoreErr))
 	}
 
+	// Async-jobs Boot: orphan rows still in `running` from a prior
+	// process, redispatch any `pending`. Runs after agent Restore so
+	// any boot-time delivery has the agents back online.
+	if jobsErr := dm.AsyncJobs().Boot(ctx); jobsErr != nil {
+		logger.Warn("async-jobs boot replay failed", zap.Error(jobsErr))
+	}
+
 	// Single Connect-Go handler serves gRPC, gRPC-Web, and Connect from
 	// the same code path. The protocol is content-type-detected per
 	// request, so the CLI (gRPC over h2c) and the browser (Connect/JSON
@@ -199,6 +206,12 @@ func (d *Serve) Run(ctx context.Context, common *cmd.Commons, sqlite *cmd.SQLite
 
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), d.ShutdownTimeout)
 		defer cancel()
+
+		// Drain async jobs first so their cancellation paths can settle
+		// before the gRPC listener stops accepting traffic.
+		if jobsErr := dm.AsyncJobs().Shutdown(shutdownCtx); jobsErr != nil {
+			logger.Warn("async-jobs shutdown timed out", zap.Error(jobsErr))
+		}
 
 		_ = unixSrv.Shutdown(shutdownCtx)
 
