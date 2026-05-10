@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"sort"
 	"strings"
 	"text/tabwriter"
 	"time"
@@ -14,8 +15,9 @@ import (
 )
 
 type Ps struct {
-	Quiet   bool `short:"q" help:"Only display agent IDs (useful for piping)" default:"false"`
-	Verbose bool `help:"Show extra columns (mounts, etc.)" default:"false"`
+	Quiet   bool     `short:"q" help:"Only display agent IDs (useful for piping)" default:"false"`
+	Verbose bool     `help:"Show extra columns (mounts, labels, etc.)" default:"false"`
+	Labels  []string `name:"label" help:"Filter by key=value label. Repeatable; all labels must match (AND). Example: --label io.openotters.origin=cli"`
 }
 
 func (p *Ps) Run(ctx context.Context, common *cmd.Commons, d *Daemon) error {
@@ -25,7 +27,14 @@ func (p *Ps) Run(ctx context.Context, common *cmd.Commons, d *Daemon) error {
 	}
 	defer conn.Close()
 
-	resp, err := c.ListAgents(ctx, &daemonv1.ListAgentsRequest{})
+	labelSelector, err := parseKVPairs(p.Labels)
+	if err != nil {
+		return fmt.Errorf("--label: %w", err)
+	}
+
+	resp, err := c.ListAgents(ctx, &daemonv1.ListAgentsRequest{
+		LabelSelector: labelSelector,
+	})
 	if err != nil {
 		return err
 	}
@@ -47,7 +56,7 @@ func (p *Ps) Run(ctx context.Context, common *cmd.Commons, d *Daemon) error {
 	w := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
 
 	if p.Verbose {
-		fmt.Fprintln(w, "ID\tNAME\tIMAGE\tMODEL\tSTATUS\tADDR\tCREATED\tMOUNTS")
+		fmt.Fprintln(w, "ID\tNAME\tIMAGE\tMODEL\tSTATUS\tADDR\tCREATED\tMOUNTS\tLABELS")
 	} else {
 		fmt.Fprintln(w, "ID\tNAME\tIMAGE\tMODEL\tSTATUS\tADDR\tCREATED")
 	}
@@ -61,8 +70,9 @@ func (p *Ps) Run(ctx context.Context, common *cmd.Commons, d *Daemon) error {
 		created := time.Unix(a.CreatedAt, 0).Format(time.RFC3339)
 
 		if p.Verbose {
-			fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
-				id, a.Name, a.Image, a.Model, a.Status, a.Addr, created, summarizeMounts(a.GetMounts()))
+			fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
+				id, a.Name, a.Image, a.Model, a.Status, a.Addr, created,
+				summarizeMounts(a.GetMounts()), summarizeLabels(a.GetLabels()))
 		} else {
 			fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
 				id, a.Name, a.Image, a.Model, a.Status, a.Addr, created)
@@ -70,6 +80,26 @@ func (p *Ps) Run(ctx context.Context, common *cmd.Commons, d *Daemon) error {
 	}
 
 	return w.Flush()
+}
+
+// summarizeLabels renders `k=v,k=v,…` on a single line so the
+// tabwriter stays aligned. Empty map renders as "-" so the column
+// never collapses to a blank that visually merges with the previous
+// one. Keys are sorted for deterministic output.
+func summarizeLabels(labels map[string]string) string {
+	if len(labels) == 0 {
+		return "-"
+	}
+	keys := make([]string, 0, len(labels))
+	for k := range labels {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	parts := make([]string, 0, len(keys))
+	for _, k := range keys {
+		parts = append(parts, fmt.Sprintf("%s=%s", k, labels[k]))
+	}
+	return strings.Join(parts, ",")
 }
 
 // summarizeMounts renders `target←host,target←host,…` on a single

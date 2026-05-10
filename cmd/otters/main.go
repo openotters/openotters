@@ -106,6 +106,20 @@ type CMD struct {
 	Image    ImageCmd    `cmd:"" group:"management" help:"Manage agent images — build, push, pull, list, remove, inspect."`
 	Bin      BinCmd      `cmd:"" group:"management" help:"Manage binary tools — build, push, pull, list, remove, inspect."`
 	Provider ProviderCmd `cmd:"" group:"management" help:"Manage AI provider configuration in ~/.otters/providers.yaml — add, rm, ls, and list available models."`
+	Jobs     JobsCmd     `cmd:"" group:"management" help:"Async BIN jobs — run, await, ls, inspect, cancel."`
+}
+
+// JobsCmd is the namespace for async BIN jobs dispatched against an
+// agent's spawn env. The daemon delivers the completion as a
+// synthetic turn in the agent's session, so any agent watching its
+// own conversation history sees the result on the next turn.
+type JobsCmd struct {
+	Run     *commands.JobsRun     `cmd:"" help:"Submit a BIN job to run against an agent's spawn env"`
+	Await   *commands.JobsAwait   `cmd:"" help:"Poll a job until completion; print stdout, exit with the BIN's exit code"`
+	Ls      *commands.JobsLs      `cmd:"" aliases:"list" help:"List jobs (filter by --agent, --status)"`
+	Inspect *commands.JobsInspect `cmd:"" aliases:"desc,describe" help:"Show one job's full state, output, timing"`
+	Cancel  *commands.JobsCancel  `cmd:"" aliases:"rm" help:"Cancel a pending or running job"`
+	Watch   *commands.JobsWatch   `cmd:"" help:"Stream a job's state changes; closes when the job reaches a terminal status"`
 }
 
 // AgentCmd is the fully-qualified form of the running-agent lifecycle

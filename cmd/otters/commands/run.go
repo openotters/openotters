@@ -28,6 +28,7 @@ type Run struct {
 	Runtime string   `help:"Override the image's declared RUNTIME reference" optional:""`
 	Mounts  []string `short:"v" name:"mount" help:"Bind host path into agent: HOST:TARGET[:DESC][:ro|:rw]. HOST is resolved client-side (~, relative paths); must exist on the daemon host. Trailing :ro makes the mount read-only (docker enforces; system surfaces it to the model)."`
 	Envs    []string `short:"e" name:"env" help:"Set or override an env var on the agent: KEY=VALUE. Repeatable. Wins over Agentfile-declared ENV with the same key. Reserved keys (PATH, *_API_KEY, OTTERS_AGENT_ROOT, …) are rejected."`
+	Labels  []string `name:"label" help:"Attach a key=value label. Repeatable. Reserved keys live under io.openotters.* — see the daemon proto for the standard set (origin, etc.). Filterable via 'otters ps --label'."`
 }
 
 func (r *Run) Run(ctx context.Context, common *cmd.Commons, d *Daemon) error {
@@ -88,6 +89,11 @@ func (r *Run) Run(ctx context.Context, common *cmd.Commons, d *Daemon) error {
 		})
 	}
 
+	labels, err := parseKVPairs(r.Labels)
+	if err != nil {
+		return fmt.Errorf("--label: %w", err)
+	}
+
 	resp, err := c.CreateAgent(ctx, &daemonv1.CreateAgentRequest{
 		Name:    r.Name,
 		Ref:     ref,
@@ -95,6 +101,7 @@ func (r *Run) Run(ctx context.Context, common *cmd.Commons, d *Daemon) error {
 		Runtime: r.Runtime,
 		Mounts:  mounts,
 		Envs:    envs,
+		Labels:  labels,
 	})
 	if err != nil {
 		return fmt.Errorf("creating agent: %w", unwrapRPC(err))
