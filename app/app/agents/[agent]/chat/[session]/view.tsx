@@ -49,6 +49,7 @@ import {
 import { StatusBadge } from "@/components/status-badge"
 import { Button } from "@/components/ui/button"
 import { listAgents, listSessionMessages } from "@/lib/proto/v1/daemon-Runtime_connectquery"
+import { SessionJobsStrip } from "@/components/jobs/session-jobs-strip"
 import { Runtime } from "@/lib/proto/v1/daemon_pb"
 import { useRouteParams } from "@/lib/use-route-params"
 
@@ -951,6 +952,8 @@ export default function ChatPage() {
 					)}
 				</Button>
 			</div>
+
+			<SessionJobsStrip sessionId={sessionId} />
 
 			<div className="min-h-0 flex-1 overflow-y-auto px-6 py-6">
 				<div className="flex flex-col gap-8">
