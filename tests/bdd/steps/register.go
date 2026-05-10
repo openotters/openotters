@@ -25,4 +25,5 @@ func RegisterAll(sc *godog.ScenarioContext, daemon *helper.Daemon) {
 
 	RegisterCommon(sc, state)
 	RegisterInfo(sc, state)
+	RegisterJobs(sc, state)
 }

@@ -11,10 +11,10 @@ Feature: Agent inheritance via FROM
   # The parent fetcher mishandles a tagged ref and ends up requesting
   # "latest:latest". This scenario should pass once the bug is fixed
   # in agentfile/store/load.go (or wherever the fetcher builds the
-  # parent ref).
-  #
-  # Uses 127.0.0.1:5527 (the daemon's embedded loopback registry) so
-  # the test stays offline — no GHCR auth, no network.
+  # parent ref) AND the supporting BDD steps for in-test agent
+  # builds land. Uses 127.0.0.1:5527 (the daemon's embedded loopback
+  # registry) so the test stays offline — no GHCR auth, no network.
+  @pending
   Scenario: Child Agentfile overrides only the NAME
     Given a base agent image is published at "127.0.0.1:5527/agents/bdd-base:v1" with the Agentfile:
       """
