@@ -577,7 +577,7 @@ func (s *StateStore) ReplaceAllImages(ctx context.Context, imgs []PersistedImage
 
 func (s *StateStore) ListAgents(ctx context.Context) ([]persistedAgent, error) {
 	rows, err := s.db.QueryContext(ctx,
-		"SELECT id, name, agent_name, model, runtime, tag, status, created_at, mounts, labels_json FROM agents ORDER BY created_at ASC",
+		"SELECT id, name, agent_name, model, runtime, tag, status, created_at, mounts, labels_json, token, token_jti FROM agents ORDER BY created_at ASC",
 	)
 	if err != nil {
 		return nil, fmt.Errorf("querying agents: %w", err)
@@ -596,6 +596,7 @@ func (s *StateStore) ListAgents(ctx context.Context) ([]persistedAgent, error) {
 		if err = rows.Scan(
 			&a.ID, &a.Name, &a.AgentName, &a.Model, &a.Runtime,
 			&a.Tag, &a.Status, &a.CreatedAt, &mounts, &labels,
+			&a.Token, &a.TokenJTI,
 		); err != nil {
 			return nil, fmt.Errorf("scanning agent: %w", err)
 		}
