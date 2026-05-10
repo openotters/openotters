@@ -133,3 +133,30 @@ export const updateProvider = Runtime.method.updateProvider;
  * @generated from rpc openotters.daemon.v1.Runtime.RemoveProvider
  */
 export const removeProvider = Runtime.method.removeProvider;
+
+/**
+ * ── async jobs ────────────────────────────────────────────────────
+ * Submit a BIN job to run against the agent's spawn env. Jobs are
+ * attached to the agent — not to a session. The daemon does not
+ * push results anywhere on completion: observers (agent runtime,
+ * operator CLI, UI) read via GetAsyncJob / WatchAsyncJob and
+ * decide their own watch strategy.
+ *
+ * @generated from rpc openotters.daemon.v1.Runtime.SubmitAsyncJob
+ */
+export const submitAsyncJob = Runtime.method.submitAsyncJob;
+
+/**
+ * @generated from rpc openotters.daemon.v1.Runtime.CancelAsyncJob
+ */
+export const cancelAsyncJob = Runtime.method.cancelAsyncJob;
+
+/**
+ * @generated from rpc openotters.daemon.v1.Runtime.GetAsyncJob
+ */
+export const getAsyncJob = Runtime.method.getAsyncJob;
+
+/**
+ * @generated from rpc openotters.daemon.v1.Runtime.ListAsyncJobs
+ */
+export const listAsyncJobs = Runtime.method.listAsyncJobs;

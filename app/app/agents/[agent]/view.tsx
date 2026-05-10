@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery } from "@connectrpc/connect-query"
 import { useQueryClient } from "@tanstack/react-query"
-import { ArrowLeft, Bot, ChevronRight, History, MessageSquare, Pause, Play, ScrollText, Terminal, Trash2 } from "lucide-react"
+import { ArrowLeft, Bot, ChevronRight, History, ListChecks, MessageSquare, Pause, Play, ScrollText, Terminal, Trash2 } from "lucide-react"
 import Link from "next/link"
 import { notFound, useRouter } from "next/navigation"
 import { toast } from "sonner"
@@ -19,11 +19,14 @@ import {
 	deleteSession,
 	getAgentLogs,
 	listAgents,
+	listAsyncJobs,
 	listSessions,
 	removeAgent,
 	startAgent,
 	stopAgent,
 } from "@/lib/proto/v1/daemon-Runtime_connectquery"
+import { JobsTable } from "@/components/jobs/jobs-table"
+import { RunJobDialog } from "@/components/jobs/run-job-dialog"
 
 function createdAtDate(unixSec: bigint): Date {
 	return new Date(Number(unixSec) * 1000)
@@ -45,6 +48,16 @@ export default function AgentDetailPage() {
 		listSessions,
 		{ ref: agentName },
 		{ enabled: agentName !== "", refetchInterval: 10_000 },
+	)
+
+	const agentForJobs = list.data?.agents.find((a) => a.name === agentName)
+	const jobs = useQuery(
+		listAsyncJobs,
+		{ agentId: agentForJobs?.id ?? "" },
+		// Run jobs poll separately from agents — short tick keeps the
+		// "Jobs" tab live while the rest of the page (mostly static
+		// agent metadata) doesn't refetch every 2s.
+		{ enabled: !!agentForJobs?.id, refetchInterval: 2_000 },
 	)
 
 	const invalidate = () =>
@@ -181,6 +194,15 @@ export default function AgentDetailPage() {
 								{sessions.data?.sessions && sessions.data.sessions.length > 0 && (
 									<Badge className="ml-1" variant="secondary">
 										{sessions.data.sessions.length}
+									</Badge>
+								)}
+							</TabsTrigger>
+							<TabsTrigger className="gap-2" value="jobs">
+								<ListChecks className="h-4 w-4" />
+								Jobs
+								{jobs.data?.jobs && jobs.data.jobs.length > 0 && (
+									<Badge className="ml-1" variant="secondary">
+										{jobs.data.jobs.length}
 									</Badge>
 								)}
 							</TabsTrigger>
@@ -376,6 +398,24 @@ export default function AgentDetailPage() {
 												))}
 										</ul>
 									)}
+								</CardContent>
+							</Card>
+						</TabsContent>
+
+						<TabsContent className="space-y-4 pt-4" value="jobs">
+							<Card>
+								<CardHeader className="flex flex-row items-start justify-between gap-4">
+									<div>
+										<CardTitle>Jobs</CardTitle>
+										<CardDescription>
+											Async BIN jobs dispatched against this agent's spawn env. Polls
+											every 2s — running jobs visibly tick to done.
+										</CardDescription>
+									</div>
+									<RunJobDialog agentRef={agent.name} />
+								</CardHeader>
+								<CardContent>
+									<JobsTable agentColumn={false} jobs={jobs.data?.jobs ?? []} />
 								</CardContent>
 							</Card>
 						</TabsContent>

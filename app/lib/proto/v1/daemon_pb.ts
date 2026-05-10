@@ -10,7 +10,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file v1/daemon.proto.
  */
 export const file_v1_daemon: GenFile = /*@__PURE__*/
-  fileDesc("Cg92MS9kYWVtb24ucHJvdG8SFG9wZW5vdHRlcnMuZGFlbW9uLnYxIhMKEUxpc3RNb2RlbHNSZXF1ZXN0IkEKEkxpc3RNb2RlbHNSZXNwb25zZRIrCgZtb2RlbHMYASADKAsyGy5vcGVub3R0ZXJzLmRhZW1vbi52MS5Nb2RlbCLbAQoFTW9kZWwSEAoIcHJvdmlkZXIYASABKAkSDAoEbmFtZRgCIAEoCRILCgNyZWYYAyABKAkSEAoIYXBpX2Jhc2UYBCABKAkSFAoMZGlzcGxheV9uYW1lGAUgASgJEhYKDmNvbnRleHRfd2luZG93GAYgASgDEhoKEmRlZmF1bHRfbWF4X3Rva2VucxgHIAEoAxIZChFjb3N0X2lucHV0X3Blcl8xbRgIIAEoARIaChJjb3N0X291dHB1dF9wZXJfMW0YCSABKAESEgoKY2FuX3JlYXNvbhgKIAEoCCJKChNHZXRBZ2VudExvZ3NSZXF1ZXN0EgsKA3JlZhgBIAEoCRISCgp0YWlsX2J5dGVzGAIgASgDEhIKCnRhaWxfbGluZXMYAyABKAMiNQoUR2V0QWdlbnRMb2dzUmVzcG9uc2USDwoHY29udGVudBgBIAEoDBIMCgRwYXRoGAIgASgJIhAKDkdldEluZm9SZXF1ZXN0Iu8CCg9HZXRJbmZvUmVzcG9uc2USFQoNcmVnaXN0cnlfYWRkchgBIAEoCRITCgtzb2NrZXRfcGF0aBgCIAEoCRIPCgdsb2dfZGlyGAMgASgJEhIKCmFnZW50c19kaXIYBCABKAkSEAoIZGF0YV9kaXIYBSABKAkSFAoMcnVudGltZV9wYXRoGAYgASgJEg8KB3ZlcnNpb24YByABKAkSDgoGY29tbWl0GAggASgJEhIKCmJ1aWxkX2RhdGUYCSABKAkSFgoOYWdlbnRzX3J1bm5pbmcYCiABKAUSFAoMYWdlbnRzX3RvdGFsGAsgASgFEhEKCXByb3ZpZGVycxgMIAEoBRIWCg5tYXhfY29uY3VycmVudBgNIAEoBRIUCgxiYWNrb2ZmX2Jhc2UYDiABKAkSEwoLYmFja29mZl9jYXAYDyABKAkSGAoQc2h1dGRvd25fdGltZW91dBgQIAEoCRIQCghleGVjdXRvchgRIAEoCSJKChFCdWlsZEFnZW50UmVxdWVzdBIWCg5hZ2VudGZpbGVfcGF0aBgBIAEoCRIMCgR0YWdzGAIgAygJEg8KB2NvbnRlbnQYAyABKAwiPwoSQnVpbGRBZ2VudFJlc3BvbnNlEg4KBmRpZ2VzdBgBIAEoCRIMCgR0YWdzGAIgAygJEgsKA3JlZhgDIAEoCSI6CgxUb29sUGxhdGZvcm0SCgoCb3MYASABKAkSDAoEYXJjaBgCIAEoCRIQCghiaW5fcGF0aBgDIAEoCSKeAQoVQnVpbGRUb29sSW1hZ2VSZXF1ZXN0EgwKBG5hbWUYASABKAkSEwoLZGVzY3JpcHRpb24YAiABKAkSDQoFdXNhZ2UYAyABKAkSDAoEdGFncxgEIAMoCRI1CglwbGF0Zm9ybXMYBSADKAsyIi5vcGVub3R0ZXJzLmRhZW1vbi52MS5Ub29sUGxhdGZvcm0SDgoGc291cmNlGAYgASgJIkMKFkJ1aWxkVG9vbEltYWdlUmVzcG9uc2USDgoGZGlnZXN0GAEgASgJEgwKBHRhZ3MYAiADKAkSCwoDcmVmGAMgASgJIjsKFVNhdmVBZ2VudEltYWdlUmVxdWVzdBIUCgxvY2lfYXJ0aWZhY3QYASABKAwSDAoEdGFncxgCIAMoCSI2ChZTYXZlQWdlbnRJbWFnZVJlc3BvbnNlEg4KBmRpZ2VzdBgBIAEoCRIMCgR0YWdzGAIgAygJIigKC1B1bGxSZXF1ZXN0EgsKA3JlZhgBIAEoCRIMCgR0YWdzGAIgAygJIiwKDFB1bGxSZXNwb25zZRIOCgZkaWdlc3QYASABKAkSDAoEdGFncxgCIAMoCSIaCgtQdXNoUmVxdWVzdBILCgNyZWYYASABKAkiKwoMUHVzaFJlc3BvbnNlEg4KBmRpZ2VzdBgBIAEoCRILCgNyZWYYAiABKAkiEwoRTGlzdEltYWdlc1JlcXVlc3QihgEKCUltYWdlSW5mbxILCgNyZWYYASABKAkSDgoGZGlnZXN0GAIgASgJEhUKDWFydGlmYWN0X3R5cGUYAyABKAkSDAoEc2l6ZRgEIAEoAxISCgpjcmVhdGVkX2F0GAUgASgDEhMKC2Rlc2NyaXB0aW9uGAYgASgJEg4KBnNvdXJjZRgHIAEoCSJLCglBZ2VudFRvb2wSDAoEbmFtZRgBIAEoCRILCgNyZWYYAiABKAkSDgoGZGlnZXN0GAMgASgJEhMKC2Rlc2NyaXB0aW9uGAQgASgJIkUKEkxpc3RJbWFnZXNSZXNwb25zZRIvCgZpbWFnZXMYASADKAsyHy5vcGVub3R0ZXJzLmRhZW1vbi52MS5JbWFnZUluZm8iIgoTUmVmcmVzaEltYWdlUmVxdWVzdBILCgNyZWYYASABKAkiSgoUUmVmcmVzaEltYWdlUmVzcG9uc2USCwoDcmVmGAEgASgJEg4KBmRpZ2VzdBgCIAEoCRIVCg1hcnRpZmFjdF90eXBlGAMgASgJIiEKElJlbW92ZUltYWdlUmVxdWVzdBILCgNyZWYYASABKAkiFQoTUmVtb3ZlSW1hZ2VSZXNwb25zZSIjChREZXNjcmliZUltYWdlUmVxdWVzdBILCgNyZWYYASABKAki4wEKFURlc2NyaWJlSW1hZ2VSZXNwb25zZRILCgNyZWYYASABKAkSDgoGZGlnZXN0GAIgASgJEhUKDWFydGlmYWN0X3R5cGUYAyABKAkSDgoGY29uZmlnGAQgASgJEg4KBmxheWVycxgFIAMoCRJHCgZsYWJlbHMYBiADKAsyNy5vcGVub3R0ZXJzLmRhZW1vbi52MS5EZXNjcmliZUltYWdlUmVzcG9uc2UuTGFiZWxzRW50cnkaLQoLTGFiZWxzRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4ASJNCgVNb3VudBIMCgRob3N0GAEgASgJEg4KBnRhcmdldBgCIAEoCRITCgtkZXNjcmlwdGlvbhgDIAEoCRIRCglyZWFkX29ubHkYBCABKAgirQEKEkNyZWF0ZUFnZW50UmVxdWVzdBIMCgRuYW1lGAEgASgJEgsKA3JlZhgCIAEoCRINCgVtb2RlbBgDIAEoCRIPCgdydW50aW1lGAQgASgJEisKBm1vdW50cxgFIAMoCzIbLm9wZW5vdHRlcnMuZGFlbW9uLnYxLk1vdW50Ei8KBGVudnMYBiADKAsyIS5vcGVub3R0ZXJzLmRhZW1vbi52MS5FbnZPdmVycmlkZSIpCgtFbnZPdmVycmlkZRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAkiPwoTQ3JlYXRlQWdlbnRSZXNwb25zZRIKCgJpZBgBIAEoCRIMCgRuYW1lGAIgASgJEg4KBnN0YXR1cxgDIAEoCSITChFMaXN0QWdlbnRzUmVxdWVzdCKjAgoJQWdlbnRJbmZvEgoKAmlkGAEgASgJEgwKBG5hbWUYAiABKAkSDQoFbW9kZWwYAyABKAkSDgoGc3RhdHVzGAQgASgJEgwKBHJvb3QYBSABKAkSEgoKY3JlYXRlZF9hdBgGIAEoAxIMCgRhZGRyGAcgASgJEg0KBWltYWdlGAggASgJEisKBm1vdW50cxgJIAMoCzIbLm9wZW5vdHRlcnMuZGFlbW9uLnYxLk1vdW50EhQKDGltYWdlX2RpZ2VzdBgKIAEoCRITCgtydW50aW1lX3JlZhgLIAEoCRIWCg5ydW50aW1lX2RpZ2VzdBgMIAEoCRIuCgV0b29scxgNIAMoCzIfLm9wZW5vdHRlcnMuZGFlbW9uLnYxLkFnZW50VG9vbCJFChJMaXN0QWdlbnRzUmVzcG9uc2USLwoGYWdlbnRzGAEgAygLMh8ub3Blbm90dGVycy5kYWVtb24udjEuQWdlbnRJbmZvIiAKEVN0YXJ0QWdlbnRSZXF1ZXN0EgsKA3JlZhgBIAEoCSIUChJTdGFydEFnZW50UmVzcG9uc2UiHwoQU3RvcEFnZW50UmVxdWVzdBILCgNyZWYYASABKAkiEwoRU3RvcEFnZW50UmVzcG9uc2UiIQoSUmVtb3ZlQWdlbnRSZXF1ZXN0EgsKA3JlZhgBIAEoCSIVChNSZW1vdmVBZ2VudFJlc3BvbnNlIj4KC0NoYXRSZXF1ZXN0EgsKA3JlZhgBIAEoCRISCgpzZXNzaW9uX2lkGAIgASgJEg4KBnByb21wdBgDIAEoCSIgCgxDaGF0UmVzcG9uc2USEAoIcmVzcG9uc2UYASABKAkicQoTUHJvbXB0T2JqZWN0UmVxdWVzdBILCgNyZWYYASABKAkSDgoGcHJvbXB0GAIgASgJEhMKC3NjaGVtYV9qc29uGAMgASgMEhMKC3NjaGVtYV9uYW1lGAQgASgJEhMKC3NjaGVtYV9kZXNjGAUgASgJIj0KFFByb21wdE9iamVjdFJlc3BvbnNlEhMKC29iamVjdF9qc29uGAEgASgMEhAKCHJhd190ZXh0GAIgASgJIlgKEUNoYXRTdHJlYW1SZXF1ZXN0EgsKA3JlZhgBIAEoCRISCgpzZXNzaW9uX2lkGAIgASgJEg4KBnByb21wdBgDIAEoCRISCgpyZWdlbmVyYXRlGAQgASgIIkwKD0NoYXRTdHJlYW1FdmVudBIMCgR0eXBlGAEgASgJEgwKBHN0ZXAYAiABKAUSDAoEdG9vbBgDIAEoCRIPCgdjb250ZW50GAQgASgJIkwKGkxpc3RTZXNzaW9uTWVzc2FnZXNSZXF1ZXN0EgsKA3JlZhgBIAEoCRISCgpzZXNzaW9uX2lkGAIgASgJEg0KBWxpbWl0GAMgASgFInEKDlNlc3Npb25NZXNzYWdlEgwKBHJvbGUYASABKAkSDwoHY29udGVudBgCIAEoCRISCgpjcmVhdGVkX2F0GAMgASgDEhUKDWJyYW5jaGVzX2pzb24YBCABKAkSFQoNYWN0aXZlX2JyYW5jaBgFIAEoBSJVChtMaXN0U2Vzc2lvbk1lc3NhZ2VzUmVzcG9uc2USNgoIbWVzc2FnZXMYASADKAsyJC5vcGVub3R0ZXJzLmRhZW1vbi52MS5TZXNzaW9uTWVzc2FnZSIiChNMaXN0U2Vzc2lvbnNSZXF1ZXN0EgsKA3JlZhgBIAEoCSJFCgtTZXNzaW9uSW5mbxIKCgJpZBgBIAEoCRIVCg1tZXNzYWdlX2NvdW50GAIgASgFEhMKC2xhc3RfYWN0aXZlGAMgASgDIksKFExpc3RTZXNzaW9uc1Jlc3BvbnNlEjMKCHNlc3Npb25zGAEgAygLMiEub3Blbm90dGVycy5kYWVtb24udjEuU2Vzc2lvbkluZm8iNwoURGVsZXRlU2Vzc2lvblJlcXVlc3QSCwoDcmVmGAEgASgJEhIKCnNlc3Npb25faWQYAiABKAkiFwoVRGVsZXRlU2Vzc2lvblJlc3BvbnNlIksKCFByb3ZpZGVyEgwKBG5hbWUYASABKAkSDwoHYXBpX2tleRgCIAEoCRIQCghhcGlfYmFzZRgDIAEoCRIOCgZtb2RlbHMYBCADKAkiFgoUTGlzdFByb3ZpZGVyc1JlcXVlc3QiSgoVTGlzdFByb3ZpZGVyc1Jlc3BvbnNlEjEKCXByb3ZpZGVycxgBIAMoCzIeLm9wZW5vdHRlcnMuZGFlbW9uLnYxLlByb3ZpZGVyIkYKEkFkZFByb3ZpZGVyUmVxdWVzdBIwCghwcm92aWRlchgBIAEoCzIeLm9wZW5vdHRlcnMuZGFlbW9uLnYxLlByb3ZpZGVyIkcKE0FkZFByb3ZpZGVyUmVzcG9uc2USMAoIcHJvdmlkZXIYASABKAsyHi5vcGVub3R0ZXJzLmRhZW1vbi52MS5Qcm92aWRlciJJChVVcGRhdGVQcm92aWRlclJlcXVlc3QSMAoIcHJvdmlkZXIYASABKAsyHi5vcGVub3R0ZXJzLmRhZW1vbi52MS5Qcm92aWRlciJKChZVcGRhdGVQcm92aWRlclJlc3BvbnNlEjAKCHByb3ZpZGVyGAEgASgLMh4ub3Blbm90dGVycy5kYWVtb24udjEuUHJvdmlkZXIiJQoVUmVtb3ZlUHJvdmlkZXJSZXF1ZXN0EgwKBG5hbWUYASABKAkiGAoWUmVtb3ZlUHJvdmlkZXJSZXNwb25zZTKxFQoHUnVudGltZRJWCgdHZXRJbmZvEiQub3Blbm90dGVycy5kYWVtb24udjEuR2V0SW5mb1JlcXVlc3QaJS5vcGVub3R0ZXJzLmRhZW1vbi52MS5HZXRJbmZvUmVzcG9uc2USXwoKQnVpbGRBZ2VudBInLm9wZW5vdHRlcnMuZGFlbW9uLnYxLkJ1aWxkQWdlbnRSZXF1ZXN0Gigub3Blbm90dGVycy5kYWVtb24udjEuQnVpbGRBZ2VudFJlc3BvbnNlEmsKDkJ1aWxkVG9vbEltYWdlEisub3Blbm90dGVycy5kYWVtb24udjEuQnVpbGRUb29sSW1hZ2VSZXF1ZXN0Giwub3Blbm90dGVycy5kYWVtb24udjEuQnVpbGRUb29sSW1hZ2VSZXNwb25zZRJrCg5TYXZlQWdlbnRJbWFnZRIrLm9wZW5vdHRlcnMuZGFlbW9uLnYxLlNhdmVBZ2VudEltYWdlUmVxdWVzdBosLm9wZW5vdHRlcnMuZGFlbW9uLnYxLlNhdmVBZ2VudEltYWdlUmVzcG9uc2USVwoOUHVsbEFnZW50SW1hZ2USIS5vcGVub3R0ZXJzLmRhZW1vbi52MS5QdWxsUmVxdWVzdBoiLm9wZW5vdHRlcnMuZGFlbW9uLnYxLlB1bGxSZXNwb25zZRJXCg5QdXNoQWdlbnRJbWFnZRIhLm9wZW5vdHRlcnMuZGFlbW9uLnYxLlB1c2hSZXF1ZXN0GiIub3Blbm90dGVycy5kYWVtb24udjEuUHVzaFJlc3BvbnNlEl8KCkxpc3RJbWFnZXMSJy5vcGVub3R0ZXJzLmRhZW1vbi52MS5MaXN0SW1hZ2VzUmVxdWVzdBooLm9wZW5vdHRlcnMuZGFlbW9uLnYxLkxpc3RJbWFnZXNSZXNwb25zZRJlCgxSZWZyZXNoSW1hZ2USKS5vcGVub3R0ZXJzLmRhZW1vbi52MS5SZWZyZXNoSW1hZ2VSZXF1ZXN0Gioub3Blbm90dGVycy5kYWVtb24udjEuUmVmcmVzaEltYWdlUmVzcG9uc2USYgoLUmVtb3ZlSW1hZ2USKC5vcGVub3R0ZXJzLmRhZW1vbi52MS5SZW1vdmVJbWFnZVJlcXVlc3QaKS5vcGVub3R0ZXJzLmRhZW1vbi52MS5SZW1vdmVJbWFnZVJlc3BvbnNlEmgKDURlc2NyaWJlSW1hZ2USKi5vcGVub3R0ZXJzLmRhZW1vbi52MS5EZXNjcmliZUltYWdlUmVxdWVzdBorLm9wZW5vdHRlcnMuZGFlbW9uLnYxLkRlc2NyaWJlSW1hZ2VSZXNwb25zZRJiCgtDcmVhdGVBZ2VudBIoLm9wZW5vdHRlcnMuZGFlbW9uLnYxLkNyZWF0ZUFnZW50UmVxdWVzdBopLm9wZW5vdHRlcnMuZGFlbW9uLnYxLkNyZWF0ZUFnZW50UmVzcG9uc2USXwoKTGlzdEFnZW50cxInLm9wZW5vdHRlcnMuZGFlbW9uLnYxLkxpc3RBZ2VudHNSZXF1ZXN0Gigub3Blbm90dGVycy5kYWVtb24udjEuTGlzdEFnZW50c1Jlc3BvbnNlEl8KClN0YXJ0QWdlbnQSJy5vcGVub3R0ZXJzLmRhZW1vbi52MS5TdGFydEFnZW50UmVxdWVzdBooLm9wZW5vdHRlcnMuZGFlbW9uLnYxLlN0YXJ0QWdlbnRSZXNwb25zZRJcCglTdG9wQWdlbnQSJi5vcGVub3R0ZXJzLmRhZW1vbi52MS5TdG9wQWdlbnRSZXF1ZXN0Gicub3Blbm90dGVycy5kYWVtb24udjEuU3RvcEFnZW50UmVzcG9uc2USYgoLUmVtb3ZlQWdlbnQSKC5vcGVub3R0ZXJzLmRhZW1vbi52MS5SZW1vdmVBZ2VudFJlcXVlc3QaKS5vcGVub3R0ZXJzLmRhZW1vbi52MS5SZW1vdmVBZ2VudFJlc3BvbnNlElYKDUNoYXRXaXRoQWdlbnQSIS5vcGVub3R0ZXJzLmRhZW1vbi52MS5DaGF0UmVxdWVzdBoiLm9wZW5vdHRlcnMuZGFlbW9uLnYxLkNoYXRSZXNwb25zZRJlCgxQcm9tcHRPYmplY3QSKS5vcGVub3R0ZXJzLmRhZW1vbi52MS5Qcm9tcHRPYmplY3RSZXF1ZXN0Gioub3Blbm90dGVycy5kYWVtb24udjEuUHJvbXB0T2JqZWN0UmVzcG9uc2USZwoTQ2hhdFN0cmVhbVdpdGhBZ2VudBInLm9wZW5vdHRlcnMuZGFlbW9uLnYxLkNoYXRTdHJlYW1SZXF1ZXN0GiUub3Blbm90dGVycy5kYWVtb24udjEuQ2hhdFN0cmVhbUV2ZW50MAESegoTTGlzdFNlc3Npb25NZXNzYWdlcxIwLm9wZW5vdHRlcnMuZGFlbW9uLnYxLkxpc3RTZXNzaW9uTWVzc2FnZXNSZXF1ZXN0GjEub3Blbm90dGVycy5kYWVtb24udjEuTGlzdFNlc3Npb25NZXNzYWdlc1Jlc3BvbnNlEmUKDExpc3RTZXNzaW9ucxIpLm9wZW5vdHRlcnMuZGFlbW9uLnYxLkxpc3RTZXNzaW9uc1JlcXVlc3QaKi5vcGVub3R0ZXJzLmRhZW1vbi52MS5MaXN0U2Vzc2lvbnNSZXNwb25zZRJoCg1EZWxldGVTZXNzaW9uEioub3Blbm90dGVycy5kYWVtb24udjEuRGVsZXRlU2Vzc2lvblJlcXVlc3QaKy5vcGVub3R0ZXJzLmRhZW1vbi52MS5EZWxldGVTZXNzaW9uUmVzcG9uc2USZQoMR2V0QWdlbnRMb2dzEikub3Blbm90dGVycy5kYWVtb24udjEuR2V0QWdlbnRMb2dzUmVxdWVzdBoqLm9wZW5vdHRlcnMuZGFlbW9uLnYxLkdldEFnZW50TG9nc1Jlc3BvbnNlEl8KCkxpc3RNb2RlbHMSJy5vcGVub3R0ZXJzLmRhZW1vbi52MS5MaXN0TW9kZWxzUmVxdWVzdBooLm9wZW5vdHRlcnMuZGFlbW9uLnYxLkxpc3RNb2RlbHNSZXNwb25zZRJoCg1MaXN0UHJvdmlkZXJzEioub3Blbm90dGVycy5kYWVtb24udjEuTGlzdFByb3ZpZGVyc1JlcXVlc3QaKy5vcGVub3R0ZXJzLmRhZW1vbi52MS5MaXN0UHJvdmlkZXJzUmVzcG9uc2USYgoLQWRkUHJvdmlkZXISKC5vcGVub3R0ZXJzLmRhZW1vbi52MS5BZGRQcm92aWRlclJlcXVlc3QaKS5vcGVub3R0ZXJzLmRhZW1vbi52MS5BZGRQcm92aWRlclJlc3BvbnNlEmsKDlVwZGF0ZVByb3ZpZGVyEisub3Blbm90dGVycy5kYWVtb24udjEuVXBkYXRlUHJvdmlkZXJSZXF1ZXN0Giwub3Blbm90dGVycy5kYWVtb24udjEuVXBkYXRlUHJvdmlkZXJSZXNwb25zZRJrCg5SZW1vdmVQcm92aWRlchIrLm9wZW5vdHRlcnMuZGFlbW9uLnYxLlJlbW92ZVByb3ZpZGVyUmVxdWVzdBosLm9wZW5vdHRlcnMuZGFlbW9uLnYxLlJlbW92ZVByb3ZpZGVyUmVzcG9uc2VCMlowZ2l0aHViLmNvbS9vcGVub3R0ZXJzL29wZW5vdHRlcnMvYXBpL3YxO2RhZW1vbnYxYgZwcm90bzM");
+  fileDesc("Cg92MS9kYWVtb24ucHJvdG8SFG9wZW5vdHRlcnMuZGFlbW9uLnYxIhMKEUxpc3RNb2RlbHNSZXF1ZXN0IkEKEkxpc3RNb2RlbHNSZXNwb25zZRIrCgZtb2RlbHMYASADKAsyGy5vcGVub3R0ZXJzLmRhZW1vbi52MS5Nb2RlbCLbAQoFTW9kZWwSEAoIcHJvdmlkZXIYASABKAkSDAoEbmFtZRgCIAEoCRILCgNyZWYYAyABKAkSEAoIYXBpX2Jhc2UYBCABKAkSFAoMZGlzcGxheV9uYW1lGAUgASgJEhYKDmNvbnRleHRfd2luZG93GAYgASgDEhoKEmRlZmF1bHRfbWF4X3Rva2VucxgHIAEoAxIZChFjb3N0X2lucHV0X3Blcl8xbRgIIAEoARIaChJjb3N0X291dHB1dF9wZXJfMW0YCSABKAESEgoKY2FuX3JlYXNvbhgKIAEoCCJKChNHZXRBZ2VudExvZ3NSZXF1ZXN0EgsKA3JlZhgBIAEoCRISCgp0YWlsX2J5dGVzGAIgASgDEhIKCnRhaWxfbGluZXMYAyABKAMiNQoUR2V0QWdlbnRMb2dzUmVzcG9uc2USDwoHY29udGVudBgBIAEoDBIMCgRwYXRoGAIgASgJIhAKDkdldEluZm9SZXF1ZXN0Iu8CCg9HZXRJbmZvUmVzcG9uc2USFQoNcmVnaXN0cnlfYWRkchgBIAEoCRITCgtzb2NrZXRfcGF0aBgCIAEoCRIPCgdsb2dfZGlyGAMgASgJEhIKCmFnZW50c19kaXIYBCABKAkSEAoIZGF0YV9kaXIYBSABKAkSFAoMcnVudGltZV9wYXRoGAYgASgJEg8KB3ZlcnNpb24YByABKAkSDgoGY29tbWl0GAggASgJEhIKCmJ1aWxkX2RhdGUYCSABKAkSFgoOYWdlbnRzX3J1bm5pbmcYCiABKAUSFAoMYWdlbnRzX3RvdGFsGAsgASgFEhEKCXByb3ZpZGVycxgMIAEoBRIWCg5tYXhfY29uY3VycmVudBgNIAEoBRIUCgxiYWNrb2ZmX2Jhc2UYDiABKAkSEwoLYmFja29mZl9jYXAYDyABKAkSGAoQc2h1dGRvd25fdGltZW91dBgQIAEoCRIQCghleGVjdXRvchgRIAEoCSJKChFCdWlsZEFnZW50UmVxdWVzdBIWCg5hZ2VudGZpbGVfcGF0aBgBIAEoCRIMCgR0YWdzGAIgAygJEg8KB2NvbnRlbnQYAyABKAwiPwoSQnVpbGRBZ2VudFJlc3BvbnNlEg4KBmRpZ2VzdBgBIAEoCRIMCgR0YWdzGAIgAygJEgsKA3JlZhgDIAEoCSI6CgxUb29sUGxhdGZvcm0SCgoCb3MYASABKAkSDAoEYXJjaBgCIAEoCRIQCghiaW5fcGF0aBgDIAEoCSKeAQoVQnVpbGRUb29sSW1hZ2VSZXF1ZXN0EgwKBG5hbWUYASABKAkSEwoLZGVzY3JpcHRpb24YAiABKAkSDQoFdXNhZ2UYAyABKAkSDAoEdGFncxgEIAMoCRI1CglwbGF0Zm9ybXMYBSADKAsyIi5vcGVub3R0ZXJzLmRhZW1vbi52MS5Ub29sUGxhdGZvcm0SDgoGc291cmNlGAYgASgJIkMKFkJ1aWxkVG9vbEltYWdlUmVzcG9uc2USDgoGZGlnZXN0GAEgASgJEgwKBHRhZ3MYAiADKAkSCwoDcmVmGAMgASgJIjsKFVNhdmVBZ2VudEltYWdlUmVxdWVzdBIUCgxvY2lfYXJ0aWZhY3QYASABKAwSDAoEdGFncxgCIAMoCSI2ChZTYXZlQWdlbnRJbWFnZVJlc3BvbnNlEg4KBmRpZ2VzdBgBIAEoCRIMCgR0YWdzGAIgAygJIigKC1B1bGxSZXF1ZXN0EgsKA3JlZhgBIAEoCRIMCgR0YWdzGAIgAygJIiwKDFB1bGxSZXNwb25zZRIOCgZkaWdlc3QYASABKAkSDAoEdGFncxgCIAMoCSIaCgtQdXNoUmVxdWVzdBILCgNyZWYYASABKAkiKwoMUHVzaFJlc3BvbnNlEg4KBmRpZ2VzdBgBIAEoCRILCgNyZWYYAiABKAkiEwoRTGlzdEltYWdlc1JlcXVlc3QihgEKCUltYWdlSW5mbxILCgNyZWYYASABKAkSDgoGZGlnZXN0GAIgASgJEhUKDWFydGlmYWN0X3R5cGUYAyABKAkSDAoEc2l6ZRgEIAEoAxISCgpjcmVhdGVkX2F0GAUgASgDEhMKC2Rlc2NyaXB0aW9uGAYgASgJEg4KBnNvdXJjZRgHIAEoCSJLCglBZ2VudFRvb2wSDAoEbmFtZRgBIAEoCRILCgNyZWYYAiABKAkSDgoGZGlnZXN0GAMgASgJEhMKC2Rlc2NyaXB0aW9uGAQgASgJIkUKEkxpc3RJbWFnZXNSZXNwb25zZRIvCgZpbWFnZXMYASADKAsyHy5vcGVub3R0ZXJzLmRhZW1vbi52MS5JbWFnZUluZm8iIgoTUmVmcmVzaEltYWdlUmVxdWVzdBILCgNyZWYYASABKAkiSgoUUmVmcmVzaEltYWdlUmVzcG9uc2USCwoDcmVmGAEgASgJEg4KBmRpZ2VzdBgCIAEoCRIVCg1hcnRpZmFjdF90eXBlGAMgASgJIiEKElJlbW92ZUltYWdlUmVxdWVzdBILCgNyZWYYASABKAkiFQoTUmVtb3ZlSW1hZ2VSZXNwb25zZSIjChREZXNjcmliZUltYWdlUmVxdWVzdBILCgNyZWYYASABKAki4wEKFURlc2NyaWJlSW1hZ2VSZXNwb25zZRILCgNyZWYYASABKAkSDgoGZGlnZXN0GAIgASgJEhUKDWFydGlmYWN0X3R5cGUYAyABKAkSDgoGY29uZmlnGAQgASgJEg4KBmxheWVycxgFIAMoCRJHCgZsYWJlbHMYBiADKAsyNy5vcGVub3R0ZXJzLmRhZW1vbi52MS5EZXNjcmliZUltYWdlUmVzcG9uc2UuTGFiZWxzRW50cnkaLQoLTGFiZWxzRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4ASJNCgVNb3VudBIMCgRob3N0GAEgASgJEg4KBnRhcmdldBgCIAEoCRITCgtkZXNjcmlwdGlvbhgDIAEoCRIRCglyZWFkX29ubHkYBCABKAgiogIKEkNyZWF0ZUFnZW50UmVxdWVzdBIMCgRuYW1lGAEgASgJEgsKA3JlZhgCIAEoCRINCgVtb2RlbBgDIAEoCRIPCgdydW50aW1lGAQgASgJEisKBm1vdW50cxgFIAMoCzIbLm9wZW5vdHRlcnMuZGFlbW9uLnYxLk1vdW50Ei8KBGVudnMYBiADKAsyIS5vcGVub3R0ZXJzLmRhZW1vbi52MS5FbnZPdmVycmlkZRJECgZsYWJlbHMYByADKAsyNC5vcGVub3R0ZXJzLmRhZW1vbi52MS5DcmVhdGVBZ2VudFJlcXVlc3QuTGFiZWxzRW50cnkaLQoLTGFiZWxzRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4ASIpCgtFbnZPdmVycmlkZRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAkiPwoTQ3JlYXRlQWdlbnRSZXNwb25zZRIKCgJpZBgBIAEoCRIMCgRuYW1lGAIgASgJEg4KBnN0YXR1cxgDIAEoCSKdAQoRTGlzdEFnZW50c1JlcXVlc3QSUgoObGFiZWxfc2VsZWN0b3IYASADKAsyOi5vcGVub3R0ZXJzLmRhZW1vbi52MS5MaXN0QWdlbnRzUmVxdWVzdC5MYWJlbFNlbGVjdG9yRW50cnkaNAoSTGFiZWxTZWxlY3RvckVudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEijwMKCUFnZW50SW5mbxIKCgJpZBgBIAEoCRIMCgRuYW1lGAIgASgJEg0KBW1vZGVsGAMgASgJEg4KBnN0YXR1cxgEIAEoCRIMCgRyb290GAUgASgJEhIKCmNyZWF0ZWRfYXQYBiABKAMSDAoEYWRkchgHIAEoCRINCgVpbWFnZRgIIAEoCRIrCgZtb3VudHMYCSADKAsyGy5vcGVub3R0ZXJzLmRhZW1vbi52MS5Nb3VudBIUCgxpbWFnZV9kaWdlc3QYCiABKAkSEwoLcnVudGltZV9yZWYYCyABKAkSFgoOcnVudGltZV9kaWdlc3QYDCABKAkSLgoFdG9vbHMYDSADKAsyHy5vcGVub3R0ZXJzLmRhZW1vbi52MS5BZ2VudFRvb2wSOwoGbGFiZWxzGA4gAygLMisub3Blbm90dGVycy5kYWVtb24udjEuQWdlbnRJbmZvLkxhYmVsc0VudHJ5Gi0KC0xhYmVsc0VudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEiRQoSTGlzdEFnZW50c1Jlc3BvbnNlEi8KBmFnZW50cxgBIAMoCzIfLm9wZW5vdHRlcnMuZGFlbW9uLnYxLkFnZW50SW5mbyIgChFTdGFydEFnZW50UmVxdWVzdBILCgNyZWYYASABKAkiFAoSU3RhcnRBZ2VudFJlc3BvbnNlIh8KEFN0b3BBZ2VudFJlcXVlc3QSCwoDcmVmGAEgASgJIhMKEVN0b3BBZ2VudFJlc3BvbnNlIiEKElJlbW92ZUFnZW50UmVxdWVzdBILCgNyZWYYASABKAkiFQoTUmVtb3ZlQWdlbnRSZXNwb25zZSI+CgtDaGF0UmVxdWVzdBILCgNyZWYYASABKAkSEgoKc2Vzc2lvbl9pZBgCIAEoCRIOCgZwcm9tcHQYAyABKAkiIAoMQ2hhdFJlc3BvbnNlEhAKCHJlc3BvbnNlGAEgASgJInEKE1Byb21wdE9iamVjdFJlcXVlc3QSCwoDcmVmGAEgASgJEg4KBnByb21wdBgCIAEoCRITCgtzY2hlbWFfanNvbhgDIAEoDBITCgtzY2hlbWFfbmFtZRgEIAEoCRITCgtzY2hlbWFfZGVzYxgFIAEoCSI9ChRQcm9tcHRPYmplY3RSZXNwb25zZRITCgtvYmplY3RfanNvbhgBIAEoDBIQCghyYXdfdGV4dBgCIAEoCSJYChFDaGF0U3RyZWFtUmVxdWVzdBILCgNyZWYYASABKAkSEgoKc2Vzc2lvbl9pZBgCIAEoCRIOCgZwcm9tcHQYAyABKAkSEgoKcmVnZW5lcmF0ZRgEIAEoCCJMCg9DaGF0U3RyZWFtRXZlbnQSDAoEdHlwZRgBIAEoCRIMCgRzdGVwGAIgASgFEgwKBHRvb2wYAyABKAkSDwoHY29udGVudBgEIAEoCSJMChpMaXN0U2Vzc2lvbk1lc3NhZ2VzUmVxdWVzdBILCgNyZWYYASABKAkSEgoKc2Vzc2lvbl9pZBgCIAEoCRINCgVsaW1pdBgDIAEoBSJxCg5TZXNzaW9uTWVzc2FnZRIMCgRyb2xlGAEgASgJEg8KB2NvbnRlbnQYAiABKAkSEgoKY3JlYXRlZF9hdBgDIAEoAxIVCg1icmFuY2hlc19qc29uGAQgASgJEhUKDWFjdGl2ZV9icmFuY2gYBSABKAUiVQobTGlzdFNlc3Npb25NZXNzYWdlc1Jlc3BvbnNlEjYKCG1lc3NhZ2VzGAEgAygLMiQub3Blbm90dGVycy5kYWVtb24udjEuU2Vzc2lvbk1lc3NhZ2UiIgoTTGlzdFNlc3Npb25zUmVxdWVzdBILCgNyZWYYASABKAkiRQoLU2Vzc2lvbkluZm8SCgoCaWQYASABKAkSFQoNbWVzc2FnZV9jb3VudBgCIAEoBRITCgtsYXN0X2FjdGl2ZRgDIAEoAyJLChRMaXN0U2Vzc2lvbnNSZXNwb25zZRIzCghzZXNzaW9ucxgBIAMoCzIhLm9wZW5vdHRlcnMuZGFlbW9uLnYxLlNlc3Npb25JbmZvIjcKFERlbGV0ZVNlc3Npb25SZXF1ZXN0EgsKA3JlZhgBIAEoCRISCgpzZXNzaW9uX2lkGAIgASgJIhcKFURlbGV0ZVNlc3Npb25SZXNwb25zZSJLCghQcm92aWRlchIMCgRuYW1lGAEgASgJEg8KB2FwaV9rZXkYAiABKAkSEAoIYXBpX2Jhc2UYAyABKAkSDgoGbW9kZWxzGAQgAygJIhYKFExpc3RQcm92aWRlcnNSZXF1ZXN0IkoKFUxpc3RQcm92aWRlcnNSZXNwb25zZRIxCglwcm92aWRlcnMYASADKAsyHi5vcGVub3R0ZXJzLmRhZW1vbi52MS5Qcm92aWRlciJGChJBZGRQcm92aWRlclJlcXVlc3QSMAoIcHJvdmlkZXIYASABKAsyHi5vcGVub3R0ZXJzLmRhZW1vbi52MS5Qcm92aWRlciJHChNBZGRQcm92aWRlclJlc3BvbnNlEjAKCHByb3ZpZGVyGAEgASgLMh4ub3Blbm90dGVycy5kYWVtb24udjEuUHJvdmlkZXIiSQoVVXBkYXRlUHJvdmlkZXJSZXF1ZXN0EjAKCHByb3ZpZGVyGAEgASgLMh4ub3Blbm90dGVycy5kYWVtb24udjEuUHJvdmlkZXIiSgoWVXBkYXRlUHJvdmlkZXJSZXNwb25zZRIwCghwcm92aWRlchgBIAEoCzIeLm9wZW5vdHRlcnMuZGFlbW9uLnYxLlByb3ZpZGVyIiUKFVJlbW92ZVByb3ZpZGVyUmVxdWVzdBIMCgRuYW1lGAEgASgJIhgKFlJlbW92ZVByb3ZpZGVyUmVzcG9uc2UizAEKFVN1Ym1pdEFzeW5jSm9iUmVxdWVzdBIRCglhZ2VudF9yZWYYASABKAkSCwoDYmluGAIgASgJEgwKBGFyZ3MYAyADKAkSDQoFc3RkaW4YBCABKAkSRwoGbGFiZWxzGAUgAygLMjcub3Blbm90dGVycy5kYWVtb24udjEuU3VibWl0QXN5bmNKb2JSZXF1ZXN0LkxhYmVsc0VudHJ5Gi0KC0xhYmVsc0VudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEiKAoWU3VibWl0QXN5bmNKb2JSZXNwb25zZRIOCgZqb2JfaWQYASABKAkiJwoVQ2FuY2VsQXN5bmNKb2JSZXF1ZXN0Eg4KBmpvYl9pZBgBIAEoCSIYChZDYW5jZWxBc3luY0pvYlJlc3BvbnNlIiQKEkdldEFzeW5jSm9iUmVxdWVzdBIOCgZqb2JfaWQYASABKAkiQgoTR2V0QXN5bmNKb2JSZXNwb25zZRIrCgNqb2IYASABKAsyHi5vcGVub3R0ZXJzLmRhZW1vbi52MS5Bc3luY0pvYiImChRXYXRjaEFzeW5jSm9iUmVxdWVzdBIOCgZqb2JfaWQYASABKAkiRAoVV2F0Y2hBc3luY0pvYlJlc3BvbnNlEisKA2pvYhgBIAEoCzIeLm9wZW5vdHRlcnMuZGFlbW9uLnYxLkFzeW5jSm9iIsUBChRMaXN0QXN5bmNKb2JzUmVxdWVzdBIQCghhZ2VudF9pZBgBIAEoCRIOCgZzdGF0dXMYAiABKAkSVQoObGFiZWxfc2VsZWN0b3IYAyADKAsyPS5vcGVub3R0ZXJzLmRhZW1vbi52MS5MaXN0QXN5bmNKb2JzUmVxdWVzdC5MYWJlbFNlbGVjdG9yRW50cnkaNAoSTGFiZWxTZWxlY3RvckVudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEiRQoVTGlzdEFzeW5jSm9ic1Jlc3BvbnNlEiwKBGpvYnMYASADKAsyHi5vcGVub3R0ZXJzLmRhZW1vbi52MS5Bc3luY0pvYiLuAgoIQXN5bmNKb2ISCgoCaWQYASABKAkSEAoIYWdlbnRfaWQYAiABKAkSCwoDYmluGAQgASgJEgwKBGFyZ3MYBSADKAkSDQoFc3RkaW4YBiABKAkSDgoGc3RhdHVzGAcgASgJEg4KBmhhbmRsZRgIIAEoCRIRCglleGl0X2NvZGUYCSABKAUSDgoGc3Rkb3V0GAogASgJEg4KBnN0ZGVychgLIAEoCRINCgVlcnJvchgMIAEoCRISCgpjcmVhdGVkX2F0GA0gASgDEhIKCnN0YXJ0ZWRfYXQYDiABKAMSEwoLZmluaXNoZWRfYXQYDyABKAMSOgoGbGFiZWxzGBAgAygLMioub3Blbm90dGVycy5kYWVtb24udjEuQXN5bmNKb2IuTGFiZWxzRW50cnkaLQoLTGFiZWxzRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4AUoECAMQBFIKc2Vzc2lvbl9pZDLFGQoHUnVudGltZRJWCgdHZXRJbmZvEiQub3Blbm90dGVycy5kYWVtb24udjEuR2V0SW5mb1JlcXVlc3QaJS5vcGVub3R0ZXJzLmRhZW1vbi52MS5HZXRJbmZvUmVzcG9uc2USXwoKQnVpbGRBZ2VudBInLm9wZW5vdHRlcnMuZGFlbW9uLnYxLkJ1aWxkQWdlbnRSZXF1ZXN0Gigub3Blbm90dGVycy5kYWVtb24udjEuQnVpbGRBZ2VudFJlc3BvbnNlEmsKDkJ1aWxkVG9vbEltYWdlEisub3Blbm90dGVycy5kYWVtb24udjEuQnVpbGRUb29sSW1hZ2VSZXF1ZXN0Giwub3Blbm90dGVycy5kYWVtb24udjEuQnVpbGRUb29sSW1hZ2VSZXNwb25zZRJrCg5TYXZlQWdlbnRJbWFnZRIrLm9wZW5vdHRlcnMuZGFlbW9uLnYxLlNhdmVBZ2VudEltYWdlUmVxdWVzdBosLm9wZW5vdHRlcnMuZGFlbW9uLnYxLlNhdmVBZ2VudEltYWdlUmVzcG9uc2USVwoOUHVsbEFnZW50SW1hZ2USIS5vcGVub3R0ZXJzLmRhZW1vbi52MS5QdWxsUmVxdWVzdBoiLm9wZW5vdHRlcnMuZGFlbW9uLnYxLlB1bGxSZXNwb25zZRJXCg5QdXNoQWdlbnRJbWFnZRIhLm9wZW5vdHRlcnMuZGFlbW9uLnYxLlB1c2hSZXF1ZXN0GiIub3Blbm90dGVycy5kYWVtb24udjEuUHVzaFJlc3BvbnNlEl8KCkxpc3RJbWFnZXMSJy5vcGVub3R0ZXJzLmRhZW1vbi52MS5MaXN0SW1hZ2VzUmVxdWVzdBooLm9wZW5vdHRlcnMuZGFlbW9uLnYxLkxpc3RJbWFnZXNSZXNwb25zZRJlCgxSZWZyZXNoSW1hZ2USKS5vcGVub3R0ZXJzLmRhZW1vbi52MS5SZWZyZXNoSW1hZ2VSZXF1ZXN0Gioub3Blbm90dGVycy5kYWVtb24udjEuUmVmcmVzaEltYWdlUmVzcG9uc2USYgoLUmVtb3ZlSW1hZ2USKC5vcGVub3R0ZXJzLmRhZW1vbi52MS5SZW1vdmVJbWFnZVJlcXVlc3QaKS5vcGVub3R0ZXJzLmRhZW1vbi52MS5SZW1vdmVJbWFnZVJlc3BvbnNlEmgKDURlc2NyaWJlSW1hZ2USKi5vcGVub3R0ZXJzLmRhZW1vbi52MS5EZXNjcmliZUltYWdlUmVxdWVzdBorLm9wZW5vdHRlcnMuZGFlbW9uLnYxLkRlc2NyaWJlSW1hZ2VSZXNwb25zZRJiCgtDcmVhdGVBZ2VudBIoLm9wZW5vdHRlcnMuZGFlbW9uLnYxLkNyZWF0ZUFnZW50UmVxdWVzdBopLm9wZW5vdHRlcnMuZGFlbW9uLnYxLkNyZWF0ZUFnZW50UmVzcG9uc2USXwoKTGlzdEFnZW50cxInLm9wZW5vdHRlcnMuZGFlbW9uLnYxLkxpc3RBZ2VudHNSZXF1ZXN0Gigub3Blbm90dGVycy5kYWVtb24udjEuTGlzdEFnZW50c1Jlc3BvbnNlEl8KClN0YXJ0QWdlbnQSJy5vcGVub3R0ZXJzLmRhZW1vbi52MS5TdGFydEFnZW50UmVxdWVzdBooLm9wZW5vdHRlcnMuZGFlbW9uLnYxLlN0YXJ0QWdlbnRSZXNwb25zZRJcCglTdG9wQWdlbnQSJi5vcGVub3R0ZXJzLmRhZW1vbi52MS5TdG9wQWdlbnRSZXF1ZXN0Gicub3Blbm90dGVycy5kYWVtb24udjEuU3RvcEFnZW50UmVzcG9uc2USYgoLUmVtb3ZlQWdlbnQSKC5vcGVub3R0ZXJzLmRhZW1vbi52MS5SZW1vdmVBZ2VudFJlcXVlc3QaKS5vcGVub3R0ZXJzLmRhZW1vbi52MS5SZW1vdmVBZ2VudFJlc3BvbnNlElYKDUNoYXRXaXRoQWdlbnQSIS5vcGVub3R0ZXJzLmRhZW1vbi52MS5DaGF0UmVxdWVzdBoiLm9wZW5vdHRlcnMuZGFlbW9uLnYxLkNoYXRSZXNwb25zZRJlCgxQcm9tcHRPYmplY3QSKS5vcGVub3R0ZXJzLmRhZW1vbi52MS5Qcm9tcHRPYmplY3RSZXF1ZXN0Gioub3Blbm90dGVycy5kYWVtb24udjEuUHJvbXB0T2JqZWN0UmVzcG9uc2USZwoTQ2hhdFN0cmVhbVdpdGhBZ2VudBInLm9wZW5vdHRlcnMuZGFlbW9uLnYxLkNoYXRTdHJlYW1SZXF1ZXN0GiUub3Blbm90dGVycy5kYWVtb24udjEuQ2hhdFN0cmVhbUV2ZW50MAESegoTTGlzdFNlc3Npb25NZXNzYWdlcxIwLm9wZW5vdHRlcnMuZGFlbW9uLnYxLkxpc3RTZXNzaW9uTWVzc2FnZXNSZXF1ZXN0GjEub3Blbm90dGVycy5kYWVtb24udjEuTGlzdFNlc3Npb25NZXNzYWdlc1Jlc3BvbnNlEmUKDExpc3RTZXNzaW9ucxIpLm9wZW5vdHRlcnMuZGFlbW9uLnYxLkxpc3RTZXNzaW9uc1JlcXVlc3QaKi5vcGVub3R0ZXJzLmRhZW1vbi52MS5MaXN0U2Vzc2lvbnNSZXNwb25zZRJoCg1EZWxldGVTZXNzaW9uEioub3Blbm90dGVycy5kYWVtb24udjEuRGVsZXRlU2Vzc2lvblJlcXVlc3QaKy5vcGVub3R0ZXJzLmRhZW1vbi52MS5EZWxldGVTZXNzaW9uUmVzcG9uc2USZQoMR2V0QWdlbnRMb2dzEikub3Blbm90dGVycy5kYWVtb24udjEuR2V0QWdlbnRMb2dzUmVxdWVzdBoqLm9wZW5vdHRlcnMuZGFlbW9uLnYxLkdldEFnZW50TG9nc1Jlc3BvbnNlEl8KCkxpc3RNb2RlbHMSJy5vcGVub3R0ZXJzLmRhZW1vbi52MS5MaXN0TW9kZWxzUmVxdWVzdBooLm9wZW5vdHRlcnMuZGFlbW9uLnYxLkxpc3RNb2RlbHNSZXNwb25zZRJoCg1MaXN0UHJvdmlkZXJzEioub3Blbm90dGVycy5kYWVtb24udjEuTGlzdFByb3ZpZGVyc1JlcXVlc3QaKy5vcGVub3R0ZXJzLmRhZW1vbi52MS5MaXN0UHJvdmlkZXJzUmVzcG9uc2USYgoLQWRkUHJvdmlkZXISKC5vcGVub3R0ZXJzLmRhZW1vbi52MS5BZGRQcm92aWRlclJlcXVlc3QaKS5vcGVub3R0ZXJzLmRhZW1vbi52MS5BZGRQcm92aWRlclJlc3BvbnNlEmsKDlVwZGF0ZVByb3ZpZGVyEisub3Blbm90dGVycy5kYWVtb24udjEuVXBkYXRlUHJvdmlkZXJSZXF1ZXN0Giwub3Blbm90dGVycy5kYWVtb24udjEuVXBkYXRlUHJvdmlkZXJSZXNwb25zZRJrCg5SZW1vdmVQcm92aWRlchIrLm9wZW5vdHRlcnMuZGFlbW9uLnYxLlJlbW92ZVByb3ZpZGVyUmVxdWVzdBosLm9wZW5vdHRlcnMuZGFlbW9uLnYxLlJlbW92ZVByb3ZpZGVyUmVzcG9uc2USawoOU3VibWl0QXN5bmNKb2ISKy5vcGVub3R0ZXJzLmRhZW1vbi52MS5TdWJtaXRBc3luY0pvYlJlcXVlc3QaLC5vcGVub3R0ZXJzLmRhZW1vbi52MS5TdWJtaXRBc3luY0pvYlJlc3BvbnNlEmsKDkNhbmNlbEFzeW5jSm9iEisub3Blbm90dGVycy5kYWVtb24udjEuQ2FuY2VsQXN5bmNKb2JSZXF1ZXN0Giwub3Blbm90dGVycy5kYWVtb24udjEuQ2FuY2VsQXN5bmNKb2JSZXNwb25zZRJiCgtHZXRBc3luY0pvYhIoLm9wZW5vdHRlcnMuZGFlbW9uLnYxLkdldEFzeW5jSm9iUmVxdWVzdBopLm9wZW5vdHRlcnMuZGFlbW9uLnYxLkdldEFzeW5jSm9iUmVzcG9uc2USaAoNTGlzdEFzeW5jSm9icxIqLm9wZW5vdHRlcnMuZGFlbW9uLnYxLkxpc3RBc3luY0pvYnNSZXF1ZXN0Gisub3Blbm90dGVycy5kYWVtb24udjEuTGlzdEFzeW5jSm9ic1Jlc3BvbnNlEmoKDVdhdGNoQXN5bmNKb2ISKi5vcGVub3R0ZXJzLmRhZW1vbi52MS5XYXRjaEFzeW5jSm9iUmVxdWVzdBorLm9wZW5vdHRlcnMuZGFlbW9uLnYxLldhdGNoQXN5bmNKb2JSZXNwb25zZTABQjJaMGdpdGh1Yi5jb20vb3Blbm90dGVycy9vcGVub3R0ZXJzL2FwaS92MTtkYWVtb252MWIGcHJvdG8z");
 
 /**
  * @generated from message openotters.daemon.v1.ListModelsRequest
@@ -942,6 +942,13 @@ export type CreateAgentRequest = Message<"openotters.daemon.v1.CreateAgentReques
    * @generated from field: repeated openotters.daemon.v1.EnvOverride envs = 6;
    */
   envs: EnvOverride[];
+
+  /**
+   * Labels — see service-level "labels (shared semantics)" comment.
+   *
+   * @generated from field: map<string, string> labels = 7;
+   */
+  labels: { [key: string]: string };
 };
 
 /**
@@ -1004,6 +1011,14 @@ export const CreateAgentResponseSchema: GenMessage<CreateAgentResponse> = /*@__P
  * @generated from message openotters.daemon.v1.ListAgentsRequest
  */
 export type ListAgentsRequest = Message<"openotters.daemon.v1.ListAgentsRequest"> & {
+  /**
+   * label_selector — every key=value pair must match (logical AND).
+   * Empty map = no label filter. Compares against labels stored at
+   * CreateAgent time; missing keys never match.
+   *
+   * @generated from field: map<string, string> label_selector = 1;
+   */
+  labelSelector: { [key: string]: string };
 };
 
 /**
@@ -1093,6 +1108,14 @@ export type AgentInfo = Message<"openotters.daemon.v1.AgentInfo"> & {
    * @generated from field: repeated openotters.daemon.v1.AgentTool tools = 13;
    */
   tools: AgentTool[];
+
+  /**
+   * Labels attached at CreateAgent time. Same shape and reserved
+   * namespace as job labels — see the service-level comment.
+   *
+   * @generated from field: map<string, string> labels = 14;
+   */
+  labels: { [key: string]: string };
 };
 
 /**
@@ -1739,6 +1762,311 @@ export const RemoveProviderResponseSchema: GenMessage<RemoveProviderResponse> = 
   messageDesc(file_v1_daemon, 63);
 
 /**
+ * @generated from message openotters.daemon.v1.SubmitAsyncJobRequest
+ */
+export type SubmitAsyncJobRequest = Message<"openotters.daemon.v1.SubmitAsyncJobRequest"> & {
+  /**
+   * agent_ref is the agent name OR UUID (same resolution as
+   * ChatWithAgent's `ref`). The agent must be running.
+   *
+   * @generated from field: string agent_ref = 1;
+   */
+  agentRef: string;
+
+  /**
+   * @generated from field: string bin = 2;
+   */
+  bin: string;
+
+  /**
+   * @generated from field: repeated string args = 3;
+   */
+  args: string[];
+
+  /**
+   * @generated from field: string stdin = 4;
+   */
+  stdin: string;
+
+  /**
+   * labels are arbitrary metadata attached to the job. See the
+   * service-level comment for standard io.openotters.* keys. The
+   * daemon stores them verbatim and exposes them on every read; it
+   * never validates or interprets the values.
+   *
+   * @generated from field: map<string, string> labels = 5;
+   */
+  labels: { [key: string]: string };
+};
+
+/**
+ * Describes the message openotters.daemon.v1.SubmitAsyncJobRequest.
+ * Use `create(SubmitAsyncJobRequestSchema)` to create a new message.
+ */
+export const SubmitAsyncJobRequestSchema: GenMessage<SubmitAsyncJobRequest> = /*@__PURE__*/
+  messageDesc(file_v1_daemon, 64);
+
+/**
+ * @generated from message openotters.daemon.v1.SubmitAsyncJobResponse
+ */
+export type SubmitAsyncJobResponse = Message<"openotters.daemon.v1.SubmitAsyncJobResponse"> & {
+  /**
+   * @generated from field: string job_id = 1;
+   */
+  jobId: string;
+};
+
+/**
+ * Describes the message openotters.daemon.v1.SubmitAsyncJobResponse.
+ * Use `create(SubmitAsyncJobResponseSchema)` to create a new message.
+ */
+export const SubmitAsyncJobResponseSchema: GenMessage<SubmitAsyncJobResponse> = /*@__PURE__*/
+  messageDesc(file_v1_daemon, 65);
+
+/**
+ * @generated from message openotters.daemon.v1.CancelAsyncJobRequest
+ */
+export type CancelAsyncJobRequest = Message<"openotters.daemon.v1.CancelAsyncJobRequest"> & {
+  /**
+   * @generated from field: string job_id = 1;
+   */
+  jobId: string;
+};
+
+/**
+ * Describes the message openotters.daemon.v1.CancelAsyncJobRequest.
+ * Use `create(CancelAsyncJobRequestSchema)` to create a new message.
+ */
+export const CancelAsyncJobRequestSchema: GenMessage<CancelAsyncJobRequest> = /*@__PURE__*/
+  messageDesc(file_v1_daemon, 66);
+
+/**
+ * @generated from message openotters.daemon.v1.CancelAsyncJobResponse
+ */
+export type CancelAsyncJobResponse = Message<"openotters.daemon.v1.CancelAsyncJobResponse"> & {
+};
+
+/**
+ * Describes the message openotters.daemon.v1.CancelAsyncJobResponse.
+ * Use `create(CancelAsyncJobResponseSchema)` to create a new message.
+ */
+export const CancelAsyncJobResponseSchema: GenMessage<CancelAsyncJobResponse> = /*@__PURE__*/
+  messageDesc(file_v1_daemon, 67);
+
+/**
+ * @generated from message openotters.daemon.v1.GetAsyncJobRequest
+ */
+export type GetAsyncJobRequest = Message<"openotters.daemon.v1.GetAsyncJobRequest"> & {
+  /**
+   * @generated from field: string job_id = 1;
+   */
+  jobId: string;
+};
+
+/**
+ * Describes the message openotters.daemon.v1.GetAsyncJobRequest.
+ * Use `create(GetAsyncJobRequestSchema)` to create a new message.
+ */
+export const GetAsyncJobRequestSchema: GenMessage<GetAsyncJobRequest> = /*@__PURE__*/
+  messageDesc(file_v1_daemon, 68);
+
+/**
+ * @generated from message openotters.daemon.v1.GetAsyncJobResponse
+ */
+export type GetAsyncJobResponse = Message<"openotters.daemon.v1.GetAsyncJobResponse"> & {
+  /**
+   * @generated from field: openotters.daemon.v1.AsyncJob job = 1;
+   */
+  job?: AsyncJob | undefined;
+};
+
+/**
+ * Describes the message openotters.daemon.v1.GetAsyncJobResponse.
+ * Use `create(GetAsyncJobResponseSchema)` to create a new message.
+ */
+export const GetAsyncJobResponseSchema: GenMessage<GetAsyncJobResponse> = /*@__PURE__*/
+  messageDesc(file_v1_daemon, 69);
+
+/**
+ * @generated from message openotters.daemon.v1.WatchAsyncJobRequest
+ */
+export type WatchAsyncJobRequest = Message<"openotters.daemon.v1.WatchAsyncJobRequest"> & {
+  /**
+   * @generated from field: string job_id = 1;
+   */
+  jobId: string;
+};
+
+/**
+ * Describes the message openotters.daemon.v1.WatchAsyncJobRequest.
+ * Use `create(WatchAsyncJobRequestSchema)` to create a new message.
+ */
+export const WatchAsyncJobRequestSchema: GenMessage<WatchAsyncJobRequest> = /*@__PURE__*/
+  messageDesc(file_v1_daemon, 70);
+
+/**
+ * @generated from message openotters.daemon.v1.WatchAsyncJobResponse
+ */
+export type WatchAsyncJobResponse = Message<"openotters.daemon.v1.WatchAsyncJobResponse"> & {
+  /**
+   * @generated from field: openotters.daemon.v1.AsyncJob job = 1;
+   */
+  job?: AsyncJob | undefined;
+};
+
+/**
+ * Describes the message openotters.daemon.v1.WatchAsyncJobResponse.
+ * Use `create(WatchAsyncJobResponseSchema)` to create a new message.
+ */
+export const WatchAsyncJobResponseSchema: GenMessage<WatchAsyncJobResponse> = /*@__PURE__*/
+  messageDesc(file_v1_daemon, 71);
+
+/**
+ * @generated from message openotters.daemon.v1.ListAsyncJobsRequest
+ */
+export type ListAsyncJobsRequest = Message<"openotters.daemon.v1.ListAsyncJobsRequest"> & {
+  /**
+   * empty = all agents
+   *
+   * @generated from field: string agent_id = 1;
+   */
+  agentId: string;
+
+  /**
+   * empty = all statuses
+   *
+   * @generated from field: string status = 2;
+   */
+  status: string;
+
+  /**
+   * label_selector — every key=value pair must match (logical AND).
+   * Empty map = no label filter. Compares against the labels stored
+   * at submit time; non-existent keys never match.
+   *
+   * @generated from field: map<string, string> label_selector = 3;
+   */
+  labelSelector: { [key: string]: string };
+};
+
+/**
+ * Describes the message openotters.daemon.v1.ListAsyncJobsRequest.
+ * Use `create(ListAsyncJobsRequestSchema)` to create a new message.
+ */
+export const ListAsyncJobsRequestSchema: GenMessage<ListAsyncJobsRequest> = /*@__PURE__*/
+  messageDesc(file_v1_daemon, 72);
+
+/**
+ * @generated from message openotters.daemon.v1.ListAsyncJobsResponse
+ */
+export type ListAsyncJobsResponse = Message<"openotters.daemon.v1.ListAsyncJobsResponse"> & {
+  /**
+   * @generated from field: repeated openotters.daemon.v1.AsyncJob jobs = 1;
+   */
+  jobs: AsyncJob[];
+};
+
+/**
+ * Describes the message openotters.daemon.v1.ListAsyncJobsResponse.
+ * Use `create(ListAsyncJobsResponseSchema)` to create a new message.
+ */
+export const ListAsyncJobsResponseSchema: GenMessage<ListAsyncJobsResponse> = /*@__PURE__*/
+  messageDesc(file_v1_daemon, 73);
+
+/**
+ * @generated from message openotters.daemon.v1.AsyncJob
+ */
+export type AsyncJob = Message<"openotters.daemon.v1.AsyncJob"> & {
+  /**
+   * @generated from field: string id = 1;
+   */
+  id: string;
+
+  /**
+   * @generated from field: string agent_id = 2;
+   */
+  agentId: string;
+
+  /**
+   * @generated from field: string bin = 4;
+   */
+  bin: string;
+
+  /**
+   * @generated from field: repeated string args = 5;
+   */
+  args: string[];
+
+  /**
+   * @generated from field: string stdin = 6;
+   */
+  stdin: string;
+
+  /**
+   * 'pending'|'running'|'done'|'error'|'cancelled'|'orphaned'
+   *
+   * @generated from field: string status = 7;
+   */
+  status: string;
+
+  /**
+   * PID (system) or container ID (docker); empty when not yet known
+   *
+   * @generated from field: string handle = 8;
+   */
+  handle: string;
+
+  /**
+   * @generated from field: int32 exit_code = 9;
+   */
+  exitCode: number;
+
+  /**
+   * @generated from field: string stdout = 10;
+   */
+  stdout: string;
+
+  /**
+   * @generated from field: string stderr = 11;
+   */
+  stderr: string;
+
+  /**
+   * @generated from field: string error = 12;
+   */
+  error: string;
+
+  /**
+   * unix seconds
+   *
+   * @generated from field: int64 created_at = 13;
+   */
+  createdAt: bigint;
+
+  /**
+   * @generated from field: int64 started_at = 14;
+   */
+  startedAt: bigint;
+
+  /**
+   * @generated from field: int64 finished_at = 15;
+   */
+  finishedAt: bigint;
+
+  /**
+   * @generated from field: map<string, string> labels = 16;
+   */
+  labels: { [key: string]: string };
+};
+
+/**
+ * Describes the message openotters.daemon.v1.AsyncJob.
+ * Use `create(AsyncJobSchema)` to create a new message.
+ */
+export const AsyncJobSchema: GenMessage<AsyncJob> = /*@__PURE__*/
+  messageDesc(file_v1_daemon, 74);
+
+/**
  * @generated from service openotters.daemon.v1.Runtime
  */
 export const Runtime: GenService<{
@@ -1957,6 +2285,61 @@ export const Runtime: GenService<{
     methodKind: "unary";
     input: typeof RemoveProviderRequestSchema;
     output: typeof RemoveProviderResponseSchema;
+  },
+  /**
+   * ── async jobs ────────────────────────────────────────────────────
+   * Submit a BIN job to run against the agent's spawn env. Jobs are
+   * attached to the agent — not to a session. The daemon does not
+   * push results anywhere on completion: observers (agent runtime,
+   * operator CLI, UI) read via GetAsyncJob / WatchAsyncJob and
+   * decide their own watch strategy.
+   *
+   * @generated from rpc openotters.daemon.v1.Runtime.SubmitAsyncJob
+   */
+  submitAsyncJob: {
+    methodKind: "unary";
+    input: typeof SubmitAsyncJobRequestSchema;
+    output: typeof SubmitAsyncJobResponseSchema;
+  },
+  /**
+   * @generated from rpc openotters.daemon.v1.Runtime.CancelAsyncJob
+   */
+  cancelAsyncJob: {
+    methodKind: "unary";
+    input: typeof CancelAsyncJobRequestSchema;
+    output: typeof CancelAsyncJobResponseSchema;
+  },
+  /**
+   * @generated from rpc openotters.daemon.v1.Runtime.GetAsyncJob
+   */
+  getAsyncJob: {
+    methodKind: "unary";
+    input: typeof GetAsyncJobRequestSchema;
+    output: typeof GetAsyncJobResponseSchema;
+  },
+  /**
+   * @generated from rpc openotters.daemon.v1.Runtime.ListAsyncJobs
+   */
+  listAsyncJobs: {
+    methodKind: "unary";
+    input: typeof ListAsyncJobsRequestSchema;
+    output: typeof ListAsyncJobsResponseSchema;
+  },
+  /**
+   * Server-streaming watch: emits the current AsyncJob immediately,
+   * then again on every material change (status, handle, exit_code,
+   * stdout, stderr, error, started_at, finished_at), then closes the
+   * stream when the job reaches a terminal status. NotFound at start
+   * when the job doesn't exist. Implemented as a server-side poll
+   * (~250 ms) — observers see at most ~250 ms latency from a status
+   * flip to the corresponding stream message.
+   *
+   * @generated from rpc openotters.daemon.v1.Runtime.WatchAsyncJob
+   */
+  watchAsyncJob: {
+    methodKind: "server_streaming";
+    input: typeof WatchAsyncJobRequestSchema;
+    output: typeof WatchAsyncJobResponseSchema;
   },
 }> = /*@__PURE__*/
   serviceDesc(file_v1_daemon, 0);

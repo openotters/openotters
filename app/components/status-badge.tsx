@@ -24,6 +24,12 @@ type StatusKey =
 	| "removing"
 	| "removed"
 	| "created"
+	// Async job statuses — kept in this same registry so jobs and
+	// agents share one visual language (a green "running" badge
+	// means the same thing whether it's an agent or a job).
+	| "done"
+	| "cancelled"
+	| "orphaned"
 
 interface StatusBadgeProps {
 	status: string
@@ -68,6 +74,9 @@ const statusConfig: Record<StatusKey, StatusVisual> = {
 		dotClassName: "bg-muted-foreground",
 	},
 	suspended: { label: "Suspended", className: "bg-muted text-muted-foreground", dotClassName: "bg-muted-foreground" },
+	done: { label: "Done", className: "bg-emerald-500/10 text-emerald-500", dotClassName: "bg-emerald-500" },
+	cancelled: { label: "Cancelled", className: "bg-muted text-muted-foreground", dotClassName: "bg-muted-foreground" },
+	orphaned: { label: "Orphaned", className: "bg-orange-500/10 text-orange-500", dotClassName: "bg-orange-500" },
 }
 
 const fallbackVisual: StatusVisual = {
