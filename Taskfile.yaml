@@ -52,12 +52,27 @@ tasks:
       browser always talks to the UI's own origin — no CORS dance,
       no allowlist tweak when dev falls through to :3001 because
       :3000 is busy.
+
+      The proxy injects $API_TOKEN as a Bearer header so the
+      JWT-protected daemon accepts the call. Auto-sourced from
+      ~/.otters/credentials.json keyed by OTTERSD_URL when the file
+      exists; override with API_TOKEN=... if you want to point at a
+      different daemon's token.
     vars:
       WEB_APP_DIR: '{{.WEB_APP_DIR | default "./app"}}'
       OTTERSD_URL: '{{.OTTERSD_URL | default "http://127.0.0.1:5050"}}'
+      CREDS_FILE:  '{{.CREDS_FILE  | default "~/.otters/credentials.json"}}'
     cmds:
       - test -d "{{.WEB_APP_DIR}}" || (echo "Web app not found at {{.WEB_APP_DIR}}; set WEB_APP_DIR or restore the directory" && exit 1)
-      - cd "{{.WEB_APP_DIR}}" && API_URL={{.OTTERSD_URL}} npm run dev
+      # Auto-source the operator token from credentials.json by URL
+      # when API_TOKEN isn't already set in the environment. The
+      # daemon writes this file on first TCP boot; without a token
+      # the dev UI sees Unauthenticated from every API call.
+      - >-
+        cd "{{.WEB_APP_DIR}}" &&
+        API_URL={{.OTTERSD_URL}}
+        API_TOKEN="${API_TOKEN:-$(jq -r '.endpoints["{{.OTTERSD_URL}}"].token // empty' {{.CREDS_FILE}} 2>/dev/null)}"
+        npm run dev
 
   daemon:dev:
     desc: |

@@ -301,18 +301,33 @@ func (d *Serve) startTCPListener(
 	// same listener). The web UI catches everything else; concrete
 	// paths win in http.ServeMux's matching, so connectPath and
 	// `/api/<connectPath>` both beat `/`.
+	endpoint := publicURL(d.HTTPAddr)
+
 	tcpMux := http.NewServeMux()
 	// JWT-wrap each Connect mount — but NOT the UI handler, which
 	// serves static assets that the browser fetches without an auth
-	// header. Browser → API requests still go through the proxied
-	// /api path, where the interceptor validates them.
+	// header. Browser → API requests go through the proxied /api
+	// path, where autoBearer SERVER-SIDE injects the operator token
+	// when none is present (so the browser never holds a credential
+	// — same-origin XSS or DevTools snooping can't lift one), then
+	// the JWT interceptor validates. Externally-issued tokens (CLI,
+	// agents, future scoped tokens) come with their own Authorization
+	// header which autoBearer leaves untouched, so they validate
+	// against their own claims.
 	//
+	// Mint the operator token here (idempotent — bootstrap above may
+	// already have written it on first boot; Ensure returns the
+	// existing one if so). Empty token → autoBearer no-ops, every
+	// browser request fails 401 with a clean error.
+	_, opTok, _ := auth.EnsureOperatorToken(endpoint, signingKey)
+	apiInner := autoBearer(opTok, jwtIcp.Wrap(connectHandler))
+	apiAlias := autoBearer(opTok, jwtIcp.Wrap(http.StripPrefix("/api", connectHandler)))
+
 	// Same h2c-vs-jwt ordering rule as the unix listener: jwt INSIDE
 	// h2c so the HTTP/2 upgrade is established before middleware
-	// touches headers. tcpMux entries register the JWT-wrapped
-	// inner handler; the outer h2c wrap below covers the whole mux.
-	tcpMux.Handle(connectPath, jwtIcp.Wrap(connectHandler))
-	tcpMux.Handle("/api"+connectPath, jwtIcp.Wrap(http.StripPrefix("/api", connectHandler)))
+	// touches headers.
+	tcpMux.Handle(connectPath, apiInner)
+	tcpMux.Handle("/api"+connectPath, apiAlias)
 
 	if !d.NoUI {
 		tcpMux.Handle("/", webui.Handler(d.UIPath))
@@ -330,12 +345,9 @@ func (d *Serve) startTCPListener(
 		return nil, fmt.Errorf("listening on %s: %w", d.HTTPAddr, err)
 	}
 
-	// Operator-token bootstrap: on first boot (or first time this
-	// HTTPAddr is seen), mint an operator token and write it to
-	// ~/.otters/credentials.json. Idempotent — existing entries are
-	// preserved across restarts. Logged at info so the operator
-	// notices the first-time write; subsequent boots are silent.
-	endpoint := publicURL(d.HTTPAddr)
+	// Operator-token bootstrap (now using the same `endpoint` value
+	// as the autoBearer wiring above so they share the credentials
+	// entry — first call writes, second is idempotent return).
 	if created, _, ensureErr := auth.EnsureOperatorToken(endpoint, signingKey); ensureErr != nil {
 		logger.Warn("operator-token bootstrap failed", zap.Error(ensureErr))
 	} else if created {
@@ -357,6 +369,32 @@ func (d *Serve) startTCPListener(
 	}()
 
 	return srv, nil
+}
+
+// autoBearer injects the operator token as the Authorization header
+// when the request arrives without one. Mounted on the TCP /api/*
+// path so the embedded UI (served from the same listener) can call
+// the daemon without holding a credential client-side. Externally
+// authenticated callers (CLI, agents, scoped tokens) always present
+// their own Authorization header and bypass injection — their token
+// is what gets validated.
+//
+// Effective trust model on the TCP listener: anyone who can reach
+// the port without auth is treated as the operator. Loopback bind
+// (default --http-addr 127.0.0.1:…) makes this safe — the same
+// boundary as Docker's daemon.sock. A non-loopback bind should pair
+// with --no-ui so this path doesn't activate.
+func autoBearer(token string, next http.Handler) http.Handler {
+	if token == "" {
+		return next
+	}
+	bearer := "Bearer " + token
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") == "" {
+			r.Header.Set("Authorization", bearer)
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 // publicURL turns an --http-addr value (e.g. "127.0.0.1:5050") into

@@ -98,10 +98,16 @@ func SocketURL(path string) string {
 }
 
 // EnsureOperatorToken upserts an entry for `endpoint` with a freshly-
-// minted operator token IF no entry exists for that URL. Idempotent —
-// existing entries are left alone (rotation is a separate flow).
-// Returns (created, token, error): created=true means a new token
-// was written; the daemon logs that so the operator notices.
+// minted operator token. Returns (created, token, error): created=true
+// means a new token was written and the daemon logs that so the
+// operator notices.
+//
+// Existing entries are reused ONLY when the stored token still
+// validates against the current signing key. If validation fails
+// (different daemon owns the same endpoint, key rotation, corruption),
+// the entry is overwritten — silently handing back a token that the
+// daemon's own interceptor would reject would cause every browser /
+// CLI request from autoBearer to 401.
 //
 // `endpoint` may be a TCP URL (http://127.0.0.1:5050) OR a unix
 // socket URL (unix:///tmp/otters-dev.sock). Both are stored side by
@@ -112,7 +118,10 @@ func EnsureOperatorToken(endpoint string, signingKey []byte) (bool, string, erro
 		return false, "", err
 	}
 	if existing, ok := cf.Endpoints[endpoint]; ok && existing.Token != "" {
-		return false, existing.Token, nil
+		if _, vErr := Validate(signingKey, existing.Token, nil); vErr == nil {
+			return false, existing.Token, nil
+		}
+		// Existing token doesn't validate — fall through to re-mint.
 	}
 
 	token, _, err := IssueOperator(signingKey)

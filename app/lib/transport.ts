@@ -16,6 +16,12 @@ import { createConnectTransport } from "@connectrpc/connect-web"
 // `createConnectTransport` → `createGrpcWebTransport` for gRPC-Web
 // binary in production. The daemon's Connect-Go handler accepts all
 // three protocols on the same path.
+//
+// JWT auth is handled SERVER-SIDE on the daemon's same listener: the
+// `/api/*` mount auto-injects the operator token on requests arriving
+// without an Authorization header. The browser never sees the token,
+// so XSS / DevTools / extension snooping can't lift it. The dev UI
+// mirrors this via app/middleware.ts injecting at the Next.js proxy.
 const origin = process.env.NEXT_PUBLIC_OTTERSD_URL ?? ""
 
 export const transport = createConnectTransport({
