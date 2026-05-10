@@ -271,6 +271,10 @@ message Mount {
   // auto-generated /etc/context/MOUNTS.md so the agent knows what
   // the mount is for without the user having to repeat it in prompt.
   string description = 3;
+  // When true, the host bind is mounted read-only. Enforced on the
+  // docker executor (mount.ReadOnly); the system executor surfaces
+  // it to the model in MOUNTS.md but cannot enforce it (no sandbox).
+  bool read_only = 4;
 }
 
 message CreateAgentRequest {
@@ -279,6 +283,16 @@ message CreateAgentRequest {
   string model = 3;
   string runtime = 4;
   repeated Mount mounts = 5;
+  // Per-run env overrides. Merged with the agent image's baked-in
+  // ENV directives — a key set here wins. Reserved keys (PATH,
+  // HOME, *_API_KEY, OTTERS_AGENT_ROOT, etc.) are rejected by
+  // spec.Validate before the agent starts.
+  repeated EnvOverride envs = 6;
+}
+
+message EnvOverride {
+  string key   = 1;
+  string value = 2;
 }
 
 message CreateAgentResponse {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/merlindorin/go-shared/pkg/cmd"
@@ -25,7 +26,8 @@ type Run struct {
 	Name    string   `help:"Instance name (auto-generated if empty)" optional:""`
 	Model   string   `help:"Override the image's declared MODEL directive" optional:""`
 	Runtime string   `help:"Override the image's declared RUNTIME reference" optional:""`
-	Mounts  []string `short:"v" name:"mount" help:"Bind host path into agent: HOST:TARGET[:DESC]. HOST is resolved client-side (~, relative paths); must exist on the daemon host."`
+	Mounts  []string `short:"v" name:"mount" help:"Bind host path into agent: HOST:TARGET[:DESC][:ro|:rw]. HOST is resolved client-side (~, relative paths); must exist on the daemon host. Trailing :ro makes the mount read-only (docker enforces; system surfaces it to the model)."`
+	Envs    []string `short:"e" name:"env" help:"Set or override an env var on the agent: KEY=VALUE. Repeatable. Wins over Agentfile-declared ENV with the same key. Reserved keys (PATH, *_API_KEY, OTTERS_AGENT_ROOT, …) are rejected."`
 }
 
 func (r *Run) Run(ctx context.Context, common *cmd.Commons, d *Daemon) error {
@@ -74,12 +76,25 @@ func (r *Run) Run(ctx context.Context, common *cmd.Commons, d *Daemon) error {
 		mounts = append(mounts, m)
 	}
 
+	envs := make([]*daemonv1.EnvOverride, 0, len(r.Envs))
+	for _, raw := range r.Envs {
+		eq := strings.IndexByte(raw, '=')
+		if eq <= 0 {
+			return fmt.Errorf("invalid env %q: expected KEY=VALUE", raw)
+		}
+		envs = append(envs, &daemonv1.EnvOverride{
+			Key:   raw[:eq],
+			Value: raw[eq+1:],
+		})
+	}
+
 	resp, err := c.CreateAgent(ctx, &daemonv1.CreateAgentRequest{
 		Name:    r.Name,
 		Ref:     ref,
 		Model:   r.Model,
 		Runtime: r.Runtime,
 		Mounts:  mounts,
+		Envs:    envs,
 	})
 	if err != nil {
 		return fmt.Errorf("creating agent: %w", unwrapRPC(err))

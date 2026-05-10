@@ -12,6 +12,7 @@ type persistedMount struct {
 	Host        string `json:"host"`
 	Target      string `json:"target"`
 	Description string `json:"description,omitempty"`
+	ReadOnly    bool   `json:"read_only,omitempty"`
 }
 
 type persistedAgent struct {

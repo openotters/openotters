@@ -1782,7 +1782,11 @@ type Mount struct {
 	// Optional short description, surfaced to the LLM via the
 	// auto-generated /etc/context/MOUNTS.md so the agent knows what
 	// the mount is for without the user having to repeat it in prompt.
-	Description   string `protobuf:"bytes,3,opt,name=description,proto3" json:"description,omitempty"`
+	Description string `protobuf:"bytes,3,opt,name=description,proto3" json:"description,omitempty"`
+	// When true, the host bind is mounted read-only. Enforced on the
+	// docker executor (mount.ReadOnly); the system executor surfaces
+	// it to the model in MOUNTS.md but cannot enforce it (no sandbox).
+	ReadOnly      bool `protobuf:"varint,4,opt,name=read_only,json=readOnly,proto3" json:"read_only,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1838,13 +1842,25 @@ func (x *Mount) GetDescription() string {
 	return ""
 }
 
+func (x *Mount) GetReadOnly() bool {
+	if x != nil {
+		return x.ReadOnly
+	}
+	return false
+}
+
 type CreateAgentRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	Ref           string                 `protobuf:"bytes,2,opt,name=ref,proto3" json:"ref,omitempty"`
-	Model         string                 `protobuf:"bytes,3,opt,name=model,proto3" json:"model,omitempty"`
-	Runtime       string                 `protobuf:"bytes,4,opt,name=runtime,proto3" json:"runtime,omitempty"`
-	Mounts        []*Mount               `protobuf:"bytes,5,rep,name=mounts,proto3" json:"mounts,omitempty"`
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	Name    string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Ref     string                 `protobuf:"bytes,2,opt,name=ref,proto3" json:"ref,omitempty"`
+	Model   string                 `protobuf:"bytes,3,opt,name=model,proto3" json:"model,omitempty"`
+	Runtime string                 `protobuf:"bytes,4,opt,name=runtime,proto3" json:"runtime,omitempty"`
+	Mounts  []*Mount               `protobuf:"bytes,5,rep,name=mounts,proto3" json:"mounts,omitempty"`
+	// Per-run env overrides. Merged with the agent image's baked-in
+	// ENV directives — a key set here wins. Reserved keys (PATH,
+	// HOME, *_API_KEY, OTTERS_AGENT_ROOT, etc.) are rejected by
+	// spec.Validate before the agent starts.
+	Envs          []*EnvOverride `protobuf:"bytes,6,rep,name=envs,proto3" json:"envs,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1914,6 +1930,65 @@ func (x *CreateAgentRequest) GetMounts() []*Mount {
 	return nil
 }
 
+func (x *CreateAgentRequest) GetEnvs() []*EnvOverride {
+	if x != nil {
+		return x.Envs
+	}
+	return nil
+}
+
+type EnvOverride struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Key           string                 `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
+	Value         string                 `protobuf:"bytes,2,opt,name=value,proto3" json:"value,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *EnvOverride) Reset() {
+	*x = EnvOverride{}
+	mi := &file_v1_daemon_proto_msgTypes[30]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *EnvOverride) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*EnvOverride) ProtoMessage() {}
+
+func (x *EnvOverride) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_daemon_proto_msgTypes[30]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use EnvOverride.ProtoReflect.Descriptor instead.
+func (*EnvOverride) Descriptor() ([]byte, []int) {
+	return file_v1_daemon_proto_rawDescGZIP(), []int{30}
+}
+
+func (x *EnvOverride) GetKey() string {
+	if x != nil {
+		return x.Key
+	}
+	return ""
+}
+
+func (x *EnvOverride) GetValue() string {
+	if x != nil {
+		return x.Value
+	}
+	return ""
+}
+
 type CreateAgentResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
@@ -1925,7 +2000,7 @@ type CreateAgentResponse struct {
 
 func (x *CreateAgentResponse) Reset() {
 	*x = CreateAgentResponse{}
-	mi := &file_v1_daemon_proto_msgTypes[30]
+	mi := &file_v1_daemon_proto_msgTypes[31]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1937,7 +2012,7 @@ func (x *CreateAgentResponse) String() string {
 func (*CreateAgentResponse) ProtoMessage() {}
 
 func (x *CreateAgentResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_daemon_proto_msgTypes[30]
+	mi := &file_v1_daemon_proto_msgTypes[31]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1950,7 +2025,7 @@ func (x *CreateAgentResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateAgentResponse.ProtoReflect.Descriptor instead.
 func (*CreateAgentResponse) Descriptor() ([]byte, []int) {
-	return file_v1_daemon_proto_rawDescGZIP(), []int{30}
+	return file_v1_daemon_proto_rawDescGZIP(), []int{31}
 }
 
 func (x *CreateAgentResponse) GetId() string {
@@ -1982,7 +2057,7 @@ type ListAgentsRequest struct {
 
 func (x *ListAgentsRequest) Reset() {
 	*x = ListAgentsRequest{}
-	mi := &file_v1_daemon_proto_msgTypes[31]
+	mi := &file_v1_daemon_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1994,7 +2069,7 @@ func (x *ListAgentsRequest) String() string {
 func (*ListAgentsRequest) ProtoMessage() {}
 
 func (x *ListAgentsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_daemon_proto_msgTypes[31]
+	mi := &file_v1_daemon_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2007,7 +2082,7 @@ func (x *ListAgentsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListAgentsRequest.ProtoReflect.Descriptor instead.
 func (*ListAgentsRequest) Descriptor() ([]byte, []int) {
-	return file_v1_daemon_proto_rawDescGZIP(), []int{31}
+	return file_v1_daemon_proto_rawDescGZIP(), []int{32}
 }
 
 type AgentInfo struct {
@@ -2039,7 +2114,7 @@ type AgentInfo struct {
 
 func (x *AgentInfo) Reset() {
 	*x = AgentInfo{}
-	mi := &file_v1_daemon_proto_msgTypes[32]
+	mi := &file_v1_daemon_proto_msgTypes[33]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2051,7 +2126,7 @@ func (x *AgentInfo) String() string {
 func (*AgentInfo) ProtoMessage() {}
 
 func (x *AgentInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_daemon_proto_msgTypes[32]
+	mi := &file_v1_daemon_proto_msgTypes[33]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2064,7 +2139,7 @@ func (x *AgentInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AgentInfo.ProtoReflect.Descriptor instead.
 func (*AgentInfo) Descriptor() ([]byte, []int) {
-	return file_v1_daemon_proto_rawDescGZIP(), []int{32}
+	return file_v1_daemon_proto_rawDescGZIP(), []int{33}
 }
 
 func (x *AgentInfo) GetId() string {
@@ -2167,7 +2242,7 @@ type ListAgentsResponse struct {
 
 func (x *ListAgentsResponse) Reset() {
 	*x = ListAgentsResponse{}
-	mi := &file_v1_daemon_proto_msgTypes[33]
+	mi := &file_v1_daemon_proto_msgTypes[34]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2179,7 +2254,7 @@ func (x *ListAgentsResponse) String() string {
 func (*ListAgentsResponse) ProtoMessage() {}
 
 func (x *ListAgentsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_daemon_proto_msgTypes[33]
+	mi := &file_v1_daemon_proto_msgTypes[34]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2192,7 +2267,7 @@ func (x *ListAgentsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListAgentsResponse.ProtoReflect.Descriptor instead.
 func (*ListAgentsResponse) Descriptor() ([]byte, []int) {
-	return file_v1_daemon_proto_rawDescGZIP(), []int{33}
+	return file_v1_daemon_proto_rawDescGZIP(), []int{34}
 }
 
 func (x *ListAgentsResponse) GetAgents() []*AgentInfo {
@@ -2211,7 +2286,7 @@ type StartAgentRequest struct {
 
 func (x *StartAgentRequest) Reset() {
 	*x = StartAgentRequest{}
-	mi := &file_v1_daemon_proto_msgTypes[34]
+	mi := &file_v1_daemon_proto_msgTypes[35]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2223,7 +2298,7 @@ func (x *StartAgentRequest) String() string {
 func (*StartAgentRequest) ProtoMessage() {}
 
 func (x *StartAgentRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_daemon_proto_msgTypes[34]
+	mi := &file_v1_daemon_proto_msgTypes[35]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2236,7 +2311,7 @@ func (x *StartAgentRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StartAgentRequest.ProtoReflect.Descriptor instead.
 func (*StartAgentRequest) Descriptor() ([]byte, []int) {
-	return file_v1_daemon_proto_rawDescGZIP(), []int{34}
+	return file_v1_daemon_proto_rawDescGZIP(), []int{35}
 }
 
 func (x *StartAgentRequest) GetRef() string {
@@ -2254,7 +2329,7 @@ type StartAgentResponse struct {
 
 func (x *StartAgentResponse) Reset() {
 	*x = StartAgentResponse{}
-	mi := &file_v1_daemon_proto_msgTypes[35]
+	mi := &file_v1_daemon_proto_msgTypes[36]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2266,7 +2341,7 @@ func (x *StartAgentResponse) String() string {
 func (*StartAgentResponse) ProtoMessage() {}
 
 func (x *StartAgentResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_daemon_proto_msgTypes[35]
+	mi := &file_v1_daemon_proto_msgTypes[36]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2279,7 +2354,7 @@ func (x *StartAgentResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StartAgentResponse.ProtoReflect.Descriptor instead.
 func (*StartAgentResponse) Descriptor() ([]byte, []int) {
-	return file_v1_daemon_proto_rawDescGZIP(), []int{35}
+	return file_v1_daemon_proto_rawDescGZIP(), []int{36}
 }
 
 type StopAgentRequest struct {
@@ -2291,7 +2366,7 @@ type StopAgentRequest struct {
 
 func (x *StopAgentRequest) Reset() {
 	*x = StopAgentRequest{}
-	mi := &file_v1_daemon_proto_msgTypes[36]
+	mi := &file_v1_daemon_proto_msgTypes[37]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2303,7 +2378,7 @@ func (x *StopAgentRequest) String() string {
 func (*StopAgentRequest) ProtoMessage() {}
 
 func (x *StopAgentRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_daemon_proto_msgTypes[36]
+	mi := &file_v1_daemon_proto_msgTypes[37]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2316,7 +2391,7 @@ func (x *StopAgentRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StopAgentRequest.ProtoReflect.Descriptor instead.
 func (*StopAgentRequest) Descriptor() ([]byte, []int) {
-	return file_v1_daemon_proto_rawDescGZIP(), []int{36}
+	return file_v1_daemon_proto_rawDescGZIP(), []int{37}
 }
 
 func (x *StopAgentRequest) GetRef() string {
@@ -2334,7 +2409,7 @@ type StopAgentResponse struct {
 
 func (x *StopAgentResponse) Reset() {
 	*x = StopAgentResponse{}
-	mi := &file_v1_daemon_proto_msgTypes[37]
+	mi := &file_v1_daemon_proto_msgTypes[38]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2346,7 +2421,7 @@ func (x *StopAgentResponse) String() string {
 func (*StopAgentResponse) ProtoMessage() {}
 
 func (x *StopAgentResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_daemon_proto_msgTypes[37]
+	mi := &file_v1_daemon_proto_msgTypes[38]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2359,7 +2434,7 @@ func (x *StopAgentResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StopAgentResponse.ProtoReflect.Descriptor instead.
 func (*StopAgentResponse) Descriptor() ([]byte, []int) {
-	return file_v1_daemon_proto_rawDescGZIP(), []int{37}
+	return file_v1_daemon_proto_rawDescGZIP(), []int{38}
 }
 
 type RemoveAgentRequest struct {
@@ -2371,7 +2446,7 @@ type RemoveAgentRequest struct {
 
 func (x *RemoveAgentRequest) Reset() {
 	*x = RemoveAgentRequest{}
-	mi := &file_v1_daemon_proto_msgTypes[38]
+	mi := &file_v1_daemon_proto_msgTypes[39]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2383,7 +2458,7 @@ func (x *RemoveAgentRequest) String() string {
 func (*RemoveAgentRequest) ProtoMessage() {}
 
 func (x *RemoveAgentRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_daemon_proto_msgTypes[38]
+	mi := &file_v1_daemon_proto_msgTypes[39]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2396,7 +2471,7 @@ func (x *RemoveAgentRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RemoveAgentRequest.ProtoReflect.Descriptor instead.
 func (*RemoveAgentRequest) Descriptor() ([]byte, []int) {
-	return file_v1_daemon_proto_rawDescGZIP(), []int{38}
+	return file_v1_daemon_proto_rawDescGZIP(), []int{39}
 }
 
 func (x *RemoveAgentRequest) GetRef() string {
@@ -2414,7 +2489,7 @@ type RemoveAgentResponse struct {
 
 func (x *RemoveAgentResponse) Reset() {
 	*x = RemoveAgentResponse{}
-	mi := &file_v1_daemon_proto_msgTypes[39]
+	mi := &file_v1_daemon_proto_msgTypes[40]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2426,7 +2501,7 @@ func (x *RemoveAgentResponse) String() string {
 func (*RemoveAgentResponse) ProtoMessage() {}
 
 func (x *RemoveAgentResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_daemon_proto_msgTypes[39]
+	mi := &file_v1_daemon_proto_msgTypes[40]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2439,7 +2514,7 @@ func (x *RemoveAgentResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RemoveAgentResponse.ProtoReflect.Descriptor instead.
 func (*RemoveAgentResponse) Descriptor() ([]byte, []int) {
-	return file_v1_daemon_proto_rawDescGZIP(), []int{39}
+	return file_v1_daemon_proto_rawDescGZIP(), []int{40}
 }
 
 type ChatRequest struct {
@@ -2453,7 +2528,7 @@ type ChatRequest struct {
 
 func (x *ChatRequest) Reset() {
 	*x = ChatRequest{}
-	mi := &file_v1_daemon_proto_msgTypes[40]
+	mi := &file_v1_daemon_proto_msgTypes[41]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2465,7 +2540,7 @@ func (x *ChatRequest) String() string {
 func (*ChatRequest) ProtoMessage() {}
 
 func (x *ChatRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_daemon_proto_msgTypes[40]
+	mi := &file_v1_daemon_proto_msgTypes[41]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2478,7 +2553,7 @@ func (x *ChatRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ChatRequest.ProtoReflect.Descriptor instead.
 func (*ChatRequest) Descriptor() ([]byte, []int) {
-	return file_v1_daemon_proto_rawDescGZIP(), []int{40}
+	return file_v1_daemon_proto_rawDescGZIP(), []int{41}
 }
 
 func (x *ChatRequest) GetRef() string {
@@ -2511,7 +2586,7 @@ type ChatResponse struct {
 
 func (x *ChatResponse) Reset() {
 	*x = ChatResponse{}
-	mi := &file_v1_daemon_proto_msgTypes[41]
+	mi := &file_v1_daemon_proto_msgTypes[42]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2523,7 +2598,7 @@ func (x *ChatResponse) String() string {
 func (*ChatResponse) ProtoMessage() {}
 
 func (x *ChatResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_daemon_proto_msgTypes[41]
+	mi := &file_v1_daemon_proto_msgTypes[42]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2536,7 +2611,7 @@ func (x *ChatResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ChatResponse.ProtoReflect.Descriptor instead.
 func (*ChatResponse) Descriptor() ([]byte, []int) {
-	return file_v1_daemon_proto_rawDescGZIP(), []int{41}
+	return file_v1_daemon_proto_rawDescGZIP(), []int{42}
 }
 
 func (x *ChatResponse) GetResponse() string {
@@ -2564,7 +2639,7 @@ type PromptObjectRequest struct {
 
 func (x *PromptObjectRequest) Reset() {
 	*x = PromptObjectRequest{}
-	mi := &file_v1_daemon_proto_msgTypes[42]
+	mi := &file_v1_daemon_proto_msgTypes[43]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2576,7 +2651,7 @@ func (x *PromptObjectRequest) String() string {
 func (*PromptObjectRequest) ProtoMessage() {}
 
 func (x *PromptObjectRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_daemon_proto_msgTypes[42]
+	mi := &file_v1_daemon_proto_msgTypes[43]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2589,7 +2664,7 @@ func (x *PromptObjectRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PromptObjectRequest.ProtoReflect.Descriptor instead.
 func (*PromptObjectRequest) Descriptor() ([]byte, []int) {
-	return file_v1_daemon_proto_rawDescGZIP(), []int{42}
+	return file_v1_daemon_proto_rawDescGZIP(), []int{43}
 }
 
 func (x *PromptObjectRequest) GetRef() string {
@@ -2637,7 +2712,7 @@ type PromptObjectResponse struct {
 
 func (x *PromptObjectResponse) Reset() {
 	*x = PromptObjectResponse{}
-	mi := &file_v1_daemon_proto_msgTypes[43]
+	mi := &file_v1_daemon_proto_msgTypes[44]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2649,7 +2724,7 @@ func (x *PromptObjectResponse) String() string {
 func (*PromptObjectResponse) ProtoMessage() {}
 
 func (x *PromptObjectResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_daemon_proto_msgTypes[43]
+	mi := &file_v1_daemon_proto_msgTypes[44]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2662,7 +2737,7 @@ func (x *PromptObjectResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PromptObjectResponse.ProtoReflect.Descriptor instead.
 func (*PromptObjectResponse) Descriptor() ([]byte, []int) {
-	return file_v1_daemon_proto_rawDescGZIP(), []int{43}
+	return file_v1_daemon_proto_rawDescGZIP(), []int{44}
 }
 
 func (x *PromptObjectResponse) GetObjectJson() []byte {
@@ -2690,7 +2765,7 @@ type ChatStreamRequest struct {
 
 func (x *ChatStreamRequest) Reset() {
 	*x = ChatStreamRequest{}
-	mi := &file_v1_daemon_proto_msgTypes[44]
+	mi := &file_v1_daemon_proto_msgTypes[45]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2702,7 +2777,7 @@ func (x *ChatStreamRequest) String() string {
 func (*ChatStreamRequest) ProtoMessage() {}
 
 func (x *ChatStreamRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_daemon_proto_msgTypes[44]
+	mi := &file_v1_daemon_proto_msgTypes[45]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2715,7 +2790,7 @@ func (x *ChatStreamRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ChatStreamRequest.ProtoReflect.Descriptor instead.
 func (*ChatStreamRequest) Descriptor() ([]byte, []int) {
-	return file_v1_daemon_proto_rawDescGZIP(), []int{44}
+	return file_v1_daemon_proto_rawDescGZIP(), []int{45}
 }
 
 func (x *ChatStreamRequest) GetRef() string {
@@ -2751,7 +2826,7 @@ type ChatStreamEvent struct {
 
 func (x *ChatStreamEvent) Reset() {
 	*x = ChatStreamEvent{}
-	mi := &file_v1_daemon_proto_msgTypes[45]
+	mi := &file_v1_daemon_proto_msgTypes[46]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2763,7 +2838,7 @@ func (x *ChatStreamEvent) String() string {
 func (*ChatStreamEvent) ProtoMessage() {}
 
 func (x *ChatStreamEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_daemon_proto_msgTypes[45]
+	mi := &file_v1_daemon_proto_msgTypes[46]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2776,7 +2851,7 @@ func (x *ChatStreamEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ChatStreamEvent.ProtoReflect.Descriptor instead.
 func (*ChatStreamEvent) Descriptor() ([]byte, []int) {
-	return file_v1_daemon_proto_rawDescGZIP(), []int{45}
+	return file_v1_daemon_proto_rawDescGZIP(), []int{46}
 }
 
 func (x *ChatStreamEvent) GetType() string {
@@ -2818,7 +2893,7 @@ type ListSessionMessagesRequest struct {
 
 func (x *ListSessionMessagesRequest) Reset() {
 	*x = ListSessionMessagesRequest{}
-	mi := &file_v1_daemon_proto_msgTypes[46]
+	mi := &file_v1_daemon_proto_msgTypes[47]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2830,7 +2905,7 @@ func (x *ListSessionMessagesRequest) String() string {
 func (*ListSessionMessagesRequest) ProtoMessage() {}
 
 func (x *ListSessionMessagesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_daemon_proto_msgTypes[46]
+	mi := &file_v1_daemon_proto_msgTypes[47]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2843,7 +2918,7 @@ func (x *ListSessionMessagesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListSessionMessagesRequest.ProtoReflect.Descriptor instead.
 func (*ListSessionMessagesRequest) Descriptor() ([]byte, []int) {
-	return file_v1_daemon_proto_rawDescGZIP(), []int{46}
+	return file_v1_daemon_proto_rawDescGZIP(), []int{47}
 }
 
 func (x *ListSessionMessagesRequest) GetRef() string {
@@ -2878,7 +2953,7 @@ type SessionMessage struct {
 
 func (x *SessionMessage) Reset() {
 	*x = SessionMessage{}
-	mi := &file_v1_daemon_proto_msgTypes[47]
+	mi := &file_v1_daemon_proto_msgTypes[48]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2890,7 +2965,7 @@ func (x *SessionMessage) String() string {
 func (*SessionMessage) ProtoMessage() {}
 
 func (x *SessionMessage) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_daemon_proto_msgTypes[47]
+	mi := &file_v1_daemon_proto_msgTypes[48]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2903,7 +2978,7 @@ func (x *SessionMessage) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SessionMessage.ProtoReflect.Descriptor instead.
 func (*SessionMessage) Descriptor() ([]byte, []int) {
-	return file_v1_daemon_proto_rawDescGZIP(), []int{47}
+	return file_v1_daemon_proto_rawDescGZIP(), []int{48}
 }
 
 func (x *SessionMessage) GetRole() string {
@@ -2936,7 +3011,7 @@ type ListSessionMessagesResponse struct {
 
 func (x *ListSessionMessagesResponse) Reset() {
 	*x = ListSessionMessagesResponse{}
-	mi := &file_v1_daemon_proto_msgTypes[48]
+	mi := &file_v1_daemon_proto_msgTypes[49]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2948,7 +3023,7 @@ func (x *ListSessionMessagesResponse) String() string {
 func (*ListSessionMessagesResponse) ProtoMessage() {}
 
 func (x *ListSessionMessagesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_daemon_proto_msgTypes[48]
+	mi := &file_v1_daemon_proto_msgTypes[49]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2961,7 +3036,7 @@ func (x *ListSessionMessagesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListSessionMessagesResponse.ProtoReflect.Descriptor instead.
 func (*ListSessionMessagesResponse) Descriptor() ([]byte, []int) {
-	return file_v1_daemon_proto_rawDescGZIP(), []int{48}
+	return file_v1_daemon_proto_rawDescGZIP(), []int{49}
 }
 
 func (x *ListSessionMessagesResponse) GetMessages() []*SessionMessage {
@@ -2980,7 +3055,7 @@ type ListSessionsRequest struct {
 
 func (x *ListSessionsRequest) Reset() {
 	*x = ListSessionsRequest{}
-	mi := &file_v1_daemon_proto_msgTypes[49]
+	mi := &file_v1_daemon_proto_msgTypes[50]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2992,7 +3067,7 @@ func (x *ListSessionsRequest) String() string {
 func (*ListSessionsRequest) ProtoMessage() {}
 
 func (x *ListSessionsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_daemon_proto_msgTypes[49]
+	mi := &file_v1_daemon_proto_msgTypes[50]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3005,7 +3080,7 @@ func (x *ListSessionsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListSessionsRequest.ProtoReflect.Descriptor instead.
 func (*ListSessionsRequest) Descriptor() ([]byte, []int) {
-	return file_v1_daemon_proto_rawDescGZIP(), []int{49}
+	return file_v1_daemon_proto_rawDescGZIP(), []int{50}
 }
 
 func (x *ListSessionsRequest) GetRef() string {
@@ -3026,7 +3101,7 @@ type SessionInfo struct {
 
 func (x *SessionInfo) Reset() {
 	*x = SessionInfo{}
-	mi := &file_v1_daemon_proto_msgTypes[50]
+	mi := &file_v1_daemon_proto_msgTypes[51]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3038,7 +3113,7 @@ func (x *SessionInfo) String() string {
 func (*SessionInfo) ProtoMessage() {}
 
 func (x *SessionInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_daemon_proto_msgTypes[50]
+	mi := &file_v1_daemon_proto_msgTypes[51]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3051,7 +3126,7 @@ func (x *SessionInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SessionInfo.ProtoReflect.Descriptor instead.
 func (*SessionInfo) Descriptor() ([]byte, []int) {
-	return file_v1_daemon_proto_rawDescGZIP(), []int{50}
+	return file_v1_daemon_proto_rawDescGZIP(), []int{51}
 }
 
 func (x *SessionInfo) GetId() string {
@@ -3084,7 +3159,7 @@ type ListSessionsResponse struct {
 
 func (x *ListSessionsResponse) Reset() {
 	*x = ListSessionsResponse{}
-	mi := &file_v1_daemon_proto_msgTypes[51]
+	mi := &file_v1_daemon_proto_msgTypes[52]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3096,7 +3171,7 @@ func (x *ListSessionsResponse) String() string {
 func (*ListSessionsResponse) ProtoMessage() {}
 
 func (x *ListSessionsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_daemon_proto_msgTypes[51]
+	mi := &file_v1_daemon_proto_msgTypes[52]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3109,7 +3184,7 @@ func (x *ListSessionsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListSessionsResponse.ProtoReflect.Descriptor instead.
 func (*ListSessionsResponse) Descriptor() ([]byte, []int) {
-	return file_v1_daemon_proto_rawDescGZIP(), []int{51}
+	return file_v1_daemon_proto_rawDescGZIP(), []int{52}
 }
 
 func (x *ListSessionsResponse) GetSessions() []*SessionInfo {
@@ -3129,7 +3204,7 @@ type DeleteSessionRequest struct {
 
 func (x *DeleteSessionRequest) Reset() {
 	*x = DeleteSessionRequest{}
-	mi := &file_v1_daemon_proto_msgTypes[52]
+	mi := &file_v1_daemon_proto_msgTypes[53]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3141,7 +3216,7 @@ func (x *DeleteSessionRequest) String() string {
 func (*DeleteSessionRequest) ProtoMessage() {}
 
 func (x *DeleteSessionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_daemon_proto_msgTypes[52]
+	mi := &file_v1_daemon_proto_msgTypes[53]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3154,7 +3229,7 @@ func (x *DeleteSessionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteSessionRequest.ProtoReflect.Descriptor instead.
 func (*DeleteSessionRequest) Descriptor() ([]byte, []int) {
-	return file_v1_daemon_proto_rawDescGZIP(), []int{52}
+	return file_v1_daemon_proto_rawDescGZIP(), []int{53}
 }
 
 func (x *DeleteSessionRequest) GetRef() string {
@@ -3179,7 +3254,7 @@ type DeleteSessionResponse struct {
 
 func (x *DeleteSessionResponse) Reset() {
 	*x = DeleteSessionResponse{}
-	mi := &file_v1_daemon_proto_msgTypes[53]
+	mi := &file_v1_daemon_proto_msgTypes[54]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3191,7 +3266,7 @@ func (x *DeleteSessionResponse) String() string {
 func (*DeleteSessionResponse) ProtoMessage() {}
 
 func (x *DeleteSessionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_daemon_proto_msgTypes[53]
+	mi := &file_v1_daemon_proto_msgTypes[54]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3204,7 +3279,7 @@ func (x *DeleteSessionResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteSessionResponse.ProtoReflect.Descriptor instead.
 func (*DeleteSessionResponse) Descriptor() ([]byte, []int) {
-	return file_v1_daemon_proto_rawDescGZIP(), []int{53}
+	return file_v1_daemon_proto_rawDescGZIP(), []int{54}
 }
 
 // Provider mirrors internal.ProviderConfig — the on-disk shape of an
@@ -3225,7 +3300,7 @@ type Provider struct {
 
 func (x *Provider) Reset() {
 	*x = Provider{}
-	mi := &file_v1_daemon_proto_msgTypes[54]
+	mi := &file_v1_daemon_proto_msgTypes[55]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3237,7 +3312,7 @@ func (x *Provider) String() string {
 func (*Provider) ProtoMessage() {}
 
 func (x *Provider) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_daemon_proto_msgTypes[54]
+	mi := &file_v1_daemon_proto_msgTypes[55]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3250,7 +3325,7 @@ func (x *Provider) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Provider.ProtoReflect.Descriptor instead.
 func (*Provider) Descriptor() ([]byte, []int) {
-	return file_v1_daemon_proto_rawDescGZIP(), []int{54}
+	return file_v1_daemon_proto_rawDescGZIP(), []int{55}
 }
 
 func (x *Provider) GetName() string {
@@ -3289,7 +3364,7 @@ type ListProvidersRequest struct {
 
 func (x *ListProvidersRequest) Reset() {
 	*x = ListProvidersRequest{}
-	mi := &file_v1_daemon_proto_msgTypes[55]
+	mi := &file_v1_daemon_proto_msgTypes[56]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3301,7 +3376,7 @@ func (x *ListProvidersRequest) String() string {
 func (*ListProvidersRequest) ProtoMessage() {}
 
 func (x *ListProvidersRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_daemon_proto_msgTypes[55]
+	mi := &file_v1_daemon_proto_msgTypes[56]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3314,7 +3389,7 @@ func (x *ListProvidersRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListProvidersRequest.ProtoReflect.Descriptor instead.
 func (*ListProvidersRequest) Descriptor() ([]byte, []int) {
-	return file_v1_daemon_proto_rawDescGZIP(), []int{55}
+	return file_v1_daemon_proto_rawDescGZIP(), []int{56}
 }
 
 type ListProvidersResponse struct {
@@ -3326,7 +3401,7 @@ type ListProvidersResponse struct {
 
 func (x *ListProvidersResponse) Reset() {
 	*x = ListProvidersResponse{}
-	mi := &file_v1_daemon_proto_msgTypes[56]
+	mi := &file_v1_daemon_proto_msgTypes[57]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3338,7 +3413,7 @@ func (x *ListProvidersResponse) String() string {
 func (*ListProvidersResponse) ProtoMessage() {}
 
 func (x *ListProvidersResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_daemon_proto_msgTypes[56]
+	mi := &file_v1_daemon_proto_msgTypes[57]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3351,7 +3426,7 @@ func (x *ListProvidersResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListProvidersResponse.ProtoReflect.Descriptor instead.
 func (*ListProvidersResponse) Descriptor() ([]byte, []int) {
-	return file_v1_daemon_proto_rawDescGZIP(), []int{56}
+	return file_v1_daemon_proto_rawDescGZIP(), []int{57}
 }
 
 func (x *ListProvidersResponse) GetProviders() []*Provider {
@@ -3370,7 +3445,7 @@ type AddProviderRequest struct {
 
 func (x *AddProviderRequest) Reset() {
 	*x = AddProviderRequest{}
-	mi := &file_v1_daemon_proto_msgTypes[57]
+	mi := &file_v1_daemon_proto_msgTypes[58]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3382,7 +3457,7 @@ func (x *AddProviderRequest) String() string {
 func (*AddProviderRequest) ProtoMessage() {}
 
 func (x *AddProviderRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_daemon_proto_msgTypes[57]
+	mi := &file_v1_daemon_proto_msgTypes[58]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3395,7 +3470,7 @@ func (x *AddProviderRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AddProviderRequest.ProtoReflect.Descriptor instead.
 func (*AddProviderRequest) Descriptor() ([]byte, []int) {
-	return file_v1_daemon_proto_rawDescGZIP(), []int{57}
+	return file_v1_daemon_proto_rawDescGZIP(), []int{58}
 }
 
 func (x *AddProviderRequest) GetProvider() *Provider {
@@ -3414,7 +3489,7 @@ type AddProviderResponse struct {
 
 func (x *AddProviderResponse) Reset() {
 	*x = AddProviderResponse{}
-	mi := &file_v1_daemon_proto_msgTypes[58]
+	mi := &file_v1_daemon_proto_msgTypes[59]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3426,7 +3501,7 @@ func (x *AddProviderResponse) String() string {
 func (*AddProviderResponse) ProtoMessage() {}
 
 func (x *AddProviderResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_daemon_proto_msgTypes[58]
+	mi := &file_v1_daemon_proto_msgTypes[59]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3439,7 +3514,7 @@ func (x *AddProviderResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AddProviderResponse.ProtoReflect.Descriptor instead.
 func (*AddProviderResponse) Descriptor() ([]byte, []int) {
-	return file_v1_daemon_proto_rawDescGZIP(), []int{58}
+	return file_v1_daemon_proto_rawDescGZIP(), []int{59}
 }
 
 func (x *AddProviderResponse) GetProvider() *Provider {
@@ -3458,7 +3533,7 @@ type UpdateProviderRequest struct {
 
 func (x *UpdateProviderRequest) Reset() {
 	*x = UpdateProviderRequest{}
-	mi := &file_v1_daemon_proto_msgTypes[59]
+	mi := &file_v1_daemon_proto_msgTypes[60]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3470,7 +3545,7 @@ func (x *UpdateProviderRequest) String() string {
 func (*UpdateProviderRequest) ProtoMessage() {}
 
 func (x *UpdateProviderRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_daemon_proto_msgTypes[59]
+	mi := &file_v1_daemon_proto_msgTypes[60]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3483,7 +3558,7 @@ func (x *UpdateProviderRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateProviderRequest.ProtoReflect.Descriptor instead.
 func (*UpdateProviderRequest) Descriptor() ([]byte, []int) {
-	return file_v1_daemon_proto_rawDescGZIP(), []int{59}
+	return file_v1_daemon_proto_rawDescGZIP(), []int{60}
 }
 
 func (x *UpdateProviderRequest) GetProvider() *Provider {
@@ -3502,7 +3577,7 @@ type UpdateProviderResponse struct {
 
 func (x *UpdateProviderResponse) Reset() {
 	*x = UpdateProviderResponse{}
-	mi := &file_v1_daemon_proto_msgTypes[60]
+	mi := &file_v1_daemon_proto_msgTypes[61]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3514,7 +3589,7 @@ func (x *UpdateProviderResponse) String() string {
 func (*UpdateProviderResponse) ProtoMessage() {}
 
 func (x *UpdateProviderResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_daemon_proto_msgTypes[60]
+	mi := &file_v1_daemon_proto_msgTypes[61]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3527,7 +3602,7 @@ func (x *UpdateProviderResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateProviderResponse.ProtoReflect.Descriptor instead.
 func (*UpdateProviderResponse) Descriptor() ([]byte, []int) {
-	return file_v1_daemon_proto_rawDescGZIP(), []int{60}
+	return file_v1_daemon_proto_rawDescGZIP(), []int{61}
 }
 
 func (x *UpdateProviderResponse) GetProvider() *Provider {
@@ -3546,7 +3621,7 @@ type RemoveProviderRequest struct {
 
 func (x *RemoveProviderRequest) Reset() {
 	*x = RemoveProviderRequest{}
-	mi := &file_v1_daemon_proto_msgTypes[61]
+	mi := &file_v1_daemon_proto_msgTypes[62]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3558,7 +3633,7 @@ func (x *RemoveProviderRequest) String() string {
 func (*RemoveProviderRequest) ProtoMessage() {}
 
 func (x *RemoveProviderRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_daemon_proto_msgTypes[61]
+	mi := &file_v1_daemon_proto_msgTypes[62]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3571,7 +3646,7 @@ func (x *RemoveProviderRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RemoveProviderRequest.ProtoReflect.Descriptor instead.
 func (*RemoveProviderRequest) Descriptor() ([]byte, []int) {
-	return file_v1_daemon_proto_rawDescGZIP(), []int{61}
+	return file_v1_daemon_proto_rawDescGZIP(), []int{62}
 }
 
 func (x *RemoveProviderRequest) GetName() string {
@@ -3589,7 +3664,7 @@ type RemoveProviderResponse struct {
 
 func (x *RemoveProviderResponse) Reset() {
 	*x = RemoveProviderResponse{}
-	mi := &file_v1_daemon_proto_msgTypes[62]
+	mi := &file_v1_daemon_proto_msgTypes[63]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3601,7 +3676,7 @@ func (x *RemoveProviderResponse) String() string {
 func (*RemoveProviderResponse) ProtoMessage() {}
 
 func (x *RemoveProviderResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_daemon_proto_msgTypes[62]
+	mi := &file_v1_daemon_proto_msgTypes[63]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3614,7 +3689,7 @@ func (x *RemoveProviderResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RemoveProviderResponse.ProtoReflect.Descriptor instead.
 func (*RemoveProviderResponse) Descriptor() ([]byte, []int) {
-	return file_v1_daemon_proto_rawDescGZIP(), []int{62}
+	return file_v1_daemon_proto_rawDescGZIP(), []int{63}
 }
 
 var File_v1_daemon_proto protoreflect.FileDescriptor
@@ -3748,17 +3823,22 @@ const file_v1_daemon_proto_rawDesc = "" +
 	"\x06labels\x18\x06 \x03(\v27.openotters.daemon.v1.DescribeImageResponse.LabelsEntryR\x06labels\x1a9\n" +
 	"\vLabelsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"U\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"r\n" +
 	"\x05Mount\x12\x12\n" +
 	"\x04host\x18\x01 \x01(\tR\x04host\x12\x16\n" +
 	"\x06target\x18\x02 \x01(\tR\x06target\x12 \n" +
-	"\vdescription\x18\x03 \x01(\tR\vdescription\"\x9f\x01\n" +
+	"\vdescription\x18\x03 \x01(\tR\vdescription\x12\x1b\n" +
+	"\tread_only\x18\x04 \x01(\bR\breadOnly\"\xd6\x01\n" +
 	"\x12CreateAgentRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x10\n" +
 	"\x03ref\x18\x02 \x01(\tR\x03ref\x12\x14\n" +
 	"\x05model\x18\x03 \x01(\tR\x05model\x12\x18\n" +
 	"\aruntime\x18\x04 \x01(\tR\aruntime\x123\n" +
-	"\x06mounts\x18\x05 \x03(\v2\x1b.openotters.daemon.v1.MountR\x06mounts\"Q\n" +
+	"\x06mounts\x18\x05 \x03(\v2\x1b.openotters.daemon.v1.MountR\x06mounts\x125\n" +
+	"\x04envs\x18\x06 \x03(\v2!.openotters.daemon.v1.EnvOverrideR\x04envs\"5\n" +
+	"\vEnvOverride\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value\"Q\n" +
 	"\x13CreateAgentResponse\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x16\n" +
@@ -3913,7 +3993,7 @@ func file_v1_daemon_proto_rawDescGZIP() []byte {
 	return file_v1_daemon_proto_rawDescData
 }
 
-var file_v1_daemon_proto_msgTypes = make([]protoimpl.MessageInfo, 64)
+var file_v1_daemon_proto_msgTypes = make([]protoimpl.MessageInfo, 65)
 var file_v1_daemon_proto_goTypes = []any{
 	(*ListModelsRequest)(nil),           // 0: openotters.daemon.v1.ListModelsRequest
 	(*ListModelsResponse)(nil),          // 1: openotters.daemon.v1.ListModelsResponse
@@ -3945,116 +4025,118 @@ var file_v1_daemon_proto_goTypes = []any{
 	(*DescribeImageResponse)(nil),       // 27: openotters.daemon.v1.DescribeImageResponse
 	(*Mount)(nil),                       // 28: openotters.daemon.v1.Mount
 	(*CreateAgentRequest)(nil),          // 29: openotters.daemon.v1.CreateAgentRequest
-	(*CreateAgentResponse)(nil),         // 30: openotters.daemon.v1.CreateAgentResponse
-	(*ListAgentsRequest)(nil),           // 31: openotters.daemon.v1.ListAgentsRequest
-	(*AgentInfo)(nil),                   // 32: openotters.daemon.v1.AgentInfo
-	(*ListAgentsResponse)(nil),          // 33: openotters.daemon.v1.ListAgentsResponse
-	(*StartAgentRequest)(nil),           // 34: openotters.daemon.v1.StartAgentRequest
-	(*StartAgentResponse)(nil),          // 35: openotters.daemon.v1.StartAgentResponse
-	(*StopAgentRequest)(nil),            // 36: openotters.daemon.v1.StopAgentRequest
-	(*StopAgentResponse)(nil),           // 37: openotters.daemon.v1.StopAgentResponse
-	(*RemoveAgentRequest)(nil),          // 38: openotters.daemon.v1.RemoveAgentRequest
-	(*RemoveAgentResponse)(nil),         // 39: openotters.daemon.v1.RemoveAgentResponse
-	(*ChatRequest)(nil),                 // 40: openotters.daemon.v1.ChatRequest
-	(*ChatResponse)(nil),                // 41: openotters.daemon.v1.ChatResponse
-	(*PromptObjectRequest)(nil),         // 42: openotters.daemon.v1.PromptObjectRequest
-	(*PromptObjectResponse)(nil),        // 43: openotters.daemon.v1.PromptObjectResponse
-	(*ChatStreamRequest)(nil),           // 44: openotters.daemon.v1.ChatStreamRequest
-	(*ChatStreamEvent)(nil),             // 45: openotters.daemon.v1.ChatStreamEvent
-	(*ListSessionMessagesRequest)(nil),  // 46: openotters.daemon.v1.ListSessionMessagesRequest
-	(*SessionMessage)(nil),              // 47: openotters.daemon.v1.SessionMessage
-	(*ListSessionMessagesResponse)(nil), // 48: openotters.daemon.v1.ListSessionMessagesResponse
-	(*ListSessionsRequest)(nil),         // 49: openotters.daemon.v1.ListSessionsRequest
-	(*SessionInfo)(nil),                 // 50: openotters.daemon.v1.SessionInfo
-	(*ListSessionsResponse)(nil),        // 51: openotters.daemon.v1.ListSessionsResponse
-	(*DeleteSessionRequest)(nil),        // 52: openotters.daemon.v1.DeleteSessionRequest
-	(*DeleteSessionResponse)(nil),       // 53: openotters.daemon.v1.DeleteSessionResponse
-	(*Provider)(nil),                    // 54: openotters.daemon.v1.Provider
-	(*ListProvidersRequest)(nil),        // 55: openotters.daemon.v1.ListProvidersRequest
-	(*ListProvidersResponse)(nil),       // 56: openotters.daemon.v1.ListProvidersResponse
-	(*AddProviderRequest)(nil),          // 57: openotters.daemon.v1.AddProviderRequest
-	(*AddProviderResponse)(nil),         // 58: openotters.daemon.v1.AddProviderResponse
-	(*UpdateProviderRequest)(nil),       // 59: openotters.daemon.v1.UpdateProviderRequest
-	(*UpdateProviderResponse)(nil),      // 60: openotters.daemon.v1.UpdateProviderResponse
-	(*RemoveProviderRequest)(nil),       // 61: openotters.daemon.v1.RemoveProviderRequest
-	(*RemoveProviderResponse)(nil),      // 62: openotters.daemon.v1.RemoveProviderResponse
-	nil,                                 // 63: openotters.daemon.v1.DescribeImageResponse.LabelsEntry
+	(*EnvOverride)(nil),                 // 30: openotters.daemon.v1.EnvOverride
+	(*CreateAgentResponse)(nil),         // 31: openotters.daemon.v1.CreateAgentResponse
+	(*ListAgentsRequest)(nil),           // 32: openotters.daemon.v1.ListAgentsRequest
+	(*AgentInfo)(nil),                   // 33: openotters.daemon.v1.AgentInfo
+	(*ListAgentsResponse)(nil),          // 34: openotters.daemon.v1.ListAgentsResponse
+	(*StartAgentRequest)(nil),           // 35: openotters.daemon.v1.StartAgentRequest
+	(*StartAgentResponse)(nil),          // 36: openotters.daemon.v1.StartAgentResponse
+	(*StopAgentRequest)(nil),            // 37: openotters.daemon.v1.StopAgentRequest
+	(*StopAgentResponse)(nil),           // 38: openotters.daemon.v1.StopAgentResponse
+	(*RemoveAgentRequest)(nil),          // 39: openotters.daemon.v1.RemoveAgentRequest
+	(*RemoveAgentResponse)(nil),         // 40: openotters.daemon.v1.RemoveAgentResponse
+	(*ChatRequest)(nil),                 // 41: openotters.daemon.v1.ChatRequest
+	(*ChatResponse)(nil),                // 42: openotters.daemon.v1.ChatResponse
+	(*PromptObjectRequest)(nil),         // 43: openotters.daemon.v1.PromptObjectRequest
+	(*PromptObjectResponse)(nil),        // 44: openotters.daemon.v1.PromptObjectResponse
+	(*ChatStreamRequest)(nil),           // 45: openotters.daemon.v1.ChatStreamRequest
+	(*ChatStreamEvent)(nil),             // 46: openotters.daemon.v1.ChatStreamEvent
+	(*ListSessionMessagesRequest)(nil),  // 47: openotters.daemon.v1.ListSessionMessagesRequest
+	(*SessionMessage)(nil),              // 48: openotters.daemon.v1.SessionMessage
+	(*ListSessionMessagesResponse)(nil), // 49: openotters.daemon.v1.ListSessionMessagesResponse
+	(*ListSessionsRequest)(nil),         // 50: openotters.daemon.v1.ListSessionsRequest
+	(*SessionInfo)(nil),                 // 51: openotters.daemon.v1.SessionInfo
+	(*ListSessionsResponse)(nil),        // 52: openotters.daemon.v1.ListSessionsResponse
+	(*DeleteSessionRequest)(nil),        // 53: openotters.daemon.v1.DeleteSessionRequest
+	(*DeleteSessionResponse)(nil),       // 54: openotters.daemon.v1.DeleteSessionResponse
+	(*Provider)(nil),                    // 55: openotters.daemon.v1.Provider
+	(*ListProvidersRequest)(nil),        // 56: openotters.daemon.v1.ListProvidersRequest
+	(*ListProvidersResponse)(nil),       // 57: openotters.daemon.v1.ListProvidersResponse
+	(*AddProviderRequest)(nil),          // 58: openotters.daemon.v1.AddProviderRequest
+	(*AddProviderResponse)(nil),         // 59: openotters.daemon.v1.AddProviderResponse
+	(*UpdateProviderRequest)(nil),       // 60: openotters.daemon.v1.UpdateProviderRequest
+	(*UpdateProviderResponse)(nil),      // 61: openotters.daemon.v1.UpdateProviderResponse
+	(*RemoveProviderRequest)(nil),       // 62: openotters.daemon.v1.RemoveProviderRequest
+	(*RemoveProviderResponse)(nil),      // 63: openotters.daemon.v1.RemoveProviderResponse
+	nil,                                 // 64: openotters.daemon.v1.DescribeImageResponse.LabelsEntry
 }
 var file_v1_daemon_proto_depIdxs = []int32{
 	2,  // 0: openotters.daemon.v1.ListModelsResponse.models:type_name -> openotters.daemon.v1.Model
 	9,  // 1: openotters.daemon.v1.BuildToolImageRequest.platforms:type_name -> openotters.daemon.v1.ToolPlatform
 	19, // 2: openotters.daemon.v1.ListImagesResponse.images:type_name -> openotters.daemon.v1.ImageInfo
-	63, // 3: openotters.daemon.v1.DescribeImageResponse.labels:type_name -> openotters.daemon.v1.DescribeImageResponse.LabelsEntry
+	64, // 3: openotters.daemon.v1.DescribeImageResponse.labels:type_name -> openotters.daemon.v1.DescribeImageResponse.LabelsEntry
 	28, // 4: openotters.daemon.v1.CreateAgentRequest.mounts:type_name -> openotters.daemon.v1.Mount
-	28, // 5: openotters.daemon.v1.AgentInfo.mounts:type_name -> openotters.daemon.v1.Mount
-	20, // 6: openotters.daemon.v1.AgentInfo.tools:type_name -> openotters.daemon.v1.AgentTool
-	32, // 7: openotters.daemon.v1.ListAgentsResponse.agents:type_name -> openotters.daemon.v1.AgentInfo
-	47, // 8: openotters.daemon.v1.ListSessionMessagesResponse.messages:type_name -> openotters.daemon.v1.SessionMessage
-	50, // 9: openotters.daemon.v1.ListSessionsResponse.sessions:type_name -> openotters.daemon.v1.SessionInfo
-	54, // 10: openotters.daemon.v1.ListProvidersResponse.providers:type_name -> openotters.daemon.v1.Provider
-	54, // 11: openotters.daemon.v1.AddProviderRequest.provider:type_name -> openotters.daemon.v1.Provider
-	54, // 12: openotters.daemon.v1.AddProviderResponse.provider:type_name -> openotters.daemon.v1.Provider
-	54, // 13: openotters.daemon.v1.UpdateProviderRequest.provider:type_name -> openotters.daemon.v1.Provider
-	54, // 14: openotters.daemon.v1.UpdateProviderResponse.provider:type_name -> openotters.daemon.v1.Provider
-	5,  // 15: openotters.daemon.v1.Runtime.GetInfo:input_type -> openotters.daemon.v1.GetInfoRequest
-	7,  // 16: openotters.daemon.v1.Runtime.BuildAgent:input_type -> openotters.daemon.v1.BuildAgentRequest
-	10, // 17: openotters.daemon.v1.Runtime.BuildToolImage:input_type -> openotters.daemon.v1.BuildToolImageRequest
-	12, // 18: openotters.daemon.v1.Runtime.SaveAgentImage:input_type -> openotters.daemon.v1.SaveAgentImageRequest
-	14, // 19: openotters.daemon.v1.Runtime.PullAgentImage:input_type -> openotters.daemon.v1.PullRequest
-	16, // 20: openotters.daemon.v1.Runtime.PushAgentImage:input_type -> openotters.daemon.v1.PushRequest
-	18, // 21: openotters.daemon.v1.Runtime.ListImages:input_type -> openotters.daemon.v1.ListImagesRequest
-	22, // 22: openotters.daemon.v1.Runtime.RefreshImage:input_type -> openotters.daemon.v1.RefreshImageRequest
-	24, // 23: openotters.daemon.v1.Runtime.RemoveImage:input_type -> openotters.daemon.v1.RemoveImageRequest
-	26, // 24: openotters.daemon.v1.Runtime.DescribeImage:input_type -> openotters.daemon.v1.DescribeImageRequest
-	29, // 25: openotters.daemon.v1.Runtime.CreateAgent:input_type -> openotters.daemon.v1.CreateAgentRequest
-	31, // 26: openotters.daemon.v1.Runtime.ListAgents:input_type -> openotters.daemon.v1.ListAgentsRequest
-	34, // 27: openotters.daemon.v1.Runtime.StartAgent:input_type -> openotters.daemon.v1.StartAgentRequest
-	36, // 28: openotters.daemon.v1.Runtime.StopAgent:input_type -> openotters.daemon.v1.StopAgentRequest
-	38, // 29: openotters.daemon.v1.Runtime.RemoveAgent:input_type -> openotters.daemon.v1.RemoveAgentRequest
-	40, // 30: openotters.daemon.v1.Runtime.ChatWithAgent:input_type -> openotters.daemon.v1.ChatRequest
-	42, // 31: openotters.daemon.v1.Runtime.PromptObject:input_type -> openotters.daemon.v1.PromptObjectRequest
-	44, // 32: openotters.daemon.v1.Runtime.ChatStreamWithAgent:input_type -> openotters.daemon.v1.ChatStreamRequest
-	46, // 33: openotters.daemon.v1.Runtime.ListSessionMessages:input_type -> openotters.daemon.v1.ListSessionMessagesRequest
-	49, // 34: openotters.daemon.v1.Runtime.ListSessions:input_type -> openotters.daemon.v1.ListSessionsRequest
-	52, // 35: openotters.daemon.v1.Runtime.DeleteSession:input_type -> openotters.daemon.v1.DeleteSessionRequest
-	3,  // 36: openotters.daemon.v1.Runtime.GetAgentLogs:input_type -> openotters.daemon.v1.GetAgentLogsRequest
-	0,  // 37: openotters.daemon.v1.Runtime.ListModels:input_type -> openotters.daemon.v1.ListModelsRequest
-	55, // 38: openotters.daemon.v1.Runtime.ListProviders:input_type -> openotters.daemon.v1.ListProvidersRequest
-	57, // 39: openotters.daemon.v1.Runtime.AddProvider:input_type -> openotters.daemon.v1.AddProviderRequest
-	59, // 40: openotters.daemon.v1.Runtime.UpdateProvider:input_type -> openotters.daemon.v1.UpdateProviderRequest
-	61, // 41: openotters.daemon.v1.Runtime.RemoveProvider:input_type -> openotters.daemon.v1.RemoveProviderRequest
-	6,  // 42: openotters.daemon.v1.Runtime.GetInfo:output_type -> openotters.daemon.v1.GetInfoResponse
-	8,  // 43: openotters.daemon.v1.Runtime.BuildAgent:output_type -> openotters.daemon.v1.BuildAgentResponse
-	11, // 44: openotters.daemon.v1.Runtime.BuildToolImage:output_type -> openotters.daemon.v1.BuildToolImageResponse
-	13, // 45: openotters.daemon.v1.Runtime.SaveAgentImage:output_type -> openotters.daemon.v1.SaveAgentImageResponse
-	15, // 46: openotters.daemon.v1.Runtime.PullAgentImage:output_type -> openotters.daemon.v1.PullResponse
-	17, // 47: openotters.daemon.v1.Runtime.PushAgentImage:output_type -> openotters.daemon.v1.PushResponse
-	21, // 48: openotters.daemon.v1.Runtime.ListImages:output_type -> openotters.daemon.v1.ListImagesResponse
-	23, // 49: openotters.daemon.v1.Runtime.RefreshImage:output_type -> openotters.daemon.v1.RefreshImageResponse
-	25, // 50: openotters.daemon.v1.Runtime.RemoveImage:output_type -> openotters.daemon.v1.RemoveImageResponse
-	27, // 51: openotters.daemon.v1.Runtime.DescribeImage:output_type -> openotters.daemon.v1.DescribeImageResponse
-	30, // 52: openotters.daemon.v1.Runtime.CreateAgent:output_type -> openotters.daemon.v1.CreateAgentResponse
-	33, // 53: openotters.daemon.v1.Runtime.ListAgents:output_type -> openotters.daemon.v1.ListAgentsResponse
-	35, // 54: openotters.daemon.v1.Runtime.StartAgent:output_type -> openotters.daemon.v1.StartAgentResponse
-	37, // 55: openotters.daemon.v1.Runtime.StopAgent:output_type -> openotters.daemon.v1.StopAgentResponse
-	39, // 56: openotters.daemon.v1.Runtime.RemoveAgent:output_type -> openotters.daemon.v1.RemoveAgentResponse
-	41, // 57: openotters.daemon.v1.Runtime.ChatWithAgent:output_type -> openotters.daemon.v1.ChatResponse
-	43, // 58: openotters.daemon.v1.Runtime.PromptObject:output_type -> openotters.daemon.v1.PromptObjectResponse
-	45, // 59: openotters.daemon.v1.Runtime.ChatStreamWithAgent:output_type -> openotters.daemon.v1.ChatStreamEvent
-	48, // 60: openotters.daemon.v1.Runtime.ListSessionMessages:output_type -> openotters.daemon.v1.ListSessionMessagesResponse
-	51, // 61: openotters.daemon.v1.Runtime.ListSessions:output_type -> openotters.daemon.v1.ListSessionsResponse
-	53, // 62: openotters.daemon.v1.Runtime.DeleteSession:output_type -> openotters.daemon.v1.DeleteSessionResponse
-	4,  // 63: openotters.daemon.v1.Runtime.GetAgentLogs:output_type -> openotters.daemon.v1.GetAgentLogsResponse
-	1,  // 64: openotters.daemon.v1.Runtime.ListModels:output_type -> openotters.daemon.v1.ListModelsResponse
-	56, // 65: openotters.daemon.v1.Runtime.ListProviders:output_type -> openotters.daemon.v1.ListProvidersResponse
-	58, // 66: openotters.daemon.v1.Runtime.AddProvider:output_type -> openotters.daemon.v1.AddProviderResponse
-	60, // 67: openotters.daemon.v1.Runtime.UpdateProvider:output_type -> openotters.daemon.v1.UpdateProviderResponse
-	62, // 68: openotters.daemon.v1.Runtime.RemoveProvider:output_type -> openotters.daemon.v1.RemoveProviderResponse
-	42, // [42:69] is the sub-list for method output_type
-	15, // [15:42] is the sub-list for method input_type
-	15, // [15:15] is the sub-list for extension type_name
-	15, // [15:15] is the sub-list for extension extendee
-	0,  // [0:15] is the sub-list for field type_name
+	30, // 5: openotters.daemon.v1.CreateAgentRequest.envs:type_name -> openotters.daemon.v1.EnvOverride
+	28, // 6: openotters.daemon.v1.AgentInfo.mounts:type_name -> openotters.daemon.v1.Mount
+	20, // 7: openotters.daemon.v1.AgentInfo.tools:type_name -> openotters.daemon.v1.AgentTool
+	33, // 8: openotters.daemon.v1.ListAgentsResponse.agents:type_name -> openotters.daemon.v1.AgentInfo
+	48, // 9: openotters.daemon.v1.ListSessionMessagesResponse.messages:type_name -> openotters.daemon.v1.SessionMessage
+	51, // 10: openotters.daemon.v1.ListSessionsResponse.sessions:type_name -> openotters.daemon.v1.SessionInfo
+	55, // 11: openotters.daemon.v1.ListProvidersResponse.providers:type_name -> openotters.daemon.v1.Provider
+	55, // 12: openotters.daemon.v1.AddProviderRequest.provider:type_name -> openotters.daemon.v1.Provider
+	55, // 13: openotters.daemon.v1.AddProviderResponse.provider:type_name -> openotters.daemon.v1.Provider
+	55, // 14: openotters.daemon.v1.UpdateProviderRequest.provider:type_name -> openotters.daemon.v1.Provider
+	55, // 15: openotters.daemon.v1.UpdateProviderResponse.provider:type_name -> openotters.daemon.v1.Provider
+	5,  // 16: openotters.daemon.v1.Runtime.GetInfo:input_type -> openotters.daemon.v1.GetInfoRequest
+	7,  // 17: openotters.daemon.v1.Runtime.BuildAgent:input_type -> openotters.daemon.v1.BuildAgentRequest
+	10, // 18: openotters.daemon.v1.Runtime.BuildToolImage:input_type -> openotters.daemon.v1.BuildToolImageRequest
+	12, // 19: openotters.daemon.v1.Runtime.SaveAgentImage:input_type -> openotters.daemon.v1.SaveAgentImageRequest
+	14, // 20: openotters.daemon.v1.Runtime.PullAgentImage:input_type -> openotters.daemon.v1.PullRequest
+	16, // 21: openotters.daemon.v1.Runtime.PushAgentImage:input_type -> openotters.daemon.v1.PushRequest
+	18, // 22: openotters.daemon.v1.Runtime.ListImages:input_type -> openotters.daemon.v1.ListImagesRequest
+	22, // 23: openotters.daemon.v1.Runtime.RefreshImage:input_type -> openotters.daemon.v1.RefreshImageRequest
+	24, // 24: openotters.daemon.v1.Runtime.RemoveImage:input_type -> openotters.daemon.v1.RemoveImageRequest
+	26, // 25: openotters.daemon.v1.Runtime.DescribeImage:input_type -> openotters.daemon.v1.DescribeImageRequest
+	29, // 26: openotters.daemon.v1.Runtime.CreateAgent:input_type -> openotters.daemon.v1.CreateAgentRequest
+	32, // 27: openotters.daemon.v1.Runtime.ListAgents:input_type -> openotters.daemon.v1.ListAgentsRequest
+	35, // 28: openotters.daemon.v1.Runtime.StartAgent:input_type -> openotters.daemon.v1.StartAgentRequest
+	37, // 29: openotters.daemon.v1.Runtime.StopAgent:input_type -> openotters.daemon.v1.StopAgentRequest
+	39, // 30: openotters.daemon.v1.Runtime.RemoveAgent:input_type -> openotters.daemon.v1.RemoveAgentRequest
+	41, // 31: openotters.daemon.v1.Runtime.ChatWithAgent:input_type -> openotters.daemon.v1.ChatRequest
+	43, // 32: openotters.daemon.v1.Runtime.PromptObject:input_type -> openotters.daemon.v1.PromptObjectRequest
+	45, // 33: openotters.daemon.v1.Runtime.ChatStreamWithAgent:input_type -> openotters.daemon.v1.ChatStreamRequest
+	47, // 34: openotters.daemon.v1.Runtime.ListSessionMessages:input_type -> openotters.daemon.v1.ListSessionMessagesRequest
+	50, // 35: openotters.daemon.v1.Runtime.ListSessions:input_type -> openotters.daemon.v1.ListSessionsRequest
+	53, // 36: openotters.daemon.v1.Runtime.DeleteSession:input_type -> openotters.daemon.v1.DeleteSessionRequest
+	3,  // 37: openotters.daemon.v1.Runtime.GetAgentLogs:input_type -> openotters.daemon.v1.GetAgentLogsRequest
+	0,  // 38: openotters.daemon.v1.Runtime.ListModels:input_type -> openotters.daemon.v1.ListModelsRequest
+	56, // 39: openotters.daemon.v1.Runtime.ListProviders:input_type -> openotters.daemon.v1.ListProvidersRequest
+	58, // 40: openotters.daemon.v1.Runtime.AddProvider:input_type -> openotters.daemon.v1.AddProviderRequest
+	60, // 41: openotters.daemon.v1.Runtime.UpdateProvider:input_type -> openotters.daemon.v1.UpdateProviderRequest
+	62, // 42: openotters.daemon.v1.Runtime.RemoveProvider:input_type -> openotters.daemon.v1.RemoveProviderRequest
+	6,  // 43: openotters.daemon.v1.Runtime.GetInfo:output_type -> openotters.daemon.v1.GetInfoResponse
+	8,  // 44: openotters.daemon.v1.Runtime.BuildAgent:output_type -> openotters.daemon.v1.BuildAgentResponse
+	11, // 45: openotters.daemon.v1.Runtime.BuildToolImage:output_type -> openotters.daemon.v1.BuildToolImageResponse
+	13, // 46: openotters.daemon.v1.Runtime.SaveAgentImage:output_type -> openotters.daemon.v1.SaveAgentImageResponse
+	15, // 47: openotters.daemon.v1.Runtime.PullAgentImage:output_type -> openotters.daemon.v1.PullResponse
+	17, // 48: openotters.daemon.v1.Runtime.PushAgentImage:output_type -> openotters.daemon.v1.PushResponse
+	21, // 49: openotters.daemon.v1.Runtime.ListImages:output_type -> openotters.daemon.v1.ListImagesResponse
+	23, // 50: openotters.daemon.v1.Runtime.RefreshImage:output_type -> openotters.daemon.v1.RefreshImageResponse
+	25, // 51: openotters.daemon.v1.Runtime.RemoveImage:output_type -> openotters.daemon.v1.RemoveImageResponse
+	27, // 52: openotters.daemon.v1.Runtime.DescribeImage:output_type -> openotters.daemon.v1.DescribeImageResponse
+	31, // 53: openotters.daemon.v1.Runtime.CreateAgent:output_type -> openotters.daemon.v1.CreateAgentResponse
+	34, // 54: openotters.daemon.v1.Runtime.ListAgents:output_type -> openotters.daemon.v1.ListAgentsResponse
+	36, // 55: openotters.daemon.v1.Runtime.StartAgent:output_type -> openotters.daemon.v1.StartAgentResponse
+	38, // 56: openotters.daemon.v1.Runtime.StopAgent:output_type -> openotters.daemon.v1.StopAgentResponse
+	40, // 57: openotters.daemon.v1.Runtime.RemoveAgent:output_type -> openotters.daemon.v1.RemoveAgentResponse
+	42, // 58: openotters.daemon.v1.Runtime.ChatWithAgent:output_type -> openotters.daemon.v1.ChatResponse
+	44, // 59: openotters.daemon.v1.Runtime.PromptObject:output_type -> openotters.daemon.v1.PromptObjectResponse
+	46, // 60: openotters.daemon.v1.Runtime.ChatStreamWithAgent:output_type -> openotters.daemon.v1.ChatStreamEvent
+	49, // 61: openotters.daemon.v1.Runtime.ListSessionMessages:output_type -> openotters.daemon.v1.ListSessionMessagesResponse
+	52, // 62: openotters.daemon.v1.Runtime.ListSessions:output_type -> openotters.daemon.v1.ListSessionsResponse
+	54, // 63: openotters.daemon.v1.Runtime.DeleteSession:output_type -> openotters.daemon.v1.DeleteSessionResponse
+	4,  // 64: openotters.daemon.v1.Runtime.GetAgentLogs:output_type -> openotters.daemon.v1.GetAgentLogsResponse
+	1,  // 65: openotters.daemon.v1.Runtime.ListModels:output_type -> openotters.daemon.v1.ListModelsResponse
+	57, // 66: openotters.daemon.v1.Runtime.ListProviders:output_type -> openotters.daemon.v1.ListProvidersResponse
+	59, // 67: openotters.daemon.v1.Runtime.AddProvider:output_type -> openotters.daemon.v1.AddProviderResponse
+	61, // 68: openotters.daemon.v1.Runtime.UpdateProvider:output_type -> openotters.daemon.v1.UpdateProviderResponse
+	63, // 69: openotters.daemon.v1.Runtime.RemoveProvider:output_type -> openotters.daemon.v1.RemoveProviderResponse
+	43, // [43:70] is the sub-list for method output_type
+	16, // [16:43] is the sub-list for method input_type
+	16, // [16:16] is the sub-list for extension type_name
+	16, // [16:16] is the sub-list for extension extendee
+	0,  // [0:16] is the sub-list for field type_name
 }
 
 func init() { file_v1_daemon_proto_init() }
@@ -4068,7 +4150,7 @@ func file_v1_daemon_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_v1_daemon_proto_rawDesc), len(file_v1_daemon_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   64,
+			NumMessages:   65,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

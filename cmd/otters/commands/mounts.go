@@ -9,31 +9,45 @@ import (
 	daemonv1 "github.com/openotters/openotters/api/v1"
 )
 
-// parseMount turns a `-v HOST:TARGET[:DESC]` CLI spec into the
-// protobuf Mount the daemon consumes. The client is responsible for
-// resolving `~`/`$PWD`/relative host paths to absolute form —
-// daemon-side validation assumes absolute input. Bind-mode suffixes
-// (`:ro`, `:rw`) are rejected early with an explicit "not yet
-// supported" message so the syntax stays reserved for a future pass.
+// parseMount turns a `-v HOST:TARGET[:DESC][:ro|:rw]` CLI spec into
+// the protobuf Mount the daemon consumes. The client is responsible
+// for resolving `~`/`$PWD`/relative host paths to absolute form —
+// daemon-side validation assumes absolute input.
+//
+// Mode suffix:
+//
+//   - `:ro` → mount is read-only (docker bind ReadOnly = true; on
+//     system the model is told via MOUNTS.md but no kernel-level
+//     enforcement)
+//   - `:rw` → explicit read-write (default; accepted for parity)
+//   - omitted → read-write
+//
+// The mode is only recognised as the *last* colon-separated segment
+// matching exactly "ro" or "rw" — descriptions like "rwlock test"
+// stay intact.
 func parseMount(spec string) (*daemonv1.Mount, error) {
 	if spec == "" {
 		return nil, fmt.Errorf("empty -v spec")
 	}
 
+	// Pop a trailing :ro / :rw if present.
+	readOnly := false
+	if i := strings.LastIndexByte(spec, ':'); i > 0 {
+		switch spec[i+1:] {
+		case "ro":
+			readOnly = true
+			spec = spec[:i]
+		case "rw":
+			spec = spec[:i]
+		}
+	}
+
 	host, rest, ok := strings.Cut(spec, ":")
 	if !ok || rest == "" {
-		return nil, fmt.Errorf("mount %q must be HOST:TARGET[:DESC]", spec)
+		return nil, fmt.Errorf("mount %q must be HOST:TARGET[:DESC][:ro|:rw]", spec)
 	}
 
-	target, desc, hasDesc := strings.Cut(rest, ":")
-
-	// A bare `:ro`/`:rw` suffix — i.e. two-segment host:target followed
-	// by a lone mode flag — is not yet supported. The heuristic catches
-	// the common case without also rejecting legitimate descriptions
-	// that happen to be the literal words "ro" or "rw".
-	if hasDesc && (desc == "ro" || desc == "rw") {
-		return nil, fmt.Errorf("mount mode suffix %q is not yet supported", desc)
-	}
+	target, desc, _ := strings.Cut(rest, ":")
 
 	host, err := resolveHost(host)
 	if err != nil {
@@ -55,6 +69,7 @@ func parseMount(spec string) (*daemonv1.Mount, error) {
 		Host:        host,
 		Target:      target,
 		Description: desc,
+		ReadOnly:    readOnly,
 	}, nil
 }
 

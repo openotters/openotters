@@ -96,6 +96,7 @@ func mountsFromPersisted(pms []persistedMount) []agentpkg.Mount {
 			Host:        pm.Host,
 			Target:      pm.Target,
 			Description: pm.Description,
+			ReadOnly:    pm.ReadOnly,
 		})
 	}
 
@@ -115,6 +116,7 @@ func mountsToPersisted(ms []agentpkg.Mount) []persistedMount {
 			Host:        m.Host,
 			Target:      m.Target,
 			Description: m.Description,
+			ReadOnly:    m.ReadOnly,
 		})
 	}
 
@@ -184,10 +186,55 @@ func validateMounts(in []*daemonv1.Mount) ([]agentpkg.Mount, error) {
 			Host:        host,
 			Target:      target,
 			Description: m.GetDescription(),
+			ReadOnly:    m.GetReadOnly(),
 		})
 	}
 
 	return out, nil
+}
+
+// mountsForSpec converts the daemon's executor.Mount slice to the
+// spec.Mount form consumed by spec.WithMounts. The override pipes
+// the mounts through Agent.RuntimeMounts so both executor backends
+// pick them up at Create time without needing a separate per-call
+// channel — fixing the docker side which previously only honoured
+// provider-level docker.WithMounts.
+func mountsForSpec(mounts []agentpkg.Mount) []*spec.Mount {
+	if len(mounts) == 0 {
+		return nil
+	}
+
+	out := make([]*spec.Mount, 0, len(mounts))
+	for _, m := range mounts {
+		out = append(out, &spec.Mount{
+			Host:        m.Host,
+			Target:      m.Target,
+			Description: m.Description,
+			ReadOnly:    m.ReadOnly,
+		})
+	}
+
+	return out
+}
+
+// envsFromRequest converts wire-form EnvOverride entries to the
+// agentfile spec.Env shape consumed by spec.WithExtraEnvs. Empty
+// keys are skipped silently — the CLI flag parser is responsible
+// for catching malformed `KEY=VALUE` strings.
+func envsFromRequest(in []*daemonv1.EnvOverride) []*spec.Env {
+	if len(in) == 0 {
+		return nil
+	}
+
+	out := make([]*spec.Env, 0, len(in))
+	for _, e := range in {
+		if e == nil || e.GetKey() == "" {
+			continue
+		}
+		out = append(out, &spec.Env{Key: e.GetKey(), Value: e.GetValue()})
+	}
+
+	return out
 }
 
 // mountsToProto converts agentpkg.Mount slices to the protobuf form
@@ -204,6 +251,7 @@ func mountsToProto(ms []agentpkg.Mount) []*daemonv1.Mount {
 			Host:        m.Host,
 			Target:      m.Target,
 			Description: m.Description,
+			ReadOnly:    m.ReadOnly,
 		})
 	}
 
@@ -826,6 +874,10 @@ func (d *Daemon) Restore(ctx context.Context) error {
 			agentOpts = append(agentOpts, system.WithMounts(mounts))
 		}
 
+		if specMounts := mountsForSpec(mounts); len(specMounts) > 0 {
+			overrides = append(overrides, spec.WithMounts(specMounts))
+		}
+
 		if pa.Status != statusStopped {
 			d.pool.Add(id, ref, agentOpts, overrides...)
 
@@ -1257,9 +1309,17 @@ func (d *Daemon) CreateAgent(
 		overrides = append(overrides, spec.WithRuntime(req.GetRuntime()))
 	}
 
+	if extra := envsFromRequest(req.GetEnvs()); len(extra) > 0 {
+		overrides = append(overrides, spec.WithExtraEnvs(extra))
+	}
+
 	mounts, err := validateMounts(req.GetMounts())
 	if err != nil {
 		return nil, err
+	}
+
+	if specMounts := mountsForSpec(mounts); len(specMounts) > 0 {
+		overrides = append(overrides, spec.WithMounts(specMounts))
 	}
 
 	// digestResolver runs from inside the workspace materialiser, which
