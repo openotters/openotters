@@ -27,10 +27,10 @@ Feature: otters jobs (wire surface)
     Then the exit code is not 0
     And the stderr contains "not found"
 
-  Scenario: cancel on an unknown job is a precondition failure
+  Scenario: cancel on an unknown job returns NotFound
     When I run "otters jobs cancel job_does_not_exist"
     Then the exit code is not 0
-    And the stderr contains "not currently running"
+    And the stderr contains "async job not found"
 
   Scenario: get on an unknown job returns NotFound
     When I run "otters jobs inspect job_does_not_exist"
