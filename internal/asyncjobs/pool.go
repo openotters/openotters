@@ -221,7 +221,49 @@ func (p *Pool) runOne(jobID string) {
 		return
 	}
 
-	result := agent.Exec(jobCtx, job.Bin, job.Args, job.Stdin)
+	// Stream live stdout / stderr into the row while the BIN runs so
+	// UI observers polling GetAsyncJob see growing logs instead of
+	// blank panes until the terminal status. The sinks debounce
+	// writes to ~200ms cadence so a chatty BIN doesn't pound SQL.
+	// The final MarkDone / MarkCancelled still rewrites the
+	// columns with the executor's full buffer — same content, so
+	// the convergence is a no-op.
+	stdoutSink := newStreamSink(
+		func(c context.Context, chunk []byte) error {
+			return p.store.AppendStdout(c, jobID, chunk)
+		},
+		func(err error) { p.logger.Debug("stream stdout flush", zap.String("id", jobID), zap.Error(err)) },
+	)
+	stderrSink := newStreamSink(
+		func(c context.Context, chunk []byte) error {
+			return p.store.AppendStderr(c, jobID, chunk)
+		},
+		func(err error) { p.logger.Debug("stream stderr flush", zap.String("id", jobID), zap.Error(err)) },
+	)
+
+	streamCtx := executor.WithExecStreamSinks(jobCtx, executor.ExecStreamSinks{
+		Stdout: stdoutSink,
+		Stderr: stderrSink,
+	})
+
+	result := agent.Exec(streamCtx, job.Bin, job.Args, job.Stdin)
+
+	// Close the sinks BEFORE writing the terminal row state. Close
+	// blocks on a final synchronous flush of the buffered tail, so
+	// by the time MarkDone / MarkCancelled fires the DB row has
+	// every byte the streaming path saw. The terminal write itself
+	// is length-guarded against shrinkage (store.go), so even if the
+	// executor's captured buffer is slightly behind the sink-flushed
+	// content the row never regresses.
+	//
+	// Sinks are Closed while the row is still StatusRunning, so the
+	// AppendStdout/AppendStderr WHERE clause matches and the flush
+	// lands. After Close, MarkDone/MarkCancelled flips the row to a
+	// terminal state and subsequent append attempts (from a racing
+	// sink goroutine, though Close drained ours synchronously)
+	// no-op cleanly.
+	_ = stdoutSink.Close()
+	_ = stderrSink.Close()
 
 	if result.Handle != "" {
 		_ = p.store.SetHandle(bg, jobID, result.Handle)

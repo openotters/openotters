@@ -20,7 +20,12 @@ import {
 import Link from "next/link"
 import { useEffect, useMemo, useRef, useState } from "react"
 import { toast } from "sonner"
-import { ConversationEmptyState } from "@/components/ai-elements/conversation"
+import {
+	Conversation,
+	ConversationContent,
+	ConversationEmptyState,
+	ConversationScrollButton,
+} from "@/components/ai-elements/conversation"
 import {
 	Message,
 	MessageAction,
@@ -39,16 +44,13 @@ import {
 } from "@/components/ai-elements/prompt-input"
 import { Shimmer } from "@/components/ai-elements/shimmer"
 import { ToolInput, ToolOutput } from "@/components/ai-elements/tool"
-import {
-	Dialog,
-	DialogContent,
-	DialogDescription,
-	DialogHeader,
-	DialogTitle,
-} from "@/components/ui/dialog"
 import { StatusBadge } from "@/components/status-badge"
 import { Button } from "@/components/ui/button"
-import { listAgents, listSessionMessages } from "@/lib/proto/v1/daemon-Runtime_connectquery"
+import {
+	getAsyncJob,
+	listAgents,
+	listSessionMessages,
+} from "@/lib/proto/v1/daemon-Runtime_connectquery"
 import { SessionJobsStrip } from "@/components/jobs/session-jobs-strip"
 import { Runtime } from "@/lib/proto/v1/daemon_pb"
 import { useRouteParams } from "@/lib/use-route-params"
@@ -96,6 +98,12 @@ type Part =
 			input: unknown
 			output: string | null
 			state: "input-available" | "output-available"
+			// startedAt is the unix-millis timestamp captured when
+			// the tool.call event lands. Used by CompactToolRow to
+			// render an elapsed counter while state stays
+			// "input-available" (running) — so a long job_wait shows
+			// "running 12s" instead of just an inert spinner.
+			startedAt?: number
 	  }
 
 interface UIMessage {
@@ -448,6 +456,7 @@ function pushToolCall(parts: Part[], id: string, name: string, content: string):
 			input: tryParseJson(content),
 			output: null,
 			state: "input-available",
+			startedAt: Date.now(),
 		},
 	]
 }
@@ -495,6 +504,12 @@ export default function ChatPage() {
 	const agents = useQuery(listAgents, {}, { enabled: agentName !== "" })
 	const agent = agents.data?.agents.find((a) => a.name === agentName)
 
+	// streamLabel is the placeholder line shown while the latest
+	// assistant turn has no parts yet. Updates on step.start /
+	// tool.call signals so the user sees "Step 2 — calling
+	// job_wait…" instead of staying on "Thinking…" through a long
+	// streamed tool_use block.
+	const [streamLabel, setStreamLabel] = useState("Thinking…")
 	const [messages, setMessages] = useState<UIMessage[]>([])
 	const [input, setInput] = useState("")
 	const [status, setStatus] = useState<"ready" | "submitted" | "streaming" | "error">("ready")
@@ -510,7 +525,10 @@ export default function ChatPage() {
 	const [densityCompact, setDensityCompact] = useState(false)
 	const composerRef = useRef<HTMLTextAreaElement | null>(null)
 	const abortRef = useRef<AbortController | null>(null)
-	const bottomRef = useRef<HTMLDivElement | null>(null)
+	// Auto-scroll is delegated to <Conversation> from ai-elements
+	// (wraps use-stick-to-bottom). It handles "stick to tail unless
+	// the user scrolls up" and the ConversationScrollButton appears
+	// when the user is detached from the bottom.
 	// Re-render every minute so relative timestamps tick. Cheap; the
 	// state value itself isn't used.
 	const [, setNow] = useState(Date.now())
@@ -519,13 +537,6 @@ export default function ChatPage() {
 		return () => clearInterval(i)
 	}, [])
 
-	// Auto-scroll the messages section to the bottom whenever a
-	// new message lands or the streaming buffer grows. The bottomRef
-	// sits at the end of the messages container which has its own
-	// overflow-y-auto; only that section scrolls.
-	useEffect(() => {
-		bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" })
-	}, [messages])
 
 	// Hide the layout's app-level header + footer while chat is
 	// mounted; the chat owns the full viewport height. We poke
@@ -595,6 +606,15 @@ export default function ChatPage() {
 		const key = `${agentName}|${sessionId}`
 		if (hydratedRef.current === key) return
 		if (!history.data) return
+		// Race guard: if the user already started a turn (or the
+		// stream reducer is mid-flight) before history.data resolved,
+		// don't clobber the live state with the persisted snapshot.
+		// Mark hydration "done" anyway so a later refetch doesn't
+		// retry this branch.
+		if (messages.length > 0 || status === "submitted" || status === "streaming") {
+			hydratedRef.current = key
+			return
+		}
 		hydratedRef.current = key
 		const persisted: UIMessage[] = history.data.messages
 			.filter((m) => m.role === "user" || m.role === "assistant")
@@ -745,8 +765,22 @@ export default function ChatPage() {
 
 			let toolCounter = 0
 			setStatus("streaming")
+			setStreamLabel("Thinking…")
 
 			for await (const event of stream) {
+				// Update the placeholder label first so a long
+				// streamed tool_use block (no text deltas, no
+				// finalised tool.call yet) still surfaces something.
+				if (event.type === "step.start") {
+					setStreamLabel(
+						event.step > 1
+							? `Working — step ${event.step}…`
+							: "Working…",
+					)
+				} else if (event.type === "tool.call") {
+					setStreamLabel(`Calling ${event.tool}…`)
+				}
+
 				setMessages((prev) =>
 					prev.map((m) => {
 						if (m.id !== assistantId) return m
@@ -762,9 +796,8 @@ export default function ChatPage() {
 								return updateActiveBranch(m, (parts) =>
 									attachToolResult(parts, event.tool, event.content),
 								)
-							// step.start / step.finish are intentionally dropped —
-							// they're per-step bookkeeping that doesn't add visual
-							// information once text + tool blocks render in order.
+							// step.start / step.finish drive streamLabel
+							// (handled above) and don't add parts.
 							default:
 								return m
 						}
@@ -955,8 +988,8 @@ export default function ChatPage() {
 
 			<SessionJobsStrip sessionId={sessionId} />
 
-			<div className="min-h-0 flex-1 overflow-y-auto px-6 py-6">
-				<div className="flex flex-col gap-8">
+			<Conversation className="min-h-0 flex-1">
+				<ConversationContent className="px-6 py-6">
 					{/* Loading skeleton: history-fetch in flight on a session
 					    that has prior messages. Cheaper read than waiting
 					    for the empty state to flash and then disappear. */}
@@ -1063,7 +1096,7 @@ export default function ChatPage() {
 								*/}
 								<MessageContent className={`min-w-0 max-w-full overflow-hidden break-words [&_pre]:max-w-full [&_pre]:overflow-x-auto [&_table]:block [&_table]:max-w-full [&_table]:overflow-x-auto [&_code]:break-all [&_a]:break-all ${message.role === "user" ? "max-w-[70%]" : ""}`}>
 									{isEmptyAssistant && isStreamingThis && (
-										<Shimmer className="text-sm">Thinking…</Shimmer>
+										<Shimmer className="text-sm">{streamLabel}</Shimmer>
 									)}
 									{message.failed && isEmptyAssistant && !isStreamingThis && (
 										<div className="flex items-center justify-between gap-3 rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm">
@@ -1201,7 +1234,7 @@ export default function ChatPage() {
 												</MessageActions>
 											)}
 											<span
-												className="text-muted-foreground text-xs"
+												className="text-muted-foreground text-xs opacity-0 transition-opacity group-hover:opacity-100"
 												title={new Date(message.createdAt * 1000).toLocaleString()}>
 												{formatRelative(message.createdAt)}
 											</span>
@@ -1217,9 +1250,9 @@ export default function ChatPage() {
 							{error}
 						</p>
 					)}
-				</div>
-				<div ref={bottomRef} />
-			</div>
+				</ConversationContent>
+				<ConversationScrollButton />
+			</Conversation>
 
 			<div className="shrink-0 border-t bg-background px-6 py-4">
 				<PromptInput onSubmit={handleSubmit}>
@@ -1298,6 +1331,20 @@ function CompactToolRow({ part, densityCompact }: CompactToolRowProps) {
 	const summary = summarizeToolInput(part.input)
 	const [fullOpen, setFullOpen] = useState(false)
 	const [copiedFull, setCopiedFull] = useState(false)
+	// Tick once a second while the tool is running so the elapsed
+	// counter under the row name advances live (job_wait can sit
+	// for minutes; the user shouldn't wonder whether the daemon's
+	// hung).
+	const [elapsed, setElapsed] = useState(() =>
+		part.startedAt ? Math.max(0, Math.floor((Date.now() - part.startedAt) / 1000)) : 0,
+	)
+	useEffect(() => {
+		if (status !== "running" || !part.startedAt) return
+		const tick = () => setElapsed(Math.floor((Date.now() - (part.startedAt ?? 0)) / 1000))
+		tick()
+		const i = setInterval(tick, 1000)
+		return () => clearInterval(i)
+	}, [status, part.startedAt])
 	const dotClass =
 		status === "running"
 			? "text-amber-500"
@@ -1352,6 +1399,13 @@ function CompactToolRow({ part, densityCompact }: CompactToolRowProps) {
 					{summary && (
 						<span className="truncate text-muted-foreground">{summary}</span>
 					)}
+					{status === "running" && part.startedAt && (
+						<span className="shrink-0 font-mono text-[10px] text-amber-600 tabular-nums dark:text-amber-400">
+							{elapsed >= 60
+								? `${Math.floor(elapsed / 60)}m${(elapsed % 60).toString().padStart(2, "0")}s`
+								: `${elapsed}s`}
+						</span>
+					)}
 					{hasClipped && (
 						<span className="shrink-0 rounded bg-amber-500/15 px-1.5 py-0.5 font-medium text-amber-600 text-[10px] dark:text-amber-400">
 							clipped
@@ -1399,6 +1453,20 @@ function CompactToolRow({ part, densityCompact }: CompactToolRowProps) {
 							/>
 						</div>
 					)}
+					{/*
+					 * Live job logs for any job-observing tool row — renders
+					 * regardless of tool status. While the tool is running,
+					 * the panel polls the row and shows growing stdout/stderr;
+					 * once the tool returns, the panel still shows the
+					 * authoritative row state (stable for terminal jobs).
+					 * The panel is the canonical surface for job_watch in
+					 * particular — leaving it out post-refresh would lose
+					 * the very thing the user came to see. Polling stops
+					 * server-side as soon as the job is terminal.
+					 */}
+					{jobToolWatchId(part) !== null && (
+						<LiveJobLogs jobId={jobToolWatchId(part) ?? ""} />
+					)}
 					{hasClipped && (
 						<div className="flex justify-end">
 							<Button
@@ -1411,22 +1479,22 @@ function CompactToolRow({ part, densityCompact }: CompactToolRowProps) {
 					)}
 				</div>
 			</details>
-			<Dialog onOpenChange={setFullOpen} open={fullOpen}>
-				<DialogContent className="flex max-h-[85vh] max-w-4xl flex-col gap-0 overflow-hidden p-0">
-					<DialogHeader className="border-b px-6 pt-6 pb-3 pr-12">
-						<div className="flex items-start justify-between gap-4">
-							<div className="min-w-0">
-								<DialogTitle className="font-mono">{part.name}</DialogTitle>
-								<DialogDescription>
-									{inputJSON.length} char input · {(part.output ?? "").length} char
-									output
-								</DialogDescription>
-							</div>
-							<Button
-								className="shrink-0"
-								onClick={copyFull}
-								size="sm"
-								variant="outline">
+			{fullOpen && (
+				// Streamdown's fullscreen pattern: a plain fixed
+				// overlay over the viewport, not a Dialog modal.
+				// Identical shape to the one Streamdown opens for a
+				// table/code-block expand, so both views feel the
+				// same.
+				<div className="fixed inset-0 z-50 flex flex-col bg-background">
+					<div className="flex items-start justify-between gap-4 border-b px-6 pt-6 pb-3">
+						<div className="min-w-0">
+							<h2 className="font-mono font-semibold">{part.name}</h2>
+							<p className="text-muted-foreground text-sm">
+								{inputJSON.length} char input · {(part.output ?? "").length} char output
+							</p>
+						</div>
+						<div className="flex shrink-0 items-center gap-2">
+							<Button onClick={copyFull} size="sm" variant="outline">
 								{copiedFull ? (
 									<Check className="mr-2 h-3.5 w-3.5" />
 								) : (
@@ -1434,8 +1502,15 @@ function CompactToolRow({ part, densityCompact }: CompactToolRowProps) {
 								)}
 								{copiedFull ? "Copied" : "Copy all"}
 							</Button>
+							<Button
+								aria-label="Close fullscreen"
+								onClick={() => setFullOpen(false)}
+								size="icon"
+								variant="ghost">
+								<XIcon className="h-4 w-4" />
+							</Button>
 						</div>
-					</DialogHeader>
+					</div>
 					<div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-6 py-4 font-mono text-xs">
 						<section>
 							<h3 className="mb-1 font-semibold text-muted-foreground text-[10px] uppercase tracking-wide">
@@ -1454,8 +1529,104 @@ function CompactToolRow({ part, densityCompact }: CompactToolRowProps) {
 							</pre>
 						</section>
 					</div>
-				</DialogContent>
-			</Dialog>
+				</div>
+			)}
 		</>
+	)
+}
+
+// JOB_WATCH_TOOLS is the set of agent tools where live stdout/stderr
+// is the user-visible point of the call: job_watch is explicitly
+// "tail this job's stdout", job_wait is "block on this job's
+// completion" (still want to see progress while it runs), and
+// job_status returns the row snapshot — the model uses it to peek,
+// but the human reading the chat thread also benefits from seeing
+// the same growing buffer the snapshot is sampling from.
+//
+// job_submit / job_list / job_cancel are deliberately omitted —
+// they're fire-and-forget against a specific row (submit) or a row
+// set (list) / a cancel signal; no streaming buffer to display.
+const JOB_WATCH_TOOLS = new Set(["job_watch", "job_wait", "job_status"])
+
+// jobToolWatchId picks the daemon job ID out of a job-observing
+// tool's input. The runtime's `job_*` tools all accept a JobIDInput
+// (see runtime/pkg/tool/jobs.go: { "job_id": "job_…" }), so the
+// lookup is positional and validated against the obvious shape.
+// Returns null for any tool that isn't one of the watched names or
+// for malformed input — the caller then skips rendering the live
+// log pane.
+function jobToolWatchId(part: Extract<Part, { kind: "tool" }>): string | null {
+	if (!JOB_WATCH_TOOLS.has(part.name)) return null
+	const input = part.input as { job_id?: unknown } | null | undefined
+	const id = input?.job_id
+	if (typeof id !== "string" || id === "") return null
+	return id
+}
+
+// LIVE_JOB_TERMINAL mirrors the set used on /jobs/[job] — keep them
+// in lockstep. Polling stops as soon as the job hits one of these.
+const LIVE_JOB_TERMINAL = new Set(["done", "error", "cancelled", "orphaned"])
+
+// LiveJobLogs streams a job's stdout / stderr inside the chat thread
+// while the agent is mid-`job_watch` / `job_wait` / `job_status`. It
+// piggybacks on the same getAsyncJob endpoint the /jobs/[job] view
+// uses — same 1s poll cadence, same column data — so the row
+// already gets the growing logs the streaming-sink path persists
+// daemon-side. Stops polling as soon as the job is terminal; the
+// parent CompactToolRow also unmounts this on tool completion
+// (status !== "running").
+//
+// Always renders a visible panel: for job_watch in particular,
+// live stdout is the *point* of the tool call, so hiding the panel
+// while the buffer is empty would defeat the affordance. Empty
+// stdout/stderr show "(streaming …)" placeholders, matching the
+// /jobs/[job] view's behaviour.
+function LiveJobLogs({ jobId }: { jobId: string }) {
+	const { data } = useQuery(
+		getAsyncJob,
+		{ jobId },
+		{
+			enabled: jobId !== "",
+			refetchInterval: (query) => {
+				const status = query.state.data?.job?.status
+				if (status && LIVE_JOB_TERMINAL.has(status)) return false
+				return 1_000
+			},
+		},
+	)
+	const job = data?.job
+	const stdout = job?.stdout ?? ""
+	const stderr = job?.stderr ?? ""
+
+	return (
+		<div className="space-y-1.5 rounded-md border bg-muted/20 p-2">
+			<p className="font-medium text-[10px] text-muted-foreground uppercase tracking-wide">
+				live job logs · {jobId}
+			</p>
+			<div className="space-y-0.5">
+				<p className="text-[9px] text-muted-foreground uppercase tracking-wide">stdout</p>
+				{stdout !== "" ? (
+					<pre className="max-h-48 overflow-y-auto whitespace-pre-wrap rounded bg-background px-2 py-1 font-mono text-[11px]">
+						{stdout}
+					</pre>
+				) : (
+					<p className="rounded border border-dashed bg-background/60 px-2 py-1 text-[10px] text-muted-foreground italic">
+						streaming stdout…
+					</p>
+				)}
+			</div>
+			<div className="space-y-0.5">
+				<p className="text-[9px] text-muted-foreground uppercase tracking-wide">stderr</p>
+				{stderr !== "" ? (
+					<pre className="max-h-48 overflow-y-auto whitespace-pre-wrap rounded bg-background px-2 py-1 font-mono text-[11px]">
+						{stderr}
+					</pre>
+				) : (
+					<p className="rounded border border-dashed bg-background/60 px-2 py-1 text-[10px] text-muted-foreground italic">
+						streaming stderr…
+					</p>
+				)}
+			</div>
+		</div>
 	)
 }

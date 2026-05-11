@@ -279,6 +279,14 @@ type Daemon struct {
 	state      *StateStore
 	logger     *zap.Logger
 	executor   string // "system" or "docker"; surfaced by Info().
+	// storeFor lets the daemon resolve a per-ref OCI store (docker
+	// image store under the docker executor, embedded HTTP registry
+	// under the system executor). Used by DescribeImage to reach the
+	// agent's config blob when the embedded registry doesn't carry
+	// the image (docker-stored agents). Stored here rather than
+	// reconstructed because docker.NewStore would otherwise open a
+	// fresh moby client on every call.
+	storeFor   func(spec.Reference) oras.ReadOnlyTarget
 	logDir     string
 	agentsDir  string
 	dataDir    string
@@ -369,7 +377,6 @@ func WithSigningKey(key []byte) DaemonOption {
 func WithPublicURL(url string) DaemonOption {
 	return func(c *daemonConfig) { c.publicURL = url }
 }
-
 
 // WithPoolMaxConcurrent caps the number of agents the underlying Pool
 // will run simultaneously. Forwarded to pool.WithMaxConcurrent only
@@ -489,6 +496,10 @@ func buildExecutorProvider(
 			dockerOpts = append(dockerOpts, docker.WithModelResolver(providers.Resolve))
 		}
 
+		if reg != nil {
+			dockerOpts = append(dockerOpts, docker.WithUsageFetcher(newCachingUsageFetcher(reg.Addr())))
+		}
+
 		dp, err := docker.NewProvider(
 			root,
 			docker.StoreFor(storeFor),
@@ -514,6 +525,7 @@ func buildExecutorProvider(
 	if reg != nil {
 		opts = append(opts,
 			system.WithPuller(newCachingBinPuller(reg.Addr())),
+			system.WithUsageFetcher(newCachingUsageFetcher(reg.Addr())),
 			system.WithRegistryAddr(reg.Addr()),
 			system.WithRegistryCreatedAt(reg.ManifestCreatedAt),
 		)
@@ -584,6 +596,7 @@ func NewDaemon(
 		state:           state,
 		logger:          daemonLogger,
 		executor:        executorName,
+		storeFor:        storeFor,
 		logDir:          logDir,
 		agentsDir:       agentsDir,
 		dataDir:         dataDir,
@@ -985,7 +998,7 @@ func (d *Daemon) Restore(ctx context.Context) error {
 
 		if pa.Status != statusStopped {
 			d.pool.Add(id, ref, agentOpts, AgentExtras{
-				DaemonURL: d.agentReachableURL(),
+				DaemonURL:  d.agentReachableURL(),
 				AgentToken: pa.Token,
 			}, overrides...)
 
@@ -1466,7 +1479,7 @@ func (d *Daemon) CreateAgent(
 	}
 
 	d.pool.Add(id, ref, agentOpts, AgentExtras{
-		DaemonURL: d.agentReachableURL(),
+		DaemonURL:  d.agentReachableURL(),
 		AgentToken: agentToken,
 	}, overrides...)
 
@@ -2055,6 +2068,14 @@ func (d *Daemon) upsertImagesFromTags(ctx context.Context, tags []string, kindHi
 			createdUnix = time.Now().Unix()
 		}
 
+		// Cache the describe-time fields (config blob + label set +
+		// layer summary) so DescribeImage doesn't need an ImageSave
+		// per call. Best-effort: each helper logs + returns empties
+		// on failure so the row still lands with the cheap fields
+		// from Inspect.
+		configJSON, layersJSON := d.cacheableDescribeBlobs(ctx, tag)
+		labelsJSON := encodeLabels(info.Annotations)
+
 		if upsertErr := d.state.UpsertImage(ctx, PersistedImage{
 			Ref:          tag,
 			Digest:       info.Digest,
@@ -2063,11 +2084,105 @@ func (d *Daemon) upsertImagesFromTags(ctx context.Context, tags []string, kindHi
 			CreatedUnix:  createdUnix,
 			Description:  info.Description,
 			Source:       info.Source,
+			ConfigJSON:   configJSON,
+			LabelsJSON:   labelsJSON,
+			LayersJSON:   layersJSON,
 		}); upsertErr != nil {
 			d.logger.Warn("upsert image cache",
 				zap.String("ref", tag), zap.Error(upsertErr))
 		}
 	}
+}
+
+// cacheableDescribeBlobs fetches the manifest's config blob + a
+// formatted layer summary for ref. Used at ingest time
+// (upsertImagesFromTags) to pre-warm the describe cache so the
+// dashboard's image-detail page doesn't trigger an ImageSave round
+// trip per visit. Returns empty strings on any failure — the row
+// still lands with the cheap fields from Inspect, and DescribeImage
+// falls back to a live fetch if it needs richer data.
+//
+// Both return values are strings (config = raw JSON of the agent
+// spec; layers = JSON-encoded []string of "title (mediatype, N bytes)"
+// summaries) to fit the persisted-image schema directly. Empty
+// means "couldn't fetch / not applicable" rather than "empty data".
+func (d *Daemon) cacheableDescribeBlobs(ctx context.Context, ref string) (string, string) {
+	if d.executor != executorDocker || d.storeFor == nil {
+		// System executor's describeImageEmbedded fetches on demand
+		// and is cheap (local HTTP); caching is a nice-to-have, not
+		// load-bearing. Skip the pre-warm there.
+		return "", ""
+	}
+
+	store := d.storeFor(spec.ParseReference(ref))
+
+	manifestDesc, err := store.Resolve(ctx, ref)
+	if err != nil {
+		d.logger.Debug("describe cache: resolve",
+			zap.String("ref", ref), zap.Error(err))
+
+		return "", ""
+	}
+
+	manifestRC, err := store.Fetch(ctx, manifestDesc)
+	if err != nil {
+		d.logger.Debug("describe cache: fetch manifest",
+			zap.String("ref", ref), zap.Error(err))
+
+		return "", ""
+	}
+
+	manifestData, err := io.ReadAll(manifestRC)
+	_ = manifestRC.Close()
+	if err != nil {
+		return "", ""
+	}
+
+	var manifest ocispec.Manifest
+	if err = json.Unmarshal(manifestData, &manifest); err != nil {
+		return "", ""
+	}
+
+	var configJSON string
+	if manifest.Config.Digest != "" {
+		if cfgRC, cfgErr := store.Fetch(ctx, manifest.Config); cfgErr == nil {
+			if cfgData, readErr := io.ReadAll(cfgRC); readErr == nil {
+				configJSON = string(cfgData)
+			}
+			_ = cfgRC.Close()
+		}
+	}
+
+	layers := make([]string, 0, len(manifest.Layers))
+	for _, l := range manifest.Layers {
+		title := l.Annotations["org.opencontainers.image.title"]
+		if title == "" {
+			title = l.Digest.String()[:16]
+		}
+
+		layers = append(layers, fmt.Sprintf("%s (%s, %d bytes)", title, l.MediaType, l.Size))
+	}
+
+	layersJSON, _ := json.Marshal(layers)
+
+	return configJSON, string(layersJSON)
+}
+
+// encodeLabels serialises a label map for the cache column. Stable
+// JSON object so consumers (the DescribeImage RPC) can decode
+// without surprises; nil / empty input maps to "{}" rather than
+// "null" so the DB column never holds a JSON null.
+func encodeLabels(labels map[string]string) string {
+	if len(labels) == 0 {
+		return "{}"
+	}
+
+	data, err := json.Marshal(labels)
+	if err != nil {
+		return "{}"
+	}
+
+	return string(data)
 }
 
 // commitBuilt makes the freshly built manifest visible at ref. For

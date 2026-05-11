@@ -25,39 +25,38 @@ import type { NextConfig } from "next"
 // Next.js dev session; the production build path is unchanged.
 const isProd = process.env.NODE_ENV === "production"
 
-// In dev, proxy `/api/*` to the daemon so the browser sees the API
-// as same-origin — no CORS preflight, no allowlist juggling when the
-// dev server falls through to :3001 because :3000 is busy.
+// In dev, the browser talks to the daemon directly over CORS — no
+// Next.js rewrite, no middleware. The previous proxy approach
+// buffered chunked HTTP responses and collapsed every server-
+// streaming RPC into one bulk delivery, so ChatStreamWithAgent
+// looked frozen until the model finished. Going direct keeps the
+// stream framed end-to-end.
 //
 // `API_URL` defaults to the dev daemon spawned by `task daemon:dev`
-// (127.0.0.1:5050). Override it to point at any other ottersd
-// instance, e.g. `API_URL=http://127.0.0.1:5500 task ui:dev` to talk
-// to the brew daemon. Only consulted in dev — production builds are
-// `output: "export"` and live behind the daemon's own listener.
-const apiURL = process.env.API_URL ?? "http://127.0.0.1:5050"
+// (127.0.0.1:5050). Override with API_URL=http://127.0.0.1:5500 to
+// point the dev UI at the brew daemon. Daemon-side
+// --allowed-origins covers localhost:3000 / 3001 / 3030 out of the
+// box so CORS preflight resolves without intervention.
+//
+// Production builds run behind the daemon's own listener
+// (`output: "export"`), so NEXT_PUBLIC_API_URL is left unset and the
+// Connect transport falls back to a relative `/api` base.
+const env: Record<string, string> = {}
+if (!isProd) {
+	env.NEXT_PUBLIC_API_URL = process.env.API_URL ?? "http://127.0.0.1:5050"
+	if (process.env.API_TOKEN) {
+		env.NEXT_PUBLIC_API_TOKEN = process.env.API_TOKEN
+	}
+}
 
 const nextConfig: NextConfig = {
+	env,
 	output: isProd ? "export" : undefined,
 	trailingSlash: true,
-	// Pages still resolve to `/foo/index.html` (we keep `trailingSlash`
-	// for the static export), but the dev server stops 308'ing requests
-	// to add a trailing slash. Required for the `/api/*` rewrite below
-	// — Connect RPC paths like `/api/.../GetInfo` must not be rewritten
-	// to `.../GetInfo/`, which the daemon's mux doesn't match.
-	skipTrailingSlashRedirect: true,
 	reactStrictMode: true,
 	poweredByHeader: false,
 	images: {
 		unoptimized: true,
-	},
-	async rewrites() {
-		if (isProd) return []
-		return [
-			{
-				source: "/api/:path*",
-				destination: `${apiURL.replace(/\/$/, "")}/api/:path*`,
-			},
-		]
 	},
 }
 

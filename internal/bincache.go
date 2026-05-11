@@ -48,6 +48,36 @@ func newCachingBinPuller(embeddedAddr string) agentoci.Puller {
 	}
 }
 
+// newCachingUsageFetcher mirrors newCachingBinPuller for the USAGE.md
+// metadata layer. Bins materialise their docs at the same time the
+// binary is installed, so on the cold-start path the doc fetch races
+// the binary fetch. Both paths use the same mirror-then-read
+// pattern: mirror the entire upstream image into the embedded
+// registry on first miss, then serve every subsequent request
+// (binary or docs) from the local copy. Whichever request lands
+// first triggers the mirror; the other reads through.
+func newCachingUsageFetcher(embeddedAddr string) agentoci.UsageFetcher {
+	return func(ctx context.Context, ref spec.Reference) (string, error) {
+		if embeddedAddr == "" {
+			return agentoci.RemoteUsageFetcher()(ctx, ref)
+		}
+
+		if strings.HasPrefix(ref.Name, embeddedAddr) {
+			return agentoci.RemoteUsageFetcher(agentoci.WithPlainHTTP)(ctx, ref)
+		}
+
+		local := localBinRef(embeddedAddr, ref)
+
+		if !existsInEmbedded(ctx, local) {
+			if err := mirrorBinImage(ctx, ref, local); err != nil {
+				return "", fmt.Errorf("mirroring %s: %w", ref, err)
+			}
+		}
+
+		return agentoci.RemoteUsageFetcher(agentoci.WithPlainHTTP)(ctx, local)
+	}
+}
+
 // localBinRef maps an upstream reference to its embedded-registry
 // counterpart by prepending the embedded registry's address. The
 // upstream repository path (including any dots in the hostname) is

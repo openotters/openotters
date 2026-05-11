@@ -281,13 +281,65 @@ func (s *Store) SetHandle(ctx context.Context, id, handle string) error {
 	return err
 }
 
+// AppendStdout concatenates chunk to the row's stdout column. Used
+// by the pool's streaming sink so UI / CLI observers polling
+// GetAsyncJob see growing logs mid-flight. Constrained to
+// StatusRunning rows so a racing MarkDone (which rewrites stdout to
+// the final buffer) wins consistently — terminal-status rows are
+// the source of truth, and we never append to a row after it's
+// been finalised. Best-effort: silently no-ops if the row already
+// transitioned out of Running.
+func (s *Store) AppendStdout(ctx context.Context, id string, chunk []byte) error {
+	if len(chunk) == 0 {
+		return nil
+	}
+
+	_, err := s.db.ExecContext(ctx,
+		`UPDATE async_jobs SET stdout = stdout || ? WHERE id = ? AND status = ?`,
+		string(chunk), id, string(StatusRunning),
+	)
+
+	return err
+}
+
+// AppendStderr is the stderr-column counterpart of AppendStdout.
+// Same semantics: only updates while the row is StatusRunning, so
+// the final MarkDone / MarkCancelled write is authoritative.
+func (s *Store) AppendStderr(ctx context.Context, id string, chunk []byte) error {
+	if len(chunk) == 0 {
+		return nil
+	}
+
+	_, err := s.db.ExecContext(ctx,
+		`UPDATE async_jobs SET stderr = stderr || ? WHERE id = ? AND status = ?`,
+		string(chunk), id, string(StatusRunning),
+	)
+
+	return err
+}
+
 // MarkDone records a successful completion and the captured output.
+//
+// The stdout / stderr CASE expressions are a guard against the
+// streaming sink racing the final write: the sink may have appended
+// the final 200 ms tail of bytes between agent.Exec returning and
+// this UPDATE firing. If that tail makes the row longer than the
+// caller's captured buffer, we'd otherwise truncate it. Guard with
+// length-based >= so the final write only OVERWRITES when the
+// caller's buffer is at least as complete — never shrinks visible
+// content.
 func (s *Store) MarkDone(ctx context.Context, id string, exit int, stdout, stderr string, finished time.Time) error {
 	res, err := s.db.ExecContext(ctx, `
 		UPDATE async_jobs
-		   SET status = ?, exit_code = ?, stdout = ?, stderr = ?, finished_at = ?
+		   SET status = ?, exit_code = ?,
+		       stdout = CASE WHEN length(?) >= length(stdout) THEN ? ELSE stdout END,
+		       stderr = CASE WHEN length(?) >= length(stderr) THEN ? ELSE stderr END,
+		       finished_at = ?
 		 WHERE id = ? AND status = ?`,
-		string(StatusDone), exit, stdout, stderr, finished.Unix(),
+		string(StatusDone), exit,
+		stdout, stdout,
+		stderr, stderr,
+		finished.Unix(),
 		id, string(StatusRunning),
 	)
 	return notFoundIfNoRows(res, err)
@@ -308,13 +360,21 @@ func (s *Store) MarkError(ctx context.Context, id, errMsg string, finished time.
 
 // MarkCancelled records that the user / shutdown path stopped a
 // job mid-flight. Stdout/stderr captured up to the kill point land
-// in the same row.
+// in the same row, guarded by the same length-based protection as
+// MarkDone so a partial captured-buffer never erases content the
+// streaming sink already pushed.
 func (s *Store) MarkCancelled(ctx context.Context, id, stdout, stderr string, finished time.Time) error {
 	res, err := s.db.ExecContext(ctx, `
 		UPDATE async_jobs
-		   SET status = ?, stdout = ?, stderr = ?, finished_at = ?
+		   SET status = ?,
+		       stdout = CASE WHEN length(?) >= length(stdout) THEN ? ELSE stdout END,
+		       stderr = CASE WHEN length(?) >= length(stderr) THEN ? ELSE stderr END,
+		       finished_at = ?
 		 WHERE id = ? AND status IN (?, ?)`,
-		string(StatusCancelled), stdout, stderr, finished.Unix(),
+		string(StatusCancelled),
+		stdout, stdout,
+		stderr, stderr,
+		finished.Unix(),
 		id, string(StatusRunning), string(StatusPending),
 	)
 	return notFoundIfNoRows(res, err)

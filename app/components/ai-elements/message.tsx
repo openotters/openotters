@@ -56,7 +56,11 @@ export const MessageContent = ({
     className={cn(
       "is-user:dark flex w-fit min-w-0 max-w-full flex-col gap-2 overflow-hidden text-sm",
       "group-[.is-user]:ml-auto group-[.is-user]:rounded-lg group-[.is-user]:bg-secondary group-[.is-user]:px-4 group-[.is-user]:py-3 group-[.is-user]:text-foreground",
-      "group-[.is-assistant]:text-foreground",
+      // Subtle wash so the assistant turn reads as a bubble without
+      // competing with the user's filled bubble. 4% white-ish over
+      // the chat background — enough to delineate, not enough to
+      // distract.
+      "group-[.is-assistant]:rounded-lg group-[.is-assistant]:bg-foreground/[0.03] group-[.is-assistant]:px-4 group-[.is-assistant]:py-3 group-[.is-assistant]:text-foreground",
       className
     )}
     {...props}
@@ -323,6 +327,18 @@ export type MessageResponseProps = ComponentProps<typeof Streamdown>;
 
 const streamdownPlugins = { cjk, code, math, mermaid };
 
+// Streamdown ships per-block toolbars (copy / download / fullscreen)
+// natively. Enabling them here surfaces a "View fullscreen" button
+// on every rendered table and a "Copy / Download" toolbar on every
+// code fence + mermaid diagram, so long assistant outputs (tables,
+// JSON dumps) escape the chat column with one click. The fullscreen
+// view replaces the previous modal-only path.
+const streamdownControls = {
+  table: { copy: true, download: true, fullscreen: true },
+  code: { copy: true, download: true },
+  mermaid: { copy: true, download: true, fullscreen: true, panZoom: true },
+};
+
 export const MessageResponse = memo(
   ({ className, ...props }: MessageResponseProps) => (
     <Streamdown
@@ -330,6 +346,7 @@ export const MessageResponse = memo(
         "size-full [&>*:first-child]:mt-0 [&>*:last-child]:mb-0",
         className
       )}
+      controls={streamdownControls}
       plugins={streamdownPlugins}
       {...props}
     />

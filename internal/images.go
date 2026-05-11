@@ -176,29 +176,51 @@ func (d *Daemon) DescribeImage(
 ) (*daemonv1.DescribeImageResponse, error) {
 	ref := req.GetRef()
 
-	// System executor exposes an embedded HTTP OCI registry that lets
-	// us walk manifest + config + layer descriptors directly. Docker
-	// executor doesn't (the daemon's image API is the only window
-	// onto the store), so we fall back to executor.Registry.Inspect
-	// for the metadata fields and skip the raw config / layer blobs.
-	// Inspect returns enough for the dashboard's image-detail card;
-	// the env card (which parses the config blob) gracefully degrades
-	// when Config is empty.
-	if d.registry != nil {
-		return d.describeImageEmbedded(ctx, ref)
-	}
-
-	info, err := d.pool.provider.Registry().Inspect(ctx, ref)
+	// Cache-only: every ingest path (Build / Pull / Save / Push)
+	// calls upsertImagesFromTags, which pre-warms the row's
+	// describe blobs (config / labels / layers) via
+	// cacheableDescribeBlobs. The RPC never falls back to a live
+	// docker.Store ImageSave round trip — that would defeat the
+	// point of the cache and add latency to every dashboard
+	// describe-on-render. A cache miss returns NotFound so the
+	// caller can decide (a) prompt the operator to pull, or (b)
+	// trigger a RefreshImages sweep that re-populates the table.
+	row, err := d.state.GetImage(ctx, ref)
 	if err != nil {
 		return nil, fmt.Errorf("describing %s: %w", ref, err)
 	}
 
+	if row == nil {
+		return nil, fmt.Errorf("image %s: not in describe cache (try `otters image pull` or RefreshImages)", ref)
+	}
+
+	return d.persistedImageToDescribe(row), nil
+}
+
+// persistedImageToDescribe rebuilds a DescribeImageResponse from the
+// cached row. Labels and layers are stored as JSON for compactness;
+// decode failures fall back to empty values rather than blowing up
+// the response — the cheap fields (ref / digest / artifactType)
+// are always present and useful even when the JSON parse fails.
+func (d *Daemon) persistedImageToDescribe(row *PersistedImage) *daemonv1.DescribeImageResponse {
+	labels := map[string]string{}
+	if row.LabelsJSON != "" {
+		_ = json.Unmarshal([]byte(row.LabelsJSON), &labels)
+	}
+
+	var layers []string
+	if row.LayersJSON != "" {
+		_ = json.Unmarshal([]byte(row.LayersJSON), &layers)
+	}
+
 	return &daemonv1.DescribeImageResponse{
-		Ref:          info.Ref,
-		Digest:       info.Digest,
-		ArtifactType: info.MediaType,
-		Labels:       info.Annotations,
-	}, nil
+		Ref:          row.Ref,
+		Digest:       row.Digest,
+		ArtifactType: row.ArtifactType,
+		Config:       row.ConfigJSON,
+		Layers:       layers,
+		Labels:       labels,
+	}
 }
 
 func (d *Daemon) describeImageEmbedded(

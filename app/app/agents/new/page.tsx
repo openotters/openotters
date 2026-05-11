@@ -34,9 +34,14 @@ import { cn } from "@/lib/utils"
 import {
 	buildAgent,
 	createAgent,
+	describeImage,
 	listImages,
 	listModels,
 } from "@/lib/proto/v1/daemon-Runtime_connectquery"
+import {
+	type ImageEnv,
+	RunFromImageDialog,
+} from "@/components/agents/run-from-image-dialog"
 
 const BIN_ARTIFACT_TYPE = "application/vnd.openotters.bin.v1"
 const AGENT_ARTIFACT_TYPE = "application/vnd.openotters.agent.v1"
@@ -533,21 +538,8 @@ export default function NewAgentPage() {
 
 				<TabsContent className="space-y-6 pt-6" value="catalog">
 					<CatalogTab
-						error={error}
 						images={images.data?.images ?? []}
 						imagesLoading={images.isLoading}
-						isPending={create.isPending}
-						models={models.data?.models ?? []}
-						modelsLoading={models.isLoading}
-						onSubmit={async (req) => {
-							setError(null)
-							try {
-								await create.mutateAsync(req)
-								router.push("/agents")
-							} catch (err) {
-								setError(err instanceof Error ? err.message : String(err))
-							}
-						}}
 					/>
 				</TabsContent>
 			</Tabs>
@@ -1026,35 +1018,21 @@ interface CatalogImage {
 	size: bigint
 }
 
-interface CatalogModel {
-	ref: string
-	displayName: string
-	provider: string
-	name: string
-}
-
 interface CatalogTabProps {
 	images: CatalogImage[]
 	imagesLoading: boolean
-	models: CatalogModel[]
-	modelsLoading: boolean
-	error: string | null
-	isPending: boolean
-	onSubmit: (req: { ref: string; name?: string; model?: string }) => Promise<void>
 }
 
-function CatalogTab({
-	images,
-	imagesLoading,
-	models,
-	modelsLoading,
-	error,
-	isPending,
-	onSubmit,
-}: CatalogTabProps) {
-	const [selectedRef, setSelectedRef] = useState<string | null>(null)
-	const [name, setName] = useState("")
-	const [model, setModel] = useState("")
+// CatalogTab is the "create from existing image" surface. Browse
+// every published agent image as a card; clicking Run on a card
+// opens the shared RunFromImageDialog (also used from the image
+// detail view), which collects name + model + per-env overrides
+// in one place and calls CreateAgent.
+//
+// Replaces the previous list-plus-sidebar layout — the side panel
+// only handled name + model. Env overrides now live in the dialog
+// so the catalog tab can stay focused on discovery.
+function CatalogTab({ images, imagesLoading }: CatalogTabProps) {
 	const [search, setSearch] = useState("")
 
 	// Only agent artifacts are valid catalog choices. Bin images and
@@ -1075,150 +1053,106 @@ function CatalogTab({
 		)
 	}, [agentImages, search])
 
-	const selected = filtered.find((i) => i.ref === selectedRef) ?? null
-
-	const handleSubmit = async () => {
-		if (!selected) return
-		await onSubmit({
-			ref: selected.ref,
-			name: name.trim() || undefined,
-			model: model.trim() || undefined,
-		})
-	}
-
 	return (
-		<div className="grid gap-6 lg:grid-cols-[1fr_360px]">
+		<div className="space-y-4">
 			<Card>
 				<CardHeader>
-					<CardTitle>Pick an existing image</CardTitle>
+					<CardTitle>Run from catalog</CardTitle>
 					<CardDescription>
-						Skips the build step entirely — the daemon's{" "}
-						<code className="font-mono text-xs">CreateAgent</code> RPC creates an instance from a
-						pre-built image. Override the name and model below if you want to deviate from the
-						image's defaults.
+						Browse pre-built agent images. Click <strong>Run</strong> on any card to
+						override the model + environment variables and create a fresh agent — the
+						daemon's <code className="font-mono text-xs">CreateAgent</code> RPC skips
+						the build step entirely.
 					</CardDescription>
 				</CardHeader>
-				<CardContent className="space-y-3">
+				<CardContent>
 					<Input
 						onChange={(e) => setSearch(e.target.value)}
 						placeholder="Search by ref or description…"
 						value={search}
 					/>
-					{imagesLoading && <p className="text-muted-foreground text-sm">Loading images…</p>}
-					{!imagesLoading && filtered.length === 0 && (
-						<p className="rounded-lg border border-dashed p-6 text-center text-muted-foreground text-sm">
-							{search
-								? "No images match the search."
-								: "No agent images in the registry. Build one first via the Wizard or Editor tab."}
-						</p>
-					)}
-					<div className="space-y-2">
-						{filtered.map((image) => {
-							const isSel = image.ref === selectedRef
-							return (
-								<button
-									className={cn(
-										"w-full rounded-lg border p-3 text-left transition-colors hover:bg-muted/50",
-										isSel && "border-primary bg-primary/5",
-									)}
-									key={image.digest}
-									onClick={() => setSelectedRef(image.ref)}
-									type="button">
-									<div className="flex items-start justify-between gap-3">
-										<div className="min-w-0 flex-1">
-											<p className="truncate font-mono font-medium text-sm">{image.ref}</p>
-											{image.description && (
-												<p className="mt-1 line-clamp-2 text-muted-foreground text-sm">
-													{image.description}
-												</p>
-											)}
-											{image.source && (
-												<a
-													className="mt-1 inline-flex items-center gap-1 text-muted-foreground text-xs underline-offset-2 hover:text-foreground hover:underline"
-													href={image.source}
-													onClick={(e) => e.stopPropagation()}
-													rel="noreferrer"
-													target="_blank">
-													<ExternalLink className="h-3 w-3" />
-													<span className="max-w-[40ch] truncate">{image.source}</span>
-												</a>
-											)}
-										</div>
-										{isSel && (
-											<Check className="mt-1 h-4 w-4 shrink-0 text-primary" />
-										)}
-									</div>
-								</button>
-							)
-						})}
-					</div>
 				</CardContent>
 			</Card>
 
-			<div className="space-y-4">
-				<Card className="sticky top-6">
-					<CardHeader className="pb-2">
-						<CardTitle className="text-base">Run options</CardTitle>
-						<CardDescription className="text-xs">
-							Both fields are optional — leave blank to take the image's declared values.
-						</CardDescription>
-					</CardHeader>
-					<CardContent className="space-y-4">
-						<div className="space-y-2">
-							<Label className="text-xs">Selected image</Label>
-							<p className="break-all font-mono text-sm">
-								{selected ? selected.ref : <span className="text-muted-foreground">— none —</span>}
-							</p>
-						</div>
-						<div className="space-y-2">
-							<Label className="text-xs">Name override</Label>
-							<Input
-								disabled={!selected}
-								onChange={(e) =>
-									setName(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, "-"))
-								}
-								placeholder="auto-generated"
-								value={name}
-							/>
-						</div>
-						<div className="space-y-2">
-							<Label className="text-xs">Model override</Label>
-							<Select disabled={!selected || modelsLoading} onValueChange={setModel} value={model}>
-								<SelectTrigger>
-									<SelectValue
-										placeholder={
-											modelsLoading
-												? "Loading…"
-												: models.length === 0
-													? "No models configured"
-													: "use image default"
-										}
-									/>
-								</SelectTrigger>
-								<SelectContent>
-									{models.map((m) => (
-										<SelectItem key={m.ref} value={m.ref}>
-											<span className="font-mono">{m.ref}</span>
-										</SelectItem>
-									))}
-								</SelectContent>
-							</Select>
-						</div>
-						{error && <p className="text-destructive text-xs">{error}</p>}
-						<div className="flex gap-2 pt-2">
-							<Button asChild className="flex-1" variant="outline">
-								<Link href="/agents">Cancel</Link>
-							</Button>
-							<Button
-								className="flex-1"
-								disabled={!selected || isPending}
-								onClick={handleSubmit}>
-								{isPending ? "Working…" : "Run"}
-							</Button>
-						</div>
-					</CardContent>
-				</Card>
+			{imagesLoading && (
+				<p className="py-8 text-center text-muted-foreground text-sm">Loading images…</p>
+			)}
+
+			{!imagesLoading && filtered.length === 0 && (
+				<p className="rounded-lg border border-dashed py-12 text-center text-muted-foreground text-sm">
+					{search
+						? "No images match the search."
+						: "No agent images in the registry. Build one first via the Wizard or Editor tab."}
+				</p>
+			)}
+
+			<div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+				{filtered.map((image) => (
+					<CatalogCard image={image} key={image.digest} />
+				))}
 			</div>
 		</div>
+	)
+}
+
+// CatalogCard renders one agent image as a self-contained card with
+// a Run button that opens the shared override dialog. The card
+// pre-fetches the image's ENV declarations via describeImage so the
+// dialog opens with the right rows pre-populated; if the daemon
+// can't surface envs (docker-backed images today), the dialog falls
+// back to letting the user add overrides manually.
+function CatalogCard({ image }: { image: CatalogImage }) {
+	const desc = useQuery(describeImage, { ref: image.ref })
+
+	const envs: ImageEnv[] = useMemo(() => {
+		if (!desc.data?.config) return []
+		try {
+			const parsed = JSON.parse(desc.data.config) as {
+				agent?: { envs?: ImageEnv[] }
+			}
+			return parsed?.agent?.envs ?? []
+		} catch {
+			return []
+		}
+	}, [desc.data])
+
+	return (
+		<Card className="flex flex-col">
+			<CardHeader className="space-y-2 pb-3">
+				<CardTitle className="break-all font-mono text-sm">{image.ref}</CardTitle>
+				{image.description && (
+					<CardDescription className="line-clamp-3">{image.description}</CardDescription>
+				)}
+			</CardHeader>
+			<CardContent className="flex-1 space-y-2 pb-3 text-muted-foreground text-xs">
+				{envs.length > 0 && (
+					<p>
+						<strong className="text-foreground">{envs.length}</strong> env var
+						{envs.length === 1 ? "" : "s"} declared
+					</p>
+				)}
+				{image.source && (
+					<a
+						className="inline-flex items-center gap-1 underline-offset-2 hover:text-foreground hover:underline"
+						href={image.source}
+						rel="noreferrer"
+						target="_blank">
+						<ExternalLink className="h-3 w-3" />
+						<span className="truncate">{image.source}</span>
+					</a>
+				)}
+			</CardContent>
+			<div className="border-t bg-muted/30 px-4 py-2">
+				<RunFromImageDialog
+					envs={envs}
+					imageRef={image.ref}
+					trigger={
+						<Button className="w-full" disabled={desc.isLoading} size="sm">
+							{desc.isLoading ? "Loading…" : "Run"}
+						</Button>
+					}
+				/>
+			</div>
+		</Card>
 	)
 }

@@ -48,6 +48,12 @@ interface ArtifactDetailViewProps {
 	// extraSections render below the Labels card. Used by the agent
 	// view to surface ENV declarations parsed from the manifest config.
 	extraSections?: (describeData: { config: string } | undefined) => ReactNode
+	// versionAction renders an extra control inside each row of the
+	// Versions card, alongside Pull / Push / Delete. The agent view
+	// uses it for a per-tag "Run" button so the operator can launch
+	// a specific version (not just whatever's "current"). Returns
+	// null / undefined to skip; the standard buttons always render.
+	versionAction?: (ref: string) => ReactNode
 }
 
 function formatSize(bytes: bigint): string {
@@ -93,7 +99,7 @@ function kindConfig(kind: ArtifactKind) {
 	}
 }
 
-export function ArtifactDetailView({ ref, kind, extraSections }: ArtifactDetailViewProps) {
+export function ArtifactDetailView({ ref, kind, extraSections, versionAction }: ArtifactDetailViewProps) {
 	const cfg = kindConfig(kind)
 	const router = useRouter()
 	const queryClient = useQueryClient()
@@ -191,7 +197,7 @@ export function ArtifactDetailView({ ref, kind, extraSections }: ArtifactDetailV
 						<p className="truncate font-mono text-muted-foreground text-sm">{artifact.digest}</p>
 					</div>
 				</div>
-			</div>
+				</div>
 
 			{artifact.description && (
 				<Card>
@@ -255,6 +261,7 @@ export function ArtifactDetailView({ ref, kind, extraSections }: ArtifactDetailV
 									</div>
 								</div>
 								<div className="flex items-center gap-1">
+									{versionAction?.(v.ref)}
 									<Button
 										disabled={pullPending}
 										onClick={() => pull.mutate({ ref: v.ref })}

@@ -113,10 +113,36 @@ func migrateState(ctx context.Context, db *sql.DB) error {
 			created_unix  INTEGER NOT NULL DEFAULT 0,
 			description   TEXT NOT NULL DEFAULT '',
 			source        TEXT NOT NULL DEFAULT '',
+			-- Describe-time fields cached at ingest so DescribeImage
+			-- is a single SQL read instead of an ImageSave round-trip
+			-- against docker (multi-MB) per call. Each is JSON-encoded
+			-- where the upstream shape is structured; empty string
+			-- means "the executor couldn't surface this" rather than
+			-- "no data" so the dashboard can distinguish gracefully.
+			config_json   TEXT NOT NULL DEFAULT '',
+			labels_json   TEXT NOT NULL DEFAULT '{}',
+			layers_json   TEXT NOT NULL DEFAULT '[]',
 			indexed_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 		);
 	`); err != nil {
 		return err
+	}
+
+	// Idempotent ADD COLUMN for daemons whose images table pre-dates
+	// the describe cache. Cheap PRAGMA inspection in
+	// addColumnIfMissing; lets the dev daemon pick up the new
+	// columns without wiping state.
+	for _, col := range []struct {
+		name string
+		ddl  string
+	}{
+		{"config_json", "TEXT NOT NULL DEFAULT ''"},
+		{"labels_json", "TEXT NOT NULL DEFAULT '{}'"},
+		{"layers_json", "TEXT NOT NULL DEFAULT '[]'"},
+	} {
+		if err := addColumnIfMissing(ctx, db, "images", col.name, col.ddl); err != nil {
+			return err
+		}
 	}
 
 	if _, err := db.ExecContext(ctx,
@@ -453,6 +479,14 @@ type PersistedImage struct {
 	CreatedUnix  int64
 	Description  string
 	Source       string
+	// Describe-time cache: filled at ingest so DescribeImage doesn't
+	// re-do ImageSave / fetch-manifest work per call. Empty values
+	// are valid ("we couldn't surface this for this image") and the
+	// DescribeImage handler falls through to a live fetch if it
+	// needs richer data than what's cached.
+	ConfigJSON string
+	LabelsJSON string
+	LayersJSON string
 }
 
 // UpsertImage records (or refreshes) one image row. Idempotent —
@@ -463,12 +497,24 @@ func (s *StateStore) UpsertImage(ctx context.Context, img PersistedImage) error 
 		return fmt.Errorf("upsert image: ref required")
 	}
 
+	labels := img.LabelsJSON
+	if labels == "" {
+		labels = "{}"
+	}
+
+	layers := img.LayersJSON
+	if layers == "" {
+		layers = "[]"
+	}
+
 	_, err := s.db.ExecContext(ctx,
 		`INSERT OR REPLACE INTO images
-		 (ref, digest, artifact_type, size, created_unix, description, source, indexed_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
+		 (ref, digest, artifact_type, size, created_unix, description, source,
+		  config_json, labels_json, layers_json, indexed_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
 		img.Ref, img.Digest, img.ArtifactType, img.Size, img.CreatedUnix,
 		img.Description, img.Source,
+		img.ConfigJSON, labels, layers,
 	)
 
 	return err
@@ -479,7 +525,8 @@ func (s *StateStore) UpsertImage(ctx context.Context, img PersistedImage) error 
 // docker / embedded-registry round trip per call.
 func (s *StateStore) ListImages(ctx context.Context) ([]PersistedImage, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT ref, digest, artifact_type, size, created_unix, description, source
+		`SELECT ref, digest, artifact_type, size, created_unix, description, source,
+		        config_json, labels_json, layers_json
 		 FROM images ORDER BY ref ASC`,
 	)
 	if err != nil {
@@ -494,6 +541,7 @@ func (s *StateStore) ListImages(ctx context.Context) ([]PersistedImage, error) {
 		if scanErr := rows.Scan(
 			&img.Ref, &img.Digest, &img.ArtifactType, &img.Size,
 			&img.CreatedUnix, &img.Description, &img.Source,
+			&img.ConfigJSON, &img.LabelsJSON, &img.LayersJSON,
 		); scanErr != nil {
 			return nil, fmt.Errorf("scanning image: %w", scanErr)
 		}
@@ -502,6 +550,35 @@ func (s *StateStore) ListImages(ctx context.Context) ([]PersistedImage, error) {
 	}
 
 	return out, rows.Err()
+}
+
+// GetImage looks up a single row by ref. Returns (nil, nil) when
+// the row is absent — the dashboard's describe path uses this as
+// "cache miss, fall back to live fetch" rather than a hard error.
+func (s *StateStore) GetImage(ctx context.Context, ref string) (*PersistedImage, error) {
+	row := s.db.QueryRowContext(ctx,
+		`SELECT ref, digest, artifact_type, size, created_unix, description, source,
+		        config_json, labels_json, layers_json
+		 FROM images WHERE ref = ?`,
+		ref,
+	)
+
+	var img PersistedImage
+	err := row.Scan(
+		&img.Ref, &img.Digest, &img.ArtifactType, &img.Size,
+		&img.CreatedUnix, &img.Description, &img.Source,
+		&img.ConfigJSON, &img.LabelsJSON, &img.LayersJSON,
+	)
+
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil //nolint:nilnil // documented miss sentinel
+	}
+
+	if err != nil {
+		return nil, fmt.Errorf("querying image %s: %w", ref, err)
+	}
+
+	return &img, nil
 }
 
 // DeleteImageByRef drops a single ref. Used when the operator

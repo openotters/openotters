@@ -9,6 +9,7 @@ import {
 	CardTitle,
 } from "@/components/ui/card"
 import { useRouteParams } from "@/lib/use-route-params"
+import { runActionForVersion } from "@/components/agents/run-version-action"
 
 export default function ImageDetailPage() {
 	const params = useRouteParams<{ ref: string }>("/images/:ref")
@@ -16,6 +17,7 @@ export default function ImageDetailPage() {
 
 	return (
 		<ArtifactDetailView
+			versionAction={runActionForVersion}
 			extraSections={(describe) => {
 				if (!describe) return null
 				const envs = parseEnvsFromConfig(describe.config)

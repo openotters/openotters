@@ -19,8 +19,8 @@ require (
 	github.com/moby/moby/client v0.4.0
 	github.com/opencontainers/go-digest v1.0.0
 	github.com/opencontainers/image-spec v1.1.1
-	github.com/openotters/agentfile v1.0.0-alpha.27
-	github.com/openotters/bin v1.0.0-alpha.7
+	github.com/openotters/agentfile v1.0.0-alpha.28
+	github.com/openotters/bin v1.0.0-alpha.8
 	go.uber.org/zap v1.27.1
 	golang.org/x/net v0.53.0
 	golang.org/x/term v0.42.0
@@ -297,7 +297,7 @@ require (
 	github.com/goreleaser/goreleaser/v2 v2.15.4 // indirect
 	github.com/goreleaser/nfpm/v2 v2.46.3 // indirect
 	github.com/goreleaser/quill v0.0.0-20260418030907-a259ef5caf05 // indirect
-	github.com/gorilla/websocket v1.5.3 // indirect
+	github.com/gorilla/websocket v1.5.4-0.20250319132907-e064f32e3674 // indirect
 	github.com/gostaticanalysis/analysisutil v0.7.1 // indirect
 	github.com/gostaticanalysis/comment v1.5.0 // indirect
 	github.com/gostaticanalysis/forcetypeassert v0.2.0 // indirect
@@ -500,7 +500,7 @@ require (
 	go.augendre.info/fatcontext v0.9.0 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
 	go.opentelemetry.io/contrib/detectors/gcp v1.40.0 // indirect
-	go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.64.0 // indirect
+	go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.67.0 // indirect
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.67.0 // indirect
 	go.opentelemetry.io/otel v1.43.0 // indirect
 	go.opentelemetry.io/otel/metric v1.43.0 // indirect

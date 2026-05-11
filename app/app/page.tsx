@@ -1,12 +1,18 @@
 "use client"
 
 import { useQuery } from "@connectrpc/connect-query"
-import { Cpu, FolderOpen, Network, Settings2 } from "lucide-react"
+import { Cpu, FolderOpen, ListChecks, Network, Settings2 } from "lucide-react"
+import Link from "next/link"
+import { JobsTable } from "@/components/jobs/jobs-table"
 import { ResourceStats } from "@/components/resource-stats"
 import { Badge } from "@/components/ui/badge"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
-import { getInfo } from "@/lib/proto/v1/daemon-Runtime_connectquery"
+import {
+	getInfo,
+	listAsyncJobs,
+} from "@/lib/proto/v1/daemon-Runtime_connectquery"
 
 interface RowProps {
 	label: string
@@ -24,8 +30,19 @@ function Row({ label, value }: RowProps) {
 
 export default function HomePage() {
 	const { data, isLoading, error } = useQuery(getInfo, {})
+	const jobs = useQuery(
+		listAsyncJobs,
+		{},
+		// Poll every 5s so a long-running job's state surfaces on
+		// the dashboard without a manual refresh — same cadence the
+		// /jobs page uses.
+		{ refetchInterval: 5_000 },
+	)
 
 	const reachable = !error && !isLoading && data !== undefined
+	// Server returns all jobs; clip to 10 newest for the dashboard
+	// card. Full list lives behind "View all".
+	const recentJobs = (jobs.data?.jobs ?? []).slice(0, 10)
 
 	return (
 		<div className="space-y-6">
@@ -37,6 +54,39 @@ export default function HomePage() {
 			</div>
 
 			<ResourceStats />
+
+			<Card>
+				<CardHeader className="flex flex-row items-start justify-between space-y-0">
+					<div className="space-y-1">
+						<CardTitle className="flex items-center gap-2 text-base">
+							<ListChecks className="h-4 w-4" />
+							Recent jobs
+						</CardTitle>
+						<CardDescription>
+							Last 10 async runs across all agents. Click a row for
+							the full job timeline.
+						</CardDescription>
+					</div>
+					<Button asChild size="sm" variant="ghost">
+						<Link href="/jobs">View all</Link>
+					</Button>
+				</CardHeader>
+				<CardContent>
+					{jobs.isLoading && (
+						<p className="py-4 text-center text-muted-foreground text-sm">
+							Loading jobs…
+						</p>
+					)}
+					{jobs.error && (
+						<p className="py-4 text-center text-destructive text-sm">
+							Failed to fetch jobs: {jobs.error.message}
+						</p>
+					)}
+					{!jobs.isLoading && !jobs.error && (
+						<JobsTable agentColumn jobs={recentJobs} />
+					)}
+				</CardContent>
+			</Card>
 
 			<div className="grid gap-4 lg:grid-cols-2">
 				<Card>
