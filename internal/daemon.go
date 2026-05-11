@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -637,28 +638,40 @@ func NewDaemon(
 //     hand them the daemon's socket path directly as
 //     unix://<path>. The chrooted runtime can dial it (chroot is
 //     billy-rooted, not a real syscall chroot).
-//   - docker: bind-mounting the daemon's unix socket into a Linux
-//     container fails on Docker Desktop / Colima
-//     ("operation not supported" — macOS unix-socket files don't
-//     traverse virtiofs cleanly). Use TCP via host.docker.internal
-//     instead. publicURL is the daemon's bound TCP URL; rewrite
-//     127.0.0.1 → host.docker.internal so it resolves from inside
-//     the container.
+//   - docker on native Linux: bind-mount the daemon's unix socket
+//     into the container. Clean, no TCP, no DNS games. The docker
+//     executor sees the unix:// scheme, mounts the host socket at
+//     the canonical in-container path, and rewrites OTTERSD_URL
+//     accordingly.
+//   - docker on Docker Desktop / Colima: bind-mounting unix sockets
+//     through virtiofs fails ("operation not supported"). Fall
+//     back to TCP via host.docker.internal — publicURL is the
+//     daemon's bound TCP URL with 127.0.0.1 rewritten so the name
+//     resolves from inside the container.
 //
 // Empty when the daemon doesn't have the relevant transport
-// configured (e.g. system without --socket-path, docker with
-// --no-http). Agents created with empty URL silently lack
-// daemon-callback capability.
+// configured (e.g. docker with no socket AND no --http-addr).
+// Agents created with empty URL silently lack daemon-callback
+// capability.
 func (d *Daemon) agentReachableURL() string {
 	if d.executor == executorDocker {
+		// Linux: prefer the unix-socket bind-mount path. The docker
+		// executor handles the host-path → in-container-path rewrite.
+		if runtime.GOOS == "linux" && d.socket != "" {
+			return auth.SocketURL(d.socket)
+		}
+
 		if d.publicURL == "" {
 			return ""
 		}
+
 		return strings.ReplaceAll(d.publicURL, "127.0.0.1", "host.docker.internal")
 	}
+
 	if d.socket == "" {
 		return ""
 	}
+
 	return auth.SocketURL(d.socket)
 }
 
