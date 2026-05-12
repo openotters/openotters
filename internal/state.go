@@ -24,8 +24,12 @@ type persistedAgent struct {
 	Runtime   string
 	Tag       string
 	Status    string
-	CreatedAt time.Time
-	Mounts    []persistedMount
+	// FailureReason narrows Status=="failed" to a specific cause
+	// (pull / init / model / readiness_timeout / crashed). Empty for
+	// non-failed rows.
+	FailureReason string
+	CreatedAt     time.Time
+	Mounts        []persistedMount
 	// Labels — see api/v1/daemon.proto's "labels (shared semantics)"
 	// comment for the reserved io.openotters.* keys. Stored as JSON
 	// in the agents.labels_json column.
@@ -94,6 +98,47 @@ func migrateState(ctx context.Context, db *sql.DB) error {
 	}
 	if err := addColumnIfMissing(ctx, db, "agents", "token_jti", "TEXT NOT NULL DEFAULT ''"); err != nil {
 		return err
+	}
+
+	// failure_reason narrows status='failed' to a specific cause
+	// (pull / init / model / readiness_timeout / crashed). Empty for
+	// non-failed rows. Replaces the older 'init_error' / 'pull_error'
+	// / 'model_error' status strings — the migration below remaps
+	// legacy rows in place.
+	if err := addColumnIfMissing(ctx, db, "agents",
+		"failure_reason", "TEXT NOT NULL DEFAULT ''"); err != nil {
+		return err
+	}
+
+	// Status rename: the executor enum was rewritten from
+	// {created, running, init_error, pull_error, model_error, stopped,
+	// removing, removed} to {pulling, starting, ready, working, stopped,
+	// failed, removing, removed} so the dashboard / CLI surface stops
+	// reading "Created" as "ready to use". The mappings below are
+	// idempotent: each WHERE clause only matches legacy values, so
+	// re-running the migration after upgrade is a no-op.
+	if _, err := db.ExecContext(ctx,
+		`UPDATE agents SET failure_reason='pull',  status='failed'
+		 WHERE status='pull_error'`); err != nil {
+		return fmt.Errorf("migrate pull_error: %w", err)
+	}
+	if _, err := db.ExecContext(ctx,
+		`UPDATE agents SET failure_reason='init',  status='failed'
+		 WHERE status='init_error'`); err != nil {
+		return fmt.Errorf("migrate init_error: %w", err)
+	}
+	if _, err := db.ExecContext(ctx,
+		`UPDATE agents SET failure_reason='model', status='failed'
+		 WHERE status='model_error'`); err != nil {
+		return fmt.Errorf("migrate model_error: %w", err)
+	}
+	if _, err := db.ExecContext(ctx,
+		`UPDATE agents SET status='starting' WHERE status='created'`); err != nil {
+		return fmt.Errorf("migrate created status: %w", err)
+	}
+	if _, err := db.ExecContext(ctx,
+		`UPDATE agents SET status='ready' WHERE status='running'`); err != nil {
+		return fmt.Errorf("migrate running status: %w", err)
 	}
 
 	// images is the daemon-owned cache of every ref the executor
@@ -443,10 +488,11 @@ func (s *StateStore) SaveAgent(ctx context.Context, a persistedAgent) error {
 	}
 
 	_, err = s.db.ExecContext(ctx,
-		`INSERT OR REPLACE INTO agents (id, name, agent_name, model, runtime, tag, status, created_at, mounts, labels_json, token, token_jti)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		`INSERT OR REPLACE INTO agents (id, name, agent_name, model, runtime, tag, status, failure_reason, created_at, mounts, labels_json, token, token_jti)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		a.ID, a.Name, a.AgentName, a.Model, a.Runtime, a.Tag, a.Status,
-		a.CreatedAt, string(mounts), string(labels), a.Token, a.TokenJTI,
+		a.FailureReason, a.CreatedAt, string(mounts), string(labels),
+		a.Token, a.TokenJTI,
 	)
 
 	return err
@@ -460,9 +506,23 @@ func (s *StateStore) RemoveAgent(ctx context.Context, id string) error {
 	return err
 }
 
+// UpdateStatus persists the agent's status string. Pair with
+// UpdateFailureReason when flipping to / from "failed" so the row's
+// failure_reason matches the new status.
 func (s *StateStore) UpdateStatus(ctx context.Context, id, status string) error {
 	_, err := s.db.ExecContext(ctx,
 		"UPDATE agents SET status = ? WHERE id = ?", status, id,
+	)
+
+	return err
+}
+
+// UpdateFailureReason persists the failure_reason column. The empty
+// string clears it (used when moving out of failed back to a healthy
+// state).
+func (s *StateStore) UpdateFailureReason(ctx context.Context, id, reason string) error {
+	_, err := s.db.ExecContext(ctx,
+		"UPDATE agents SET failure_reason = ? WHERE id = ?", reason, id,
 	)
 
 	return err
@@ -654,7 +714,7 @@ func (s *StateStore) ReplaceAllImages(ctx context.Context, imgs []PersistedImage
 
 func (s *StateStore) ListAgents(ctx context.Context) ([]persistedAgent, error) {
 	rows, err := s.db.QueryContext(ctx,
-		"SELECT id, name, agent_name, model, runtime, tag, status, created_at, mounts, labels_json, token, token_jti FROM agents ORDER BY created_at ASC",
+		"SELECT id, name, agent_name, model, runtime, tag, status, failure_reason, created_at, mounts, labels_json, token, token_jti FROM agents ORDER BY created_at ASC",
 	)
 	if err != nil {
 		return nil, fmt.Errorf("querying agents: %w", err)
@@ -672,7 +732,7 @@ func (s *StateStore) ListAgents(ctx context.Context) ([]persistedAgent, error) {
 
 		if err = rows.Scan(
 			&a.ID, &a.Name, &a.AgentName, &a.Model, &a.Runtime,
-			&a.Tag, &a.Status, &a.CreatedAt, &mounts, &labels,
+			&a.Tag, &a.Status, &a.FailureReason, &a.CreatedAt, &mounts, &labels,
 			&a.Token, &a.TokenJTI,
 		); err != nil {
 			return nil, fmt.Errorf("scanning agent: %w", err)

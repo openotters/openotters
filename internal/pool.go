@@ -33,6 +33,17 @@ const (
 	defaultMaxConcurrent = 4
 	defaultBackoffBase   = time.Second
 	defaultBackoffCap    = 30 * time.Second
+
+	// readinessTimeout caps how long the supervisor will wait for the
+	// runtime to answer Ready() after the executor enters Starting.
+	// Generous: cold model loads + first-time image expansion can be
+	// slow. Surfaces as FailureReadinessTimeout when exceeded.
+	readinessTimeout = 60 * time.Second
+
+	// readinessProbeBase is the first sleep between Ready() probe
+	// attempts. The supervisor doubles up to readinessProbeCap.
+	readinessProbeBase = 200 * time.Millisecond
+	readinessProbeCap  = 2 * time.Second
 )
 
 // Pool manages a set of agents bound to a Provider. Adds are fire-and-forget:
@@ -411,6 +422,15 @@ func (p *Pool) runLoop(
 	id uuid.UUID, ref string, a agentpkg.Agent,
 	retryCtx context.Context, freshRun bool,
 ) {
+	// Start the readiness probe in parallel with the runLoop. The
+	// probe subscribes to status transitions, runs a Ready() probe
+	// the moment the executor hits StatusStarting, and flips to
+	// StatusReady / StatusFailed+FailureReadinessTimeout accordingly.
+	// Owned by retryCtx so a Pool.Stop / Pool.Remove cancels it too.
+	probeCtx, cancelProbe := context.WithCancel(retryCtx)
+	defer cancelProbe()
+	go p.readinessProbe(probeCtx, id, ref, a)
+
 	for attempt := 0; ; attempt++ {
 		select {
 		case p.sem <- struct{}{}:
@@ -431,8 +451,9 @@ func (p *Pool) runLoop(
 		<-p.sem
 
 		status := a.Status()
+		reason := a.FailureReason()
 
-		if runErr == nil || !isErrorStatus(status) {
+		if runErr == nil || !shouldRetry(status, reason) {
 			// agentfile's docker Agent.Run defers
 			// status.Set(StatusStopped) unconditionally, which masks
 			// init / pull / model errors as a clean exit. Without
@@ -493,17 +514,123 @@ func (p *Pool) backoffDelay(attempt int) time.Duration {
 	return d
 }
 
-// isErrorStatus says whether the agent's lifecycle status reflects an
-// initialization-time failure that auto-restart should retry.
-// StatusStopped (graceful exit / manual stop / runtime crash) is
-// excluded — a crashed runtime needs different handling than re-running
-// materialize.
-func isErrorStatus(s agentpkg.Status) bool {
-	switch s {
-	case agentpkg.StatusInitError, agentpkg.StatusPullError, agentpkg.StatusModelError:
+// readinessProbe owns the StatusStarting → StatusReady transition.
+//
+// It subscribes to the agent's status, and whenever the executor
+// emits StatusStarting (initial Run, restart after stop, retry after
+// a transient init failure) it kicks off a Ready() probe with
+// exponential backoff up to readinessTimeout. On the first
+// successful probe response, it flips the executor's tracker to
+// StatusReady. On timeout, it flips to StatusFailed +
+// FailureReadinessTimeout — the supervisor's shouldRetry then
+// declines to restart, since reading-probe failures aren't transient.
+//
+// The probe goroutine lives for the agent's whole pool lifetime.
+// Multiple Starting transitions (each retry / Start) are handled by
+// re-arming on every status notification.
+func (p *Pool) readinessProbe(
+	ctx context.Context, id uuid.UUID, ref string, a agentpkg.Agent,
+) {
+	ch, cancel := a.SubscribeStatus()
+	defer cancel()
+
+	// Handle the case where the agent is already in Starting before
+	// we subscribed (rare but possible on fast Run() startups).
+	if a.Status() == agentpkg.StatusStarting {
+		p.probeOnce(ctx, id, ref, a)
+	}
+
+	for {
+		select {
+		case s, ok := <-ch:
+			if !ok {
+				return
+			}
+			if s == agentpkg.StatusStarting {
+				p.probeOnce(ctx, id, ref, a)
+			}
+		case <-ctx.Done():
+			return
+		}
+	}
+}
+
+// probeOnce retries Ready() with exponential backoff until success,
+// timeout, or status changes out from under us (e.g. the runtime
+// crashed back to Stopped before the probe ever succeeded — in
+// which case we exit so the next Starting transition re-arms us).
+func (p *Pool) probeOnce(
+	ctx context.Context, id uuid.UUID, ref string, a agentpkg.Agent,
+) {
+	probeCtx, cancel := context.WithTimeout(ctx, readinessTimeout)
+	defer cancel()
+
+	delay := readinessProbeBase
+	for {
+		// If the executor moved off Starting (e.g. Failed during a
+		// later sub-step, or Stopped from a crash), abandon — the
+		// next Starting transition will re-arm us.
+		if a.Status() != agentpkg.StatusStarting {
+			return
+		}
+
+		err := a.Probe(probeCtx)
+		if err == nil {
+			a.StatusTracker().Set(agentpkg.StatusReady)
+			p.logger.Info("pool: agent ready",
+				zap.String("id", id.String()), zap.String("ref", ref))
+			return
+		}
+
+		if probeCtx.Err() != nil {
+			a.StatusTracker().SetFailure(agentpkg.FailureReadinessTimeout)
+			p.logger.Warn("pool: agent readiness probe timed out",
+				zap.String("id", id.String()), zap.String("ref", ref),
+				zap.Duration("after", readinessTimeout),
+				zap.Error(err))
+			return
+		}
+
+		select {
+		case <-probeCtx.Done():
+			a.StatusTracker().SetFailure(agentpkg.FailureReadinessTimeout)
+			return
+		case <-time.After(delay):
+		}
+
+		delay *= 2
+		if delay > readinessProbeCap {
+			delay = readinessProbeCap
+		}
+	}
+}
+
+// shouldRetry says whether the agent's lifecycle outcome warrants an
+// auto-restart with backoff.
+//
+// We retry on transient initialisation failures (pull / init / model)
+// that often recover after a registry hiccup, a providers.yaml edit,
+// or a permissions fix. We do NOT retry on:
+//
+//   - StatusStopped — graceful exit / manual stop / runtime crash mid-
+//     run. A crashed runtime needs different handling than re-running
+//     materialize (it ran fine once, so init isn't the issue).
+//   - StatusFailed + FailureReadinessTimeout — the subprocess started
+//     but never answered Ready(). Looping the same materialize won't
+//     help; usually a config / model / network bug.
+//   - StatusFailed + FailureCrashed — the subprocess exited
+//     unexpectedly after reaching Ready. Same reasoning as Stopped
+//     plus an explicit failure signal.
+//   - Any non-failure status (Ready, Working, etc.) — nothing to retry.
+func shouldRetry(s agentpkg.Status, reason agentpkg.FailureReason) bool {
+	if s != agentpkg.StatusFailed {
+		return false
+	}
+	switch reason {
+	case agentpkg.FailurePull, agentpkg.FailureInit, agentpkg.FailureModel:
 		return true
-	case agentpkg.StatusCreated, agentpkg.StatusRunning, agentpkg.StatusStopped,
-		agentpkg.StatusRemoving, agentpkg.StatusRemoved:
+	case agentpkg.FailureNone,
+		agentpkg.FailureReadinessTimeout, agentpkg.FailureCrashed:
 		return false
 	default:
 		return false

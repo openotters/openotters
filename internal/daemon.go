@@ -40,13 +40,18 @@ import (
 )
 
 const (
-	statusCreated    = "created"
-	statusStopped    = "stopped"
-	statusPending    = "pending"
-	statusRunning    = "running"
-	statusInitError  = "init_error"
-	statusModelError = "model_error"
-	defaultTag       = "latest"
+	// Agent status strings — mirrors agentfile/executor.Status.String().
+	// The daemon persists these in the agents table and emits them over
+	// the wire via AgentInfo.status. Keep the values in sync.
+	statusPulling  = "pulling"
+	statusStarting = "starting"
+	statusReady    = "ready"
+	statusWorking  = "working"
+	statusStopped  = "stopped"
+	statusFailed   = "failed"
+	statusRemoving = "removing"
+	statusRemoved  = "removed"
+	defaultTag     = "latest"
 
 	// executorDocker is the cfg/daemon `executor` value that
 	// switches the storage + runtime backend to Docker. The
@@ -692,8 +697,13 @@ func (d *Daemon) Info() DaemonInfo {
 	running := 0
 
 	for _, ma := range d.agents {
-		if a, ok := d.pool.Get(ma.id); ok && a.Status().String() == statusRunning {
-			running++
+		if a, ok := d.pool.Get(ma.id); ok {
+			// "Running" for the dashboard counter = ready OR working;
+			// either way the agent is alive and serving traffic.
+			switch a.Status() {
+			case agentpkg.StatusReady, agentpkg.StatusWorking:
+				running++
+			}
 		}
 	}
 
@@ -935,9 +945,15 @@ func (d *Daemon) Start(ctx context.Context, ref string) error {
 		return startErr
 	}
 
-	ma.status = statusRunning
+	// pool.Start kicks off the supervisor goroutine; the agent will
+	// transition through pulling → starting → ready via the executor +
+	// the supervisor's readiness probe. We persist "starting" here so a
+	// daemon restart mid-launch doesn't leave the row stuck at the old
+	// terminal status; the supervisor's status-sync will overwrite it
+	// once the executor publishes the next transition.
+	ma.status = statusStarting
 
-	if updateErr := d.state.UpdateStatus(ctx, ma.id.String(), statusRunning); updateErr != nil {
+	if updateErr := d.state.UpdateStatus(ctx, ma.id.String(), statusStarting); updateErr != nil {
 		d.logger.Warn("failed to persist start", zap.Error(updateErr))
 	}
 
@@ -1015,7 +1031,13 @@ func (d *Daemon) Restore(ctx context.Context) error {
 				AgentToken: pa.Token,
 			}, overrides...)
 
-			d.agents[pa.ID].status = statusRunning
+			// Restored agents go through Run() again on daemon boot —
+			// pulling caches, materialising, spawning. The supervisor
+			// will flip to ready / failed in the usual way. Persist
+			// "starting" as the floor so the row reflects "we're
+			// trying to bring this back up" rather than the stale
+			// pre-shutdown status.
+			d.agents[pa.ID].status = statusStarting
 			restored++
 
 			d.logger.Info("agent restored",
@@ -1499,13 +1521,19 @@ func (d *Daemon) CreateAgent(
 	// Provenance fields are populated lazily by hydrateProvenance the
 	// first time List() inspects this agent — the workspace is what
 	// writes agent.yaml, and that runs in pool.Add's goroutine.
+	//
+	// Initial status is "pulling": pool.Add kicks off Run() in a
+	// goroutine, and the very first transition the executor emits is
+	// StatusPulling. Persisting this here means a daemon crash between
+	// SaveAgent and the supervisor's first status update lands the
+	// row at "pulling" (accurate) instead of a misleading "created".
 	ma := &managedAgent{
 		id:        id,
 		name:      name,
 		agentName: agentName,
 		model:     af.Agent.Model,
 		tag:       stripLoopbackPrefixes(ref.String()),
-		status:    statusCreated,
+		status:    statusPulling,
 		createdAt: time.Now(),
 		mounts:    mounts,
 		labels:    req.GetLabels(),
@@ -1526,7 +1554,7 @@ func (d *Daemon) CreateAgent(
 		Model:     ma.model,
 		Runtime:   af.Agent.Runtime,
 		Tag:       ma.tag,
-		Status:    statusCreated,
+		Status:    statusPulling,
 		CreatedAt: ma.createdAt,
 		Mounts:    mountsToPersisted(mounts),
 		Labels:    ma.labels,
@@ -1601,6 +1629,7 @@ func (d *Daemon) List(labelSelector map[string]string) []*daemonv1.AgentInfo {
 		d.hydrateProvenance(ma)
 
 		status := ma.status
+		failureReason := ""
 
 		var addr string
 		if a, ok := d.pool.Get(ma.id); ok {
@@ -1612,6 +1641,7 @@ func (d *Daemon) List(labelSelector map[string]string) []*daemonv1.AgentInfo {
 			}
 
 			status = a.Status().String()
+			failureReason = a.FailureReason().String()
 		}
 
 		tools := make([]*daemonv1.AgentTool, 0, len(ma.tools))
@@ -1627,6 +1657,7 @@ func (d *Daemon) List(labelSelector map[string]string) []*daemonv1.AgentInfo {
 		infos = append(infos, &daemonv1.AgentInfo{
 			Id: ma.id.String(), Name: ma.name, Model: ma.model,
 			Status:        status,
+			FailureReason: failureReason,
 			CreatedAt:     ma.createdAt.Unix(),
 			Addr:          addr,
 			Image:         ma.tag,

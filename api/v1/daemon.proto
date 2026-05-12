@@ -377,6 +377,16 @@ message AgentInfo {
   // Labels attached at CreateAgent time. Same shape and reserved
   // namespace as job labels — see the service-level comment.
   map<string, string> labels = 14;
+  // failure_reason narrows status=failed to a specific cause so the
+  // dashboard / CLI can explain why. Values:
+  //   "pull"               image pull / network failure
+  //   "init"               workspace materialise / container create failure
+  //   "model"              provider / model resolution failure
+  //   "readiness_timeout"  subprocess started but did not answer Ready()
+  //                        within the daemon's readiness window
+  //   "crashed"            subprocess exited unexpectedly after Ready
+  //   ""                   no failure (status != "failed")
+  string failure_reason = 15;
 }
 
 message ListAgentsResponse {

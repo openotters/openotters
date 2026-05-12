@@ -27,7 +27,10 @@ func (f *fakeAgent) Run(_ context.Context) error                       { return 
 func (f *fakeAgent) Start(_ context.Context) error                     { return nil }
 func (f *fakeAgent) Stop(_ context.Context) error                      { return nil }
 func (f *fakeAgent) Remove(_ context.Context) error                    { return nil }
-func (f *fakeAgent) Status() executor.Status                           { return executor.StatusRunning }
+func (f *fakeAgent) Status() executor.Status                           { return executor.StatusReady }
+func (f *fakeAgent) FailureReason() executor.FailureReason             { return executor.FailureNone }
+func (f *fakeAgent) StatusTracker() *executor.StatusTracker            { return nil }
+func (f *fakeAgent) Probe(_ context.Context) error                     { return nil }
 func (f *fakeAgent) SubscribeStatus() (<-chan executor.Status, func()) { return nil, func() {} }
 func (f *fakeAgent) Exec(ctx context.Context, bin string, args []string, stdin string) executor.ExecResult {
 	return f.execFunc(ctx, bin, args, stdin)

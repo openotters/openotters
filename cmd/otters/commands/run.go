@@ -108,14 +108,18 @@ func (r *Run) Run(ctx context.Context, common *cmd.Commons, d *Daemon) error {
 	}
 
 	// CreateAgent returns while the pool is still spinning the runtime
-	// subprocess up; poll briefly so the user sees the final state
-	// (running / init_error) rather than the momentary "created".
+	// subprocess up; poll briefly so the user sees a settled state
+	// (ready / failed) rather than the momentary "pulling".
 	final := waitForTerminalStatus(ctx, c, resp.GetId(), resp.GetStatus(), resp.GetName())
 
 	p := common.Printer()
 	_, _ = p.Printf("created %s\n", resp.GetName())
 	_, _ = p.Printf("  id:     %s\n", resp.GetId())
 	_, _ = p.Printf("  status: %s\n", final.GetStatus())
+
+	if reason := final.GetFailureReason(); reason != "" {
+		_, _ = p.Printf("  failed: %s\n", reason)
+	}
 
 	if addr := final.GetAddr(); addr != "" {
 		_, _ = p.Printf("  addr:   %s\n", addr)
@@ -125,11 +129,11 @@ func (r *Run) Run(ctx context.Context, common *cmd.Commons, d *Daemon) error {
 }
 
 // waitForTerminalStatus polls ListAgents until the named agent
-// reaches a status that won't change on its own (running, stopped,
-// init_error, pull_error, model_error) or until the budget runs out. Returns the
-// most recent snapshot; on any RPC failure or cancellation we fall
-// back to a synthetic AgentInfo so the caller can still surface the
-// initial create response.
+// reaches a status that won't change on its own (ready, stopped,
+// failed) or until the budget runs out. Returns the most recent
+// snapshot; on any RPC failure or cancellation we fall back to a
+// synthetic AgentInfo so the caller can still surface the initial
+// create response.
 func waitForTerminalStatus(
 	ctx context.Context, c daemonv1.RuntimeClient, id, initialStatus, name string,
 ) *daemonv1.AgentInfo {
@@ -173,7 +177,7 @@ func waitForTerminalStatus(
 
 func isTerminalStatus(s string) bool {
 	switch s {
-	case "running", "stopped", "init_error", "pull_error", "model_error":
+	case "ready", "working", "stopped", "failed":
 		return true
 	}
 

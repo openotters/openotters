@@ -87,9 +87,10 @@ type fakeAgent struct {
 }
 
 type fakeOutcome struct {
-	err    error           // returned by Run/Start
-	status agentpkg.Status // status set before returning
-	hold   chan struct{}   // if non-nil, Run blocks on it until closed
+	err    error                   // returned by Run/Start
+	status agentpkg.Status         // status set before returning (zero means leave unchanged)
+	reason agentpkg.FailureReason  // when set, calls SetFailure(reason) instead of Set(status)
+	hold   chan struct{}           // if non-nil, Run blocks on it until closed
 }
 
 func newFakeAgent(outcomes ...fakeOutcome) *fakeAgent {
@@ -106,7 +107,10 @@ func (f *fakeAgent) Prepare(_ context.Context) error                   { return 
 func (f *fakeAgent) Stop(_ context.Context) error                      { return nil }
 func (f *fakeAgent) Remove(_ context.Context) error                    { return nil }
 func (f *fakeAgent) Status() agentpkg.Status                           { return f.tracker.Get() }
+func (f *fakeAgent) FailureReason() agentpkg.FailureReason             { return f.tracker.Failure() }
+func (f *fakeAgent) StatusTracker() *agentpkg.StatusTracker            { return f.tracker }
 func (f *fakeAgent) SubscribeStatus() (<-chan agentpkg.Status, func()) { return f.tracker.Subscribe() }
+func (f *fakeAgent) Probe(_ context.Context) error                     { return nil }
 func (f *fakeAgent) Exec(_ context.Context, _ string, _ []string, _ string) agentpkg.ExecResult {
 	return agentpkg.ExecResult{}
 }
@@ -139,7 +143,11 @@ func (f *fakeAgent) attempt(ctx context.Context) error {
 		}
 	}
 
-	f.tracker.Set(out.status)
+	if out.reason != agentpkg.FailureNone {
+		f.tracker.SetFailure(out.reason)
+	} else {
+		f.tracker.Set(out.status)
+	}
 
 	return out.err
 }
@@ -172,23 +180,41 @@ func TestBackoffDelay_GrowsThenCaps(t *testing.T) {
 	}
 }
 
-func TestIsErrorStatus(t *testing.T) {
+func TestShouldRetry(t *testing.T) {
 	t.Parallel()
 
-	cases := map[agentpkg.Status]bool{
-		agentpkg.StatusInitError:  true,
-		agentpkg.StatusPullError:  true,
-		agentpkg.StatusModelError: true,
-		agentpkg.StatusRunning:    false,
-		agentpkg.StatusStopped:    false,
-		agentpkg.StatusCreated:    false,
-		agentpkg.StatusRemoving:   false,
-		agentpkg.StatusRemoved:    false,
+	type tc struct {
+		status agentpkg.Status
+		reason agentpkg.FailureReason
+		want   bool
 	}
 
-	for s, want := range cases {
-		if got := isErrorStatus(s); got != want {
-			t.Errorf("isErrorStatus(%v) = %v, want %v", s, got, want)
+	cases := []tc{
+		// Retryable transient failures.
+		{agentpkg.StatusFailed, agentpkg.FailurePull, true},
+		{agentpkg.StatusFailed, agentpkg.FailureInit, true},
+		{agentpkg.StatusFailed, agentpkg.FailureModel, true},
+
+		// Non-retryable failures — readiness timeout / crashed
+		// signal a deeper issue than transient init.
+		{agentpkg.StatusFailed, agentpkg.FailureReadinessTimeout, false},
+		{agentpkg.StatusFailed, agentpkg.FailureCrashed, false},
+		{agentpkg.StatusFailed, agentpkg.FailureNone, false},
+
+		// Non-failure statuses — nothing to retry.
+		{agentpkg.StatusPulling, agentpkg.FailureNone, false},
+		{agentpkg.StatusStarting, agentpkg.FailureNone, false},
+		{agentpkg.StatusReady, agentpkg.FailureNone, false},
+		{agentpkg.StatusWorking, agentpkg.FailureNone, false},
+		{agentpkg.StatusStopped, agentpkg.FailureNone, false},
+		{agentpkg.StatusRemoving, agentpkg.FailureNone, false},
+		{agentpkg.StatusRemoved, agentpkg.FailureNone, false},
+	}
+
+	for _, c := range cases {
+		if got := shouldRetry(c.status, c.reason); got != c.want {
+			t.Errorf("shouldRetry(%v, %v) = %v, want %v",
+				c.status, c.reason, got, c.want)
 		}
 	}
 }
@@ -211,8 +237,8 @@ func TestRunLoop_RetriesUntilSuccess(t *testing.T) {
 	t.Parallel()
 
 	a := newFakeAgent(
-		fakeOutcome{err: errors.New("model resolve error"), status: agentpkg.StatusModelError},
-		fakeOutcome{err: errors.New("model resolve error"), status: agentpkg.StatusModelError},
+		fakeOutcome{err: errors.New("model resolve error"), reason: agentpkg.FailureModel},
+		fakeOutcome{err: errors.New("model resolve error"), reason: agentpkg.FailureModel},
 		fakeOutcome{err: nil, status: agentpkg.StatusStopped}, // success
 	)
 
@@ -277,7 +303,7 @@ func TestRunLoop_RetryCancelExitsCleanly(t *testing.T) {
 	// Pool.Remove rely on.
 	outcomes := make([]fakeOutcome, 100)
 	for i := range outcomes {
-		outcomes[i] = fakeOutcome{err: errors.New("boom"), status: agentpkg.StatusInitError}
+		outcomes[i] = fakeOutcome{err: errors.New("boom"), reason: agentpkg.FailureInit}
 	}
 
 	a := newFakeAgent(outcomes...)
@@ -320,7 +346,7 @@ func TestPoolStop_CancelsPendingRetry(t *testing.T) {
 
 	outcomes := make([]fakeOutcome, 100)
 	for i := range outcomes {
-		outcomes[i] = fakeOutcome{err: errors.New("boom"), status: agentpkg.StatusInitError}
+		outcomes[i] = fakeOutcome{err: errors.New("boom"), reason: agentpkg.FailureInit}
 	}
 
 	a := newFakeAgent(outcomes...)

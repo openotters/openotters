@@ -2130,7 +2130,18 @@ type AgentInfo struct {
 	Tools []*AgentTool `protobuf:"bytes,13,rep,name=tools,proto3" json:"tools,omitempty"`
 	// Labels attached at CreateAgent time. Same shape and reserved
 	// namespace as job labels — see the service-level comment.
-	Labels        map[string]string `protobuf:"bytes,14,rep,name=labels,proto3" json:"labels,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	Labels map[string]string `protobuf:"bytes,14,rep,name=labels,proto3" json:"labels,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	// failure_reason narrows status=failed to a specific cause so the
+	// dashboard / CLI can explain why. Values:
+	//
+	//	"pull"               image pull / network failure
+	//	"init"               workspace materialise / container create failure
+	//	"model"              provider / model resolution failure
+	//	"readiness_timeout"  subprocess started but did not answer Ready()
+	//	                     within the daemon's readiness window
+	//	"crashed"            subprocess exited unexpectedly after Ready
+	//	""                   no failure (status != "failed")
+	FailureReason string `protobuf:"bytes,15,opt,name=failure_reason,json=failureReason,proto3" json:"failure_reason,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2261,6 +2272,13 @@ func (x *AgentInfo) GetLabels() map[string]string {
 		return x.Labels
 	}
 	return nil
+}
+
+func (x *AgentInfo) GetFailureReason() string {
+	if x != nil {
+		return x.FailureReason
+	}
+	return ""
 }
 
 type ListAgentsResponse struct {
@@ -4553,7 +4571,7 @@ const file_v1_daemon_proto_rawDesc = "" +
 	"\x0elabel_selector\x18\x01 \x03(\v2:.openotters.daemon.v1.ListAgentsRequest.LabelSelectorEntryR\rlabelSelector\x1a@\n" +
 	"\x12LabelSelectorEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x91\x04\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xb8\x04\n" +
 	"\tAgentInfo\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x14\n" +
@@ -4571,7 +4589,8 @@ const file_v1_daemon_proto_rawDesc = "" +
 	"runtimeRef\x12%\n" +
 	"\x0eruntime_digest\x18\f \x01(\tR\rruntimeDigest\x125\n" +
 	"\x05tools\x18\r \x03(\v2\x1f.openotters.daemon.v1.AgentToolR\x05tools\x12C\n" +
-	"\x06labels\x18\x0e \x03(\v2+.openotters.daemon.v1.AgentInfo.LabelsEntryR\x06labels\x1a9\n" +
+	"\x06labels\x18\x0e \x03(\v2+.openotters.daemon.v1.AgentInfo.LabelsEntryR\x06labels\x12%\n" +
+	"\x0efailure_reason\x18\x0f \x01(\tR\rfailureReason\x1a9\n" +
 	"\vLabelsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"M\n" +
