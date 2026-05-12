@@ -103,7 +103,9 @@ export default function AgentDetailPage() {
 		return null
 	}
 
-	const running = agent.status === "running"
+	// Agent is "alive" when ready or actively working — both gate the
+	// same set of action buttons (chat enabled, stop available, …).
+	const running = agent.status === "ready" || agent.status === "working"
 
 	return (
 		<div className="space-y-6">
@@ -120,7 +122,7 @@ export default function AgentDetailPage() {
 					<div>
 						<div className="flex items-center gap-2">
 							<h1 className="font-semibold text-2xl tracking-tight">{agent.name}</h1>
-							<StatusBadge status={agent.status} />
+							<StatusBadge status={agent.status} failureReason={agent.failureReason} />
 						</div>
 						<p className="font-mono text-muted-foreground text-sm">{agent.model}</p>
 					</div>
