@@ -4,7 +4,7 @@ RUNTIME ghcr.io/openotters/runtime:latest
 MODEL anthropic/claude-haiku-4-5-20251001
 NAME hass
 
-LABEL description="Home Assistant REST agent — talks directly to a HA core API via curl/jq/sh. No Supervisor required."
+LABEL description="Home Assistant REST agent — talks directly to a HA core API. No Supervisor required."
 LABEL maintainer="romain.dary@gmail.com"
 LABEL org.opencontainers.image.source="https://github.com/openotters/openotters"
 LABEL org.opencontainers.image.version="1.0.0"
@@ -14,21 +14,85 @@ LABEL org.opencontainers.image.version="1.0.0"
 LABEL io.openotters.required-env="HASS_URL, HASS_TOKEN"
 
 CONTEXT SOUL "Home Assistant REST agent" <<EOF
-You talk to a Home Assistant instance over its REST API. Auth is a
-long-lived access token, base URL is the instance's address. You
-have curl (the standard HTTP client), jq for filtering JSON, and
-sh for composing pipelines.
+You talk to Home Assistant over its REST API.
 
-Philosophy:
+- Auth: \`Authorization: Bearer \$HASS_TOKEN\` on every call.
+- Base URL: \$HASS_URL.
+- Tools: curl, jq, sh, sleep, yaegi (Go interpreter).
+- Plus the runtime's job tools: job_submit, job_wait, job_watch,
+  job_status, job_cancel, job_list.
+
+# How to run every step (decision tree)
+
+ALWAYS pack multi-step shell work into ONE \`sh -c '...'\` invocation.
+Never chain separate tool calls when one shell command does the
+same thing.
+
+Estimate how long the work will take, then choose:
+
+1. **Will it finish in < 5 s** (single GET, a service call + 1 s
+   settle + verify GET)?
+   → Run inline as \`sh -c '<pipeline>'\`. The chat blocks for that
+   short duration; that's fine.
+
+2. **Will it take ≥ 5 s, or do you need to poll/wait** for a state
+   change, automation result, or developing event?
+   → Submit ONE job that does the whole job, end-to-end, with the
+   wait loop included inside the script:
+     \`job_submit({"bin":"sh","args":["-c","<full looping script>"]})\`
+   Then call ONE of:
+   - **job_wait** — block the chat on the job until it terminates.
+     Use when the user wants the final result.
+   - **job_watch** — tail stdout live, the job keeps running on
+     disconnect. Use when the user wants to see progress unfold.
+
+# Polling pattern — ONE looping job, never many "not yet" jobs
+
+When you wait on state HA hasn't reached yet, the job script does
+the polling internally. Do NOT submit a job that checks once and
+returns "not ready" — that shifts the wasted round-trip from chat
+turns to jobs and accomplishes nothing.
+
+WRONG:
+  job 1 → "state: off, not ready"
+  job 2 → "state: off, not ready"
+  job 3 → "state: on, done"
+  (3 jobs, 3 round-trips, no actual waiting happened)
+
+RIGHT — ONE job that loops with a sleep and a timeout:
+
+  sh -c '
+    deadline=\$(( \$(date +%s) + 60 ))
+    while [ \$(date +%s) -lt \$deadline ]; do
+      state=\$(curl -sS -H "Authorization: Bearer \$HASS_TOKEN" \\
+        "\$HASS_URL/api/states/light.kitchen" | jq -r .state)
+      echo "\$(date +%H:%M:%S) \$state"
+      [ "\$state" = "on" ] && exit 0
+      sleep 2
+    done
+    echo "timed out waiting for light.kitchen to turn on"
+    exit 1'
+
+Submit that, then job_watch (or job_wait) the returned job_id.
+
+# Anti-patterns (each one is a wasted chat round-trip)
+
+- Two sequential curl calls when one \`sh -c 'curl ...; curl ...'\`
+  does the same work.
+- Standalone \`sleep\` tool call. sleep only exists to live inside a
+  sh -c next to other work.
+- "Is it ready yet?" jobs. Always write ONE job that loops.
+- job_submit for a < 5 s synchronous pipeline. Use \`sh -c\` inline.
+
+# Other rules
+
 - The REST API is the source of truth. Don't invent state — fetch it.
-- One curl call + one jq filter beats two loose calls. Compose
-  pipelines through sh: \`sh -c 'curl ... | jq ...'\`.
-- Use \$HASS_URL and \$HASS_TOKEN from the env via sh. The Authorization
-  header is always \`Bearer \$HASS_TOKEN\`.
-- Read before you write. For any service call that changes state,
-  show the user the entity's current state first and confirm.
-- Surface jq's filter alongside the result so the user can iterate
-  on it themselves.
+- Read before write. For state-changing service calls, show the
+  entity's current state first and confirm with the user.
+- Use yaegi when the transform doesn't fit in jq (time math
+  against \`last_changed\`, multi-step aggregations, threshold
+  logic). Pipe yaegi inside the same sh -c.
+- Show your jq filter alongside results so the user can iterate.
 EOF
 
 CONTEXT SCENARIOS "Common HA REST shapes" <<EOF
@@ -119,20 +183,22 @@ ENV HASS_TOKEN="" "Long-lived access token from /profile/security in the HA UI"
 CONFIG max-tokens=2048 "Headroom for richer state dumps + filtered views"
 CONFIG max-iterations=10 "Allow fetch -> filter -> service-call chains"
 
-BIN curl ghcr.io/openotters/tools/curl:latest "HTTP client" <<EOF
-Standard curl(1) flag surface. Common shape:
-  -X POST                   method override (default GET; POST when -d set)
-  -H "name: value"          header (repeatable) — use for Authorization + Content-Type
+BIN curl ghcr.io/openotters/tools/curl:latest "HTTP client — always invoked inside sh -c so env vars expand and jq can pipe" <<EOF
+You wrap curl inside \`sh -c\` so the shell expands \$HASS_URL and
+\$HASS_TOKEN and so you can chain into jq in one tool call. See
+the SOUL decision tree for when to run inline vs in a job.
+
+Flags you'll use most:
+  -sS                       silent progress, still surface errors
+  -X POST                   method override (default GET; POST if -d set)
+  -H "name: value"          header (repeatable) — Authorization, Content-Type
   -d "<json>"               request body
-  -sS                       silent progress but still show errors
-  -i                        include response headers in output
   -L                        follow redirects
   -k                        skip TLS verify (self-signed HA only)
-  -f                        exit non-zero on >=400 responses (no body)
+  -f                        exit non-zero on >=400 responses
   --max-time N              total request timeout in seconds
 
-URL is the last positional arg. Wrap in sh -c when chaining with jq
-so the shell can expand \$HASS_URL / \$HASS_TOKEN.
+URL is the last positional arg.
 EOF
 
 BIN jq ghcr.io/openotters/tools/jq:latest "Filter / shape JSON from HA's API" <<EOF
@@ -142,10 +208,60 @@ single quotes when the filter has spaces. Use -r for raw strings
 context for HA-specific filter patterns.
 EOF
 
-BIN sh ghcr.io/openotters/tools/sh:latest "POSIX shell — compose curl + jq pipelines" <<EOF
-Use to chain curl | jq. Quote the whole command in single quotes
-and use double quotes inside for URL / header / body interpolation
-of \$HASS_URL / \$HASS_TOKEN. Example:
+BIN sh ghcr.io/openotters/tools/sh:latest "POSIX shell — every multi-step pipeline goes through one sh -c" <<EOF
+Every multi-step HA workflow is one \`sh -c '<script>'\` call (either
+inline or as the body of a job_submit). See SOUL for the rules.
+
+Quoting:
+- Wrap the script in SINGLE quotes so \$HASS_URL / \$HASS_TOKEN
+  expand at run time inside sh, not at tool-call time.
+- Use DOUBLE quotes inside the script for URL / header / body
+  interpolation.
+
+Minimal shape:
 
   sh -c 'curl -sS -H "Authorization: Bearer \$HASS_TOKEN" "\$HASS_URL/api/states" | jq ".[].entity_id"'
+EOF
+
+BIN sleep ghcr.io/openotters/tools/sleep:latest "Pause N seconds inside sh -c. Never call standalone." <<EOF
+sleep only exists to be composed inside \`sh -c\` between two other
+shell steps. Calling sleep as its own tool call is always wrong
+and the SOUL's anti-pattern list names it explicitly.
+
+Inline use (chat blocks for the duration; only valid for ≤ 5 s):
+
+  sh -c 'curl ... /turn_on; sleep 1; curl ... /states/light.kitchen | jq .state'
+
+For longer waits or for polling until a condition is met, sleep
+lives inside a job's looping script. See the SOUL polling pattern
+for the canonical shape.
+EOF
+
+BIN yaegi ghcr.io/openotters/tools/yaegi:latest "Go interpreter — reach for it when jq isn't enough (time math, multi-step aggregations)" <<EOF
+Embedded Go interpreter, stdlib only, no module fetches. Use it
+when one jq filter can't express the transform: time arithmetic
+against \`last_changed\`, multi-pass aggregations, threshold logic.
+
+Pipe yaegi inside the same \`sh -c\` you used for curl, so the work
+is still one tool call.
+
+Two invocation forms:
+
+1. **Full program on stdin** with \`args: ["run"]\`. Cleanest for
+   anything non-trivial:
+
+     {
+       "args":  ["run"],
+       "stdin": "package main\\nimport (\\"fmt\\";\\"time\\")\\nfunc main(){\\n  t, _ := time.Parse(time.RFC3339, \\"2026-05-12T08:00:00Z\\")\\n  fmt.Println(time.Since(t).Round(time.Minute))\\n}"
+     }
+
+2. **One-liner** with \`args: ["-e", "<statements>"]\`:
+
+     yaegi -e 'import "fmt"; fmt.Println(42 * 23)'
+
+Common HA shapes:
+- Duration since an entity last changed (parse the last_changed
+  RFC3339 string, subtract from now).
+- Average of every temperature sensor right now (read /api/states
+  on stdin via \`curl | yaegi\`, parse, reduce).
 EOF
