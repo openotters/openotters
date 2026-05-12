@@ -25,6 +25,7 @@ import {
 	SelectTrigger,
 	SelectValue,
 } from "@/components/ui/select"
+import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
 import {
 	createAgent,
@@ -75,6 +76,17 @@ interface EnvRow {
 	defaultValue: string
 }
 
+// MountRow mirrors the proto Mount shape — host path on the
+// operator's machine, target inside the agent's chroot, optional
+// description surfaced to the model via MOUNTS.md, and a read-only
+// toggle enforced on the docker executor.
+interface MountRow {
+	host: string
+	target: string
+	description: string
+	readOnly: boolean
+}
+
 // nameFromRef derives a reasonable default agent name from an image
 // ref. "ghcr.io/openotters/agents/hass:latest" → "hass-" + 4 random
 // chars. The suffix avoids collisions on consecutive runs from the
@@ -118,6 +130,7 @@ export function RunFromImageDialog({ imageRef, envs, trigger }: RunFromImageDial
 		[envs],
 	)
 	const [rows, setRows] = useState<EnvRow[]>(initialRows)
+	const [mounts, setMounts] = useState<MountRow[]>([])
 
 	useEffect(() => {
 		setRows(initialRows)
@@ -158,6 +171,21 @@ export function RunFromImageDialog({ imageRef, envs, trigger }: RunFromImageDial
 		])
 	}
 
+	const updateMount = (idx: number, patch: Partial<MountRow>) => {
+		setMounts((s) => s.map((m, i) => (i === idx ? { ...m, ...patch } : m)))
+	}
+
+	const removeMount = (idx: number) => {
+		setMounts((s) => s.filter((_, i) => i !== idx))
+	}
+
+	const addMount = () => {
+		setMounts((s) => [
+			...s,
+			{ host: "", target: "", description: "", readOnly: false },
+		])
+	}
+
 	const submit = () => {
 		// Build env overrides:
 		// - declared rows whose value DIFFERS from the image default
@@ -175,11 +203,25 @@ export function RunFromImageDialog({ imageRef, envs, trigger }: RunFromImageDial
 				description: r.description,
 			}))
 
+		// Mounts: drop rows missing either host or target (incomplete
+		// rows are user-in-progress, not an empty-list signal). Daemon
+		// validates absolute-ness + existence; surface its error if
+		// the user typed a non-existent path.
+		const mountOverrides = mounts
+			.filter((m) => m.host !== "" && m.target !== "")
+			.map((m) => ({
+				host: m.host,
+				target: m.target,
+				description: m.description,
+				readOnly: m.readOnly,
+			}))
+
 		create.mutate({
 			name,
 			ref: imageRef,
 			model: model || "",
 			envs: envOverrides,
+			mounts: mountOverrides,
 		})
 	}
 
@@ -348,6 +390,115 @@ export function RunFromImageDialog({ imageRef, envs, trigger }: RunFromImageDial
 										</div>
 									)
 								})}
+							</div>
+						)}
+					</div>
+
+					<div className="space-y-3">
+						<div className="flex items-center justify-between gap-2">
+							<div className="space-y-1">
+								<Label>Mounts</Label>
+								<p className="text-muted-foreground text-xs">
+									Bind-mount host paths into the agent's chroot. Surfaced
+									to the model via <code className="font-mono">MOUNTS.md</code>.
+								</p>
+							</div>
+							<Button onClick={addMount} size="sm" type="button" variant="outline">
+								<Plus className="mr-1.5 h-3.5 w-3.5" />
+								Add
+							</Button>
+						</div>
+						{mounts.length === 0 ? (
+							<p className="rounded border border-dashed px-3 py-4 text-muted-foreground text-sm">
+								No mounts. Click <strong>Add</strong> to bind a host path
+								(e.g. project source, config files, credentials).
+							</p>
+						) : (
+							<div className="space-y-3">
+								{mounts.map((m, idx) => (
+									<div
+										className="space-y-2 rounded-lg border bg-muted/20 p-3"
+										key={`mount-${idx}`}>
+										<div className="flex items-baseline justify-between gap-2">
+											<Label className="text-xs">Mount {idx + 1}</Label>
+											<button
+												aria-label="remove mount"
+												className="text-muted-foreground hover:text-destructive"
+												onClick={() => removeMount(idx)}
+												type="button">
+												<Trash2 className="h-3.5 w-3.5" />
+											</button>
+										</div>
+										<div className="space-y-1.5">
+											<Label
+												className="text-muted-foreground text-xs"
+												htmlFor={`mount-${idx}-host`}>
+												Host path
+											</Label>
+											<Input
+												className="font-mono text-xs"
+												id={`mount-${idx}-host`}
+												onChange={(e) =>
+													updateMount(idx, { host: e.target.value })
+												}
+												placeholder="/Users/me/project"
+												value={m.host}
+											/>
+										</div>
+										<div className="space-y-1.5">
+											<Label
+												className="text-muted-foreground text-xs"
+												htmlFor={`mount-${idx}-target`}>
+												Target (inside agent)
+											</Label>
+											<Input
+												className="font-mono text-xs"
+												id={`mount-${idx}-target`}
+												onChange={(e) =>
+													updateMount(idx, { target: e.target.value })
+												}
+												placeholder="/workspace/src"
+												value={m.target}
+											/>
+											<p className="text-muted-foreground text-xs">
+												Must start with <code className="font-mono">/</code>.
+												Reserved prefixes (<code className="font-mono">/etc/context</code>,{" "}
+												<code className="font-mono">/usr/bin</code>,{" "}
+												<code className="font-mono">/var</code>, …) are rejected.
+											</p>
+										</div>
+										<div className="space-y-1.5">
+											<Label
+												className="text-muted-foreground text-xs"
+												htmlFor={`mount-${idx}-desc`}>
+												Description (optional)
+											</Label>
+											<Input
+												className="text-xs"
+												id={`mount-${idx}-desc`}
+												onChange={(e) =>
+													updateMount(idx, { description: e.target.value })
+												}
+												placeholder="Project source"
+												value={m.description}
+											/>
+										</div>
+										<div className="flex items-center justify-between pt-1">
+											<Label
+												className="text-xs"
+												htmlFor={`mount-${idx}-ro`}>
+												Read-only
+											</Label>
+											<Switch
+												checked={m.readOnly}
+												id={`mount-${idx}-ro`}
+												onCheckedChange={(checked) =>
+													updateMount(idx, { readOnly: checked })
+												}
+											/>
+										</div>
+									</div>
+								))}
 							</div>
 						)}
 					</div>
