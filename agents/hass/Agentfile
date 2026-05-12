@@ -223,6 +223,21 @@ Minimal shape:
   sh -c 'curl -sS -H "Authorization: Bearer \$HASS_TOKEN" "\$HASS_URL/api/states" | jq ".[].entity_id"'
 EOF
 
+BIN date ghcr.io/openotters/tools/date:latest "Print current date / time — used in polling loops for deadlines + timestamping" <<EOF
+Standard \`date\` semantics.
+
+Most common shapes inside sh -c:
+- Epoch seconds for deadline math:        \`date +%s\`
+- HH:MM:SS prefix for log lines:          \`date +%H:%M:%S\`
+- RFC3339 timestamp:                      \`date -u +%Y-%m-%dT%H:%M:%SZ\`
+
+You'll use this in two places:
+1. Polling loops, to bound the wait — see the SOUL polling pattern.
+2. Comparing against an entity's \`last_changed\` (RFC3339 from HA) —
+   pipe the diff through yaegi when you need a duration, since
+   shell arithmetic on RFC3339 is painful.
+EOF
+
 BIN sleep ghcr.io/openotters/tools/sleep:latest "Pause N seconds inside sh -c. Never call standalone." <<EOF
 sleep only exists to be composed inside \`sh -c\` between two other
 shell steps. Calling sleep as its own tool call is always wrong
