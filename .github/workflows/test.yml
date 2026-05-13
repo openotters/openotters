@@ -66,7 +66,13 @@ jobs:
       - name: Compute coverage on public-API packages
         id: cov
         run: |
-          awk 'NR==1 || !/api\/v1|cmd\/|\/internal/' \
+          # Filter `coverage.out` down to the public surface — exclude
+          # protoc-generated stubs (api/v1), binary entry points
+          # (cmd/*), implementation helpers (internal/*), and the BDD
+          # harness (tests/*, which has no production statements but
+          # would otherwise contribute 0% to the aggregate and tank
+          # the total).
+          awk 'NR==1 || !/api\/v1|cmd\/|\/internal|tests\//' \
             coverage.out > coverage.core.out
           total=$(go tool cover -func=coverage.core.out | awk '/^total:/ {print $3}' | tr -d %)
           echo "public API coverage: ${total}%"
