@@ -16,6 +16,15 @@ type persistedMount struct {
 	ReadOnly    bool   `json:"read_only,omitempty"`
 }
 
+// persistedEnv is the on-disk shape of a per-run ENV override. The
+// agent's Agentfile defines the schema (key + description); the
+// operator's `otters run -e KEY=VAL` supplies the value. Persisting
+// is what makes the override survive a daemon restart.
+type persistedEnv struct {
+	Key   string `json:"key"`
+	Value string `json:"value"`
+}
+
 type persistedAgent struct {
 	ID        string
 	Name      string
@@ -30,6 +39,11 @@ type persistedAgent struct {
 	FailureReason string
 	CreatedAt     time.Time
 	Mounts        []persistedMount
+	// Envs are the per-run ENV overrides supplied at CreateAgent
+	// (CLI `-e KEY=VAL` / dashboard run-from-image dialog). Stored
+	// as JSON in the agents.envs_json column; re-applied on Restore
+	// so daemon restarts don't lose operator-supplied values.
+	Envs []persistedEnv
 	// Labels — see api/v1/daemon.proto's "labels (shared semantics)"
 	// comment for the reserved io.openotters.* keys. Stored as JSON
 	// in the agents.labels_json column.
@@ -97,6 +111,16 @@ func migrateState(ctx context.Context, db *sql.DB) error {
 		return err
 	}
 	if err := addColumnIfMissing(ctx, db, "agents", "token_jti", "TEXT NOT NULL DEFAULT ''"); err != nil {
+		return err
+	}
+
+	// envs_json carries per-run ENV overrides supplied at CreateAgent
+	// (the CLI's `-e KEY=VAL` flag, the run-from-image dialog) so
+	// they survive daemon restarts. Empty JSON array for agents that
+	// took no overrides. Pre-existing rows default to "[]" via the
+	// addColumnIfMissing default.
+	if err := addColumnIfMissing(ctx, db, "agents",
+		"envs_json", "TEXT NOT NULL DEFAULT '[]'"); err != nil {
 		return err
 	}
 
@@ -487,12 +511,21 @@ func (s *StateStore) SaveAgent(ctx context.Context, a persistedAgent) error {
 		labels = []byte("{}")
 	}
 
+	envs, err := json.Marshal(a.Envs)
+	if err != nil {
+		return fmt.Errorf("encoding envs: %w", err)
+	}
+
+	if len(a.Envs) == 0 {
+		envs = []byte("[]")
+	}
+
 	_, err = s.db.ExecContext(ctx,
-		`INSERT OR REPLACE INTO agents (id, name, agent_name, model, runtime, tag, status, failure_reason, created_at, mounts, labels_json, token, token_jti)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		`INSERT OR REPLACE INTO agents (id, name, agent_name, model, runtime, tag, status, failure_reason, created_at, mounts, labels_json, envs_json, token, token_jti)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		a.ID, a.Name, a.AgentName, a.Model, a.Runtime, a.Tag, a.Status,
 		a.FailureReason, a.CreatedAt, string(mounts), string(labels),
-		a.Token, a.TokenJTI,
+		string(envs), a.Token, a.TokenJTI,
 	)
 
 	return err
@@ -714,7 +747,7 @@ func (s *StateStore) ReplaceAllImages(ctx context.Context, imgs []PersistedImage
 
 func (s *StateStore) ListAgents(ctx context.Context) ([]persistedAgent, error) {
 	rows, err := s.db.QueryContext(ctx,
-		"SELECT id, name, agent_name, model, runtime, tag, status, failure_reason, created_at, mounts, labels_json, token, token_jti FROM agents ORDER BY created_at ASC",
+		"SELECT id, name, agent_name, model, runtime, tag, status, failure_reason, created_at, mounts, labels_json, envs_json, token, token_jti FROM agents ORDER BY created_at ASC",
 	)
 	if err != nil {
 		return nil, fmt.Errorf("querying agents: %w", err)
@@ -728,12 +761,13 @@ func (s *StateStore) ListAgents(ctx context.Context) ([]persistedAgent, error) {
 			a      persistedAgent
 			mounts string
 			labels string
+			envs   string
 		)
 
 		if err = rows.Scan(
 			&a.ID, &a.Name, &a.AgentName, &a.Model, &a.Runtime,
 			&a.Tag, &a.Status, &a.FailureReason, &a.CreatedAt, &mounts, &labels,
-			&a.Token, &a.TokenJTI,
+			&envs, &a.Token, &a.TokenJTI,
 		); err != nil {
 			return nil, fmt.Errorf("scanning agent: %w", err)
 		}
@@ -746,6 +780,11 @@ func (s *StateStore) ListAgents(ctx context.Context) ([]persistedAgent, error) {
 		if labels != "" && labels != "{}" {
 			if err = json.Unmarshal([]byte(labels), &a.Labels); err != nil {
 				return nil, fmt.Errorf("decoding labels for %s: %w", a.ID, err)
+			}
+		}
+		if envs != "" && envs != "[]" {
+			if err = json.Unmarshal([]byte(envs), &a.Envs); err != nil {
+				return nil, fmt.Errorf("decoding envs for %s: %w", a.ID, err)
 			}
 		}
 

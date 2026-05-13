@@ -69,6 +69,12 @@ type managedAgent struct {
 	status    string
 	createdAt time.Time
 	mounts    []agentpkg.Mount
+	// envOverrides are the per-run ENV values supplied at CreateAgent
+	// time (CLI `-e KEY=VAL` flags or the dashboard's run-from-image
+	// dialog). Persisted to daemon.db alongside the agent so they
+	// survive daemon restarts; re-applied as spec.WithExtraEnvs
+	// overrides on Restore.
+	envOverrides []*spec.Env
 	// labels — see api/v1/daemon.proto's "labels (shared semantics)"
 	// comment for reserved io.openotters.* keys. Persisted alongside
 	// the agent and surfaced on every ListAgents read.
@@ -138,6 +144,42 @@ func mountsToPersisted(ms []agentpkg.Mount) []persistedMount {
 			Description: m.Description,
 			ReadOnly:    m.ReadOnly,
 		})
+	}
+
+	return out
+}
+
+// envsToPersisted shrinks spec.Env to its persistable shape — the
+// state store only needs key + value (the description / required flag
+// come from the agent's Agentfile, not from the operator's overrides).
+func envsToPersisted(es []*spec.Env) []persistedEnv {
+	if len(es) == 0 {
+		return nil
+	}
+
+	out := make([]persistedEnv, 0, len(es))
+	for _, e := range es {
+		if e == nil || e.Key == "" {
+			continue
+		}
+		out = append(out, persistedEnv{Key: e.Key, Value: e.Value})
+	}
+
+	return out
+}
+
+// envsFromPersisted is the read-side counterpart for Restore.
+func envsFromPersisted(pes []persistedEnv) []*spec.Env {
+	if len(pes) == 0 {
+		return nil
+	}
+
+	out := make([]*spec.Env, 0, len(pes))
+	for _, p := range pes {
+		if p.Key == "" {
+			continue
+		}
+		out = append(out, &spec.Env{Key: p.Key, Value: p.Value})
 	}
 
 	return out
@@ -998,19 +1040,21 @@ func (d *Daemon) Restore(ctx context.Context) error {
 		}
 
 		mounts := mountsFromPersisted(pa.Mounts)
+		envOverrides := envsFromPersisted(pa.Envs)
 
 		d.agents[pa.ID] = &managedAgent{
-			id:        id,
-			name:      pa.Name,
-			agentName: pa.AgentName,
-			model:     pa.Model,
-			tag:       pa.Tag,
-			status:    pa.Status,
-			createdAt: pa.CreatedAt,
-			mounts:    mounts,
-			labels:    pa.Labels,
-			token:     pa.Token,
-			tokenJTI:  pa.TokenJTI,
+			id:           id,
+			name:         pa.Name,
+			agentName:    pa.AgentName,
+			model:        pa.Model,
+			tag:          pa.Tag,
+			status:       pa.Status,
+			createdAt:    pa.CreatedAt,
+			mounts:       mounts,
+			envOverrides: envOverrides,
+			labels:       pa.Labels,
+			token:        pa.Token,
+			tokenJTI:     pa.TokenJTI,
 		}
 
 		agentOpts := []system.AgentOption{
@@ -1023,6 +1067,12 @@ func (d *Daemon) Restore(ctx context.Context) error {
 
 		if specMounts := mountsForSpec(mounts); len(specMounts) > 0 {
 			overrides = append(overrides, spec.WithMounts(specMounts))
+		}
+
+		// Re-apply persisted ENV overrides so the operator's CLI
+		// `-e KEY=VAL` flags survive daemon restarts.
+		if len(envOverrides) > 0 {
+			overrides = append(overrides, spec.WithExtraEnvs(envOverrides))
 		}
 
 		if pa.Status != statusStopped {
@@ -1527,18 +1577,21 @@ func (d *Daemon) CreateAgent(
 	// StatusPulling. Persisting this here means a daemon crash between
 	// SaveAgent and the supervisor's first status update lands the
 	// row at "pulling" (accurate) instead of a misleading "created".
+	envOverrides := envsFromRequest(req.GetEnvs())
+
 	ma := &managedAgent{
-		id:        id,
-		name:      name,
-		agentName: agentName,
-		model:     af.Agent.Model,
-		tag:       stripLoopbackPrefixes(ref.String()),
-		status:    statusPulling,
-		createdAt: time.Now(),
-		mounts:    mounts,
-		labels:    req.GetLabels(),
-		token:     agentToken,
-		tokenJTI:  agentJTI,
+		id:           id,
+		name:         name,
+		agentName:    agentName,
+		model:        af.Agent.Model,
+		tag:          stripLoopbackPrefixes(ref.String()),
+		status:       statusPulling,
+		createdAt:    time.Now(),
+		mounts:       mounts,
+		envOverrides: envOverrides,
+		labels:       req.GetLabels(),
+		token:        agentToken,
+		tokenJTI:     agentJTI,
 	}
 
 	if req.GetModel() != "" {
@@ -1558,6 +1611,7 @@ func (d *Daemon) CreateAgent(
 		CreatedAt: ma.createdAt,
 		Mounts:    mountsToPersisted(mounts),
 		Labels:    ma.labels,
+		Envs:      envsToPersisted(envOverrides),
 		Token:     ma.token,
 		TokenJTI:  ma.tokenJTI,
 	}); saveErr != nil {
