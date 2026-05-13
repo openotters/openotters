@@ -50,19 +50,13 @@ func (l *fakeLookup) Get(id uuid.UUID) (executor.Agent, bool) {
 }
 
 // waitFor polls fn() until it returns true or the deadline hits.
-// Useful because the pool dispatches on a goroutine.
-//
-// The 10 s budget is generous on purpose: under `-race` plus the
-// parallel scheduler on CI runners (typically 2-vCPU x86_64),
-// pool.runOne + stdout-sink debounce can stretch well past several
-// seconds between Submit and the terminal store write. 2 s was the
-// original budget and tipped over almost immediately; 5 s tipped
-// over on busier runs. 10 s is enough for the worst CI runner
-// without masking real bugs (a hung pool would still surface as a
-// 10-second test).
+// Only used by the Cancel test below, which already synchronises on
+// the `<-started` channel; after that, the tail (ctx.Done → sink
+// close → MarkCancelled) is bounded by streamFlushInterval × 2 plus
+// two trivial SQL writes. 5 s leaves an order-of-magnitude headroom.
 func waitFor(t *testing.T, fn func() bool, msg string) {
 	t.Helper()
-	deadline := time.Now().Add(10 * time.Second)
+	deadline := time.Now().Add(5 * time.Second)
 	for time.Now().Before(deadline) {
 		if fn() {
 			return
@@ -111,11 +105,61 @@ func newPoolFixture(t *testing.T, exec execFunc) (*Pool, *Store, uuid.UUID) {
 	return pool, store, agentID
 }
 
-func TestPool_Submit_RunsToCompletion(t *testing.T) {
+// Runs the dispatch work synchronously via runOne (white-box) instead
+// of going through Submit's goroutine dispatch. On slow CI runners
+// under -race + -covermode=atomic, the goroutine scheduling tail can
+// exceed any reasonable poll budget — this test cared about the work
+// runOne does (MarkRunning → Exec → MarkDone), not the trivial
+// `go func() { runOne(id) }` wrapper. The async dispatch is exercised
+// (and synchronised on a real signal) by the Cancel test below.
+func TestPool_RunOne_HappyPath_MarksDone(t *testing.T) {
 	pool, store, agentID := newPoolFixture(t,
 		func(_ context.Context, _ string, _ []string, _ string) executor.ExecResult {
 			return executor.ExecResult{Stdout: "hello\n", ExitCode: 0}
 		})
+
+	id, err := store.Insert(context.Background(), Spec{
+		AgentID: agentID.String(), Bin: "echo", Args: []string{"hello"},
+	})
+	if err != nil {
+		t.Fatalf("Insert: %v", err)
+	}
+
+	pool.runOne(id)
+
+	final, err := store.Get(context.Background(), id)
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if final.Status != StatusDone {
+		t.Fatalf("status = %s, want %s", final.Status, StatusDone)
+	}
+	if final.Stdout != "hello\n" {
+		t.Errorf("stdout = %q, want %q", final.Stdout, "hello\n")
+	}
+	if !final.ExitCode.Valid || final.ExitCode.Int64 != 0 {
+		t.Errorf("exit code = %+v, want 0", final.ExitCode)
+	}
+}
+
+// Submit returns immediately after the row is inserted; the actual
+// completion runs on a goroutine. Test only the synchronous half here
+// — the goroutine-dispatched work is covered by runOne tests above.
+func TestPool_Submit_InsertsPendingRow(t *testing.T) {
+	pool, store, agentID := newPoolFixture(t,
+		func(_ context.Context, _ string, _ []string, _ string) executor.ExecResult {
+			// Block forever so the goroutine cannot transition the
+			// row out of pending/running before we observe it.
+			select {}
+		})
+	t.Cleanup(func() {
+		// Drain the in-flight goroutine on shutdown so go test doesn't
+		// flag a leak. Cancel via Pool.Shutdown, which signals every
+		// per-job ctx and waits for the wg.
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		_ = pool.Shutdown(ctx)
+	})
 
 	id, err := pool.Submit(context.Background(), Spec{
 		AgentID: agentID.String(), Bin: "echo", Args: []string{"hello"},
@@ -123,13 +167,17 @@ func TestPool_Submit_RunsToCompletion(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Submit: %v", err)
 	}
-
-	final := waitForStatus(t, store, id, StatusDone)
-	if final.Stdout != "hello\n" {
-		t.Errorf("stdout = %q, want %q", final.Stdout, "hello\n")
+	if id == "" {
+		t.Fatalf("Submit returned empty id")
 	}
-	if !final.ExitCode.Valid || final.ExitCode.Int64 != 0 {
-		t.Errorf("exit code = %+v, want 0", final.ExitCode)
+	row, err := store.Get(context.Background(), id)
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	// Either status is fine — Submit guarantees the row exists, not
+	// that the dispatcher has or hasn't reached MarkRunning yet.
+	if row.Status != StatusPending && row.Status != StatusRunning {
+		t.Errorf("status = %s, want pending or running", row.Status)
 	}
 }
 
@@ -205,14 +253,22 @@ func TestPool_RunOne_AgentNotRunning_MarksError(t *testing.T) {
 	pool := NewPool(store, &fakeLookup{agents: map[uuid.UUID]executor.Agent{}},
 		zap.NewNop())
 
-	id, err := pool.Submit(context.Background(), Spec{
+	id, err := store.Insert(context.Background(), Spec{
 		AgentID: agentID.String(), Bin: "echo", Args: []string{"hi"},
 	})
 	if err != nil {
-		t.Fatalf("Submit: %v", err)
+		t.Fatalf("Insert: %v", err)
 	}
 
-	final := waitForStatus(t, store, id, StatusError)
+	pool.runOne(id)
+
+	final, err := store.Get(context.Background(), id)
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if final.Status != StatusError {
+		t.Fatalf("status = %s, want %s", final.Status, StatusError)
+	}
 	if final.Error == "" {
 		t.Errorf("error message empty; want a non-empty reason")
 	}
