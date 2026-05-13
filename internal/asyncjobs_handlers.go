@@ -318,16 +318,16 @@ func (h *runtimeHandler) WatchAsyncJob(
 			// an error to the caller; nothing for us to do.
 			return ctx.Err()
 		case <-ticker.C:
-			next, err := store.Get(ctx, jobID)
-			if errors.Is(err, asyncjobs.ErrNotFound) {
+			next, getErr := store.Get(ctx, jobID)
+			if errors.Is(getErr, asyncjobs.ErrNotFound) {
 				// Row vanished mid-watch (FK cascade after the agent
 				// was removed). Surface explicitly so the caller can
 				// distinguish from a clean terminal close.
 				return connect.NewError(connect.CodeNotFound,
 					fmt.Errorf("job %q vanished while watching — likely the agent was removed", jobID))
 			}
-			if err != nil {
-				return connect.NewError(connect.CodeInternal, err)
+			if getErr != nil {
+				return connect.NewError(connect.CodeInternal, getErr)
 			}
 
 			if !materiallyChanged(current, next) {
@@ -356,6 +356,8 @@ func isTerminal(s asyncjobs.Status) bool {
 		asyncjobs.StatusCancelled,
 		asyncjobs.StatusOrphaned:
 		return true
+	case asyncjobs.StatusPending, asyncjobs.StatusRunning:
+		return false
 	}
 	return false
 }

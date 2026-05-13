@@ -348,7 +348,11 @@ func (p *Pool) createAgent(
 	return p.provider.Create(ctx, id, ref, overrides...)
 }
 
-func (p *Pool) runNew(id uuid.UUID, ref spec.Reference, agentOpts []system.AgentOption, extras AgentExtras, overrides []spec.Override) {
+func (p *Pool) runNew(
+	id uuid.UUID, ref spec.Reference,
+	agentOpts []system.AgentOption, extras AgentExtras,
+	overrides []spec.Override,
+) {
 	rootCtx := p.rootContext()
 
 	// createAgent is fast (no subprocess); take the sem only for the

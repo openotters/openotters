@@ -47,11 +47,11 @@ func LoadOrCreateSigningKey(ctx context.Context, store SecretStore) ([]byte, err
 	}
 
 	key := make([]byte, 32)
-	if _, err := rand.Read(key); err != nil {
+	if _, err = rand.Read(key); err != nil {
 		return nil, fmt.Errorf("auth: generate signing key: %w", err)
 	}
 
-	if err := store.PutSecret(ctx, SigningKeyName, key); err != nil {
+	if err = store.PutSecret(ctx, SigningKeyName, key); err != nil {
 		return nil, fmt.Errorf("auth: persist signing key: %w", err)
 	}
 	return key, nil

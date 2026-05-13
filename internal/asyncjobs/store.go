@@ -45,6 +45,8 @@ func (s Status) IsTerminal() bool {
 	switch s {
 	case StatusDone, StatusError, StatusCancelled, StatusOrphaned:
 		return true
+	case StatusPending, StatusRunning:
+		return false
 	}
 	return false
 }
@@ -441,12 +443,12 @@ func scanJob(r rowOrRows) (*Job, error) {
 		return nil, err
 	}
 	if argsJSON != "" && argsJSON != "[]" {
-		if err := json.Unmarshal([]byte(argsJSON), &j.Args); err != nil {
+		if err = json.Unmarshal([]byte(argsJSON), &j.Args); err != nil {
 			return nil, fmt.Errorf("decoding args for %s: %w", j.ID, err)
 		}
 	}
 	if labelsJSON != "" && labelsJSON != "{}" {
-		if err := json.Unmarshal([]byte(labelsJSON), &j.Labels); err != nil {
+		if err = json.Unmarshal([]byte(labelsJSON), &j.Labels); err != nil {
 			return nil, fmt.Errorf("decoding labels for %s: %w", j.ID, err)
 		}
 	}
@@ -470,9 +472,9 @@ func (s *Store) queryJobs(ctx context.Context, query string, args ...any) ([]*Jo
 
 	var out []*Job
 	for rows.Next() {
-		j, err := scanJob(rows)
-		if err != nil {
-			return nil, err
+		j, scanErr := scanJob(rows)
+		if scanErr != nil {
+			return nil, scanErr
 		}
 		out = append(out, j)
 	}
@@ -496,7 +498,7 @@ func placeholders(n int) string {
 // notFoundIfNoRows turns a UPDATE-affected-zero-rows result into
 // ErrNotFound. Used by every Mark* method so callers can distinguish
 // "row doesn't exist" from "I tried to mark something that's already
-// in the wrong state."
+// in the wrong state.".
 func notFoundIfNoRows(res sql.Result, err error) error {
 	if err != nil {
 		return err

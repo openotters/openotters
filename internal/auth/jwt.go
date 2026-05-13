@@ -40,15 +40,17 @@ const (
 )
 
 // IssueOperator mints an operator token and returns it alongside its
-// jti so callers can record the jti for future revocation.
-func IssueOperator(key []byte) (token, jti string, err error) {
+// jti so callers can record the jti for future revocation. Returns
+// (token, jti, err).
+func IssueOperator(key []byte) (string, string, error) {
 	return issue(key, IssuerOperator, "")
 }
 
 // IssueAgent mints a token bound to an agent's UUID and returns it
 // alongside its jti. Caller persists both — token lands in
 // agents.token, jti in agents.token_jti so RemoveAgent can revoke.
-func IssueAgent(key []byte, agentID string) (token, jti string, err error) {
+// Returns (token, jti, err).
+func IssueAgent(key []byte, agentID string) (string, string, error) {
 	if agentID == "" {
 		return "", "", errors.New("IssueAgent: agentID is required")
 	}

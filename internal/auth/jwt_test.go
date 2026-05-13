@@ -1,3 +1,7 @@
+// White-box test: pins behaviour of unexported helpers and reaches
+// into the issue / parse paths to assert claim shapes.
+//
+//nolint:testpackage // intentional white-box access to private jwt internals
 package auth
 
 import (
@@ -134,8 +138,8 @@ func TestValidate_RejectsRevoked(t *testing.T) {
 
 	// And confirm a different jti still passes (sanity — no global state).
 	other, _, _ := IssueOperator(key)
-	if _, err := Validate(key, other, revoked); err != nil {
-		t.Errorf("unrelated token validate: %v", err)
+	if _, vErr := Validate(key, other, revoked); vErr != nil {
+		t.Errorf("unrelated token validate: %v", vErr)
 	}
 }
 

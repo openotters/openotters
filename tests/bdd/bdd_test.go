@@ -81,7 +81,7 @@ func TestBDD(t *testing.T) {
 // Scenario failures bubble back through t.Errorf rather than
 // t.Fatalf so the runner reports every failing scenario in one
 // pass; the operator gets a full picture of what's broken instead
-// of "first failure wins."
+// of "first failure wins.".
 func runGodog(t *testing.T, daemon *helper.Daemon) {
 	t.Helper()
 

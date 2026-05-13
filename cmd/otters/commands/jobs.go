@@ -77,10 +77,10 @@ func (j *JobsRun) Run(ctx context.Context, common *cmd.Commons, d *Daemon) error
 // First `=` splits; values may contain further `=`. Empty keys and
 // duplicates are errors — silent overwrite would mask typos.
 func parseKVPairs(raw []string) (map[string]string, error) {
-	if len(raw) == 0 {
-		return nil, nil
-	}
 	out := make(map[string]string, len(raw))
+	if len(raw) == 0 {
+		return out, nil
+	}
 	for _, s := range raw {
 		eq := strings.IndexByte(s, '=')
 		if eq < 1 {
@@ -122,40 +122,15 @@ func (j *JobsAwait) Run(ctx context.Context, common *cmd.Commons, d *Daemon) err
 	defer tick.Stop()
 
 	for {
-		resp, err := c.GetAsyncJob(ctx, &daemonv1.GetAsyncJobRequest{JobId: j.JobID})
-		if err != nil {
-			return fmt.Errorf("get: %w", unwrapRPC(err))
+		resp, getErr := c.GetAsyncJob(ctx, &daemonv1.GetAsyncJobRequest{JobId: j.JobID})
+		if getErr != nil {
+			return fmt.Errorf("get: %w", unwrapRPC(getErr))
 		}
 		job := resp.GetJob()
 
 		if isTerminal(job.GetStatus()) {
-			p := common.Printer()
-			if job.GetStdout() != "" {
-				_, _ = p.Printf("%s", job.GetStdout())
-				if !strings.HasSuffix(job.GetStdout(), "\n") {
-					_, _ = p.Printf("\n")
-				}
-			}
-			if job.GetStderr() != "" {
-				_, _ = fmt.Fprint(os.Stderr, job.GetStderr())
-				if !strings.HasSuffix(job.GetStderr(), "\n") {
-					_, _ = fmt.Fprintln(os.Stderr)
-				}
-			}
-			switch job.GetStatus() {
-			case "done":
-				if job.GetExitCode() != 0 {
-					os.Exit(int(job.GetExitCode()))
-				}
-				return nil
-			case "error":
-				return fmt.Errorf("job %s errored: %s", j.JobID, job.GetError())
-			case "cancelled":
-				return fmt.Errorf("job %s cancelled", j.JobID)
-			case "orphaned":
-				return fmt.Errorf("job %s orphaned (daemon restarted before completion)", j.JobID)
-			}
-			return fmt.Errorf("unexpected terminal status %q", job.GetStatus())
+			tick.Stop()
+			return reportTerminal(common.Printer(), j.JobID, job)
 		}
 
 		select {
@@ -193,12 +168,12 @@ func (j *JobsWatch) Run(ctx context.Context, common *cmd.Commons, d *Daemon) err
 
 	p := common.Printer()
 	for {
-		resp, err := stream.Recv()
-		if errors.Is(err, io.EOF) {
+		resp, recvErr := stream.Recv()
+		if errors.Is(recvErr, io.EOF) {
 			return nil
 		}
-		if err != nil {
-			return fmt.Errorf("watch recv: %w", unwrapRPC(err))
+		if recvErr != nil {
+			return fmt.Errorf("watch recv: %w", unwrapRPC(recvErr))
 		}
 		job := resp.GetJob()
 		_, _ = p.Printf("%s status=%s handle=%s exit=%d\n",
@@ -344,11 +319,51 @@ func (j *JobsCancel) Run(ctx context.Context, common *cmd.Commons, d *Daemon) er
 	}
 	defer conn.Close()
 
-	if _, err := c.CancelAsyncJob(ctx, &daemonv1.CancelAsyncJobRequest{JobId: j.JobID}); err != nil {
+	if _, err = c.CancelAsyncJob(ctx, &daemonv1.CancelAsyncJobRequest{JobId: j.JobID}); err != nil {
 		return fmt.Errorf("cancel: %w", unwrapRPC(err))
 	}
 	_, _ = common.Printer().Printf("cancelled %s\n", j.JobID)
 	return nil
+}
+
+// reportTerminal writes a terminal-status job's captured output and
+// returns the right CLI error for the status. Extracted out of
+// JobsAwait.Run so the await loop stays flat (the inline if-switch
+// previously tripped nestif).
+//
+// A non-zero exit code on a successful "done" status surfaces as an
+// error string rather than os.Exit(code) — kong's main.go uses
+// FatalIfErrorf which always exits 1, so we cannot propagate the
+// underlying BIN's exit code today. Acceptable: callers that need
+// the exact code can read it via `otters jobs inspect <id>` after
+// await returns.
+func reportTerminal(p cmd.Printer, jobID string, job *daemonv1.AsyncJob) error {
+	if job.GetStdout() != "" {
+		_, _ = p.Printf("%s", job.GetStdout())
+		if !strings.HasSuffix(job.GetStdout(), "\n") {
+			_, _ = p.Printf("\n")
+		}
+	}
+	if job.GetStderr() != "" {
+		_, _ = fmt.Fprint(os.Stderr, job.GetStderr())
+		if !strings.HasSuffix(job.GetStderr(), "\n") {
+			_, _ = fmt.Fprintln(os.Stderr)
+		}
+	}
+	switch job.GetStatus() {
+	case "done":
+		if job.GetExitCode() != 0 {
+			return fmt.Errorf("job %s exited %d", jobID, job.GetExitCode())
+		}
+		return nil
+	case "error":
+		return fmt.Errorf("job %s errored: %s", jobID, job.GetError())
+	case "cancelled":
+		return fmt.Errorf("job %s cancelled", jobID)
+	case "orphaned":
+		return fmt.Errorf("job %s orphaned (daemon restarted before completion)", jobID)
+	}
+	return fmt.Errorf("unexpected terminal status %q", job.GetStatus())
 }
 
 // ─── helpers ────────────────────────────────────────────────────────

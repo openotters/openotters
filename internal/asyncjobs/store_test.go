@@ -1,3 +1,7 @@
+// White-box test: exercises the unexported store schema migration
+// and helper queries directly.
+//
+//nolint:testpackage // intentional white-box access to private store internals
 package asyncjobs
 
 import (
@@ -29,11 +33,11 @@ func newTestStore(t *testing.T) (*Store, *sql.DB) {
 	t.Cleanup(func() { _ = db.Close() })
 
 	// Minimal agents table so the FK resolves in the cascade test.
-	if _, err := db.Exec(`CREATE TABLE agents (id TEXT PRIMARY KEY, name TEXT)`); err != nil {
+	if _, err = db.Exec(`CREATE TABLE agents (id TEXT PRIMARY KEY, name TEXT)`); err != nil {
 		t.Fatalf("agents schema: %v", err)
 	}
 
-	if _, err := db.Exec(`
+	if _, err = db.Exec(`
 		CREATE TABLE async_jobs (
 			id            TEXT PRIMARY KEY,
 			agent_id      TEXT NOT NULL,
@@ -57,7 +61,7 @@ func newTestStore(t *testing.T) (*Store, *sql.DB) {
 	}
 
 	// Two agents so we can exercise per-agent filtering / cascade.
-	if _, err := db.Exec(`INSERT INTO agents (id, name) VALUES ('a1', 'one'), ('a2', 'two')`); err != nil {
+	if _, err = db.Exec(`INSERT INTO agents (id, name) VALUES ('a1', 'one'), ('a2', 'two')`); err != nil {
 		t.Fatalf("seed agents: %v", err)
 	}
 

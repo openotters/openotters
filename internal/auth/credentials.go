@@ -54,7 +54,7 @@ func LoadCredentials() (*CredentialsFile, error) {
 		return nil, fmt.Errorf("auth: read credentials: %w", err)
 	}
 	var cf CredentialsFile
-	if err := json.Unmarshal(raw, &cf); err != nil {
+	if err = json.Unmarshal(raw, &cf); err != nil {
 		return nil, fmt.Errorf("auth: decode credentials: %w", err)
 	}
 	if cf.Endpoints == nil {
@@ -71,7 +71,7 @@ func SaveCredentials(cf *CredentialsFile) error {
 	if err != nil {
 		return err
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+	if err = os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return fmt.Errorf("auth: mkdir credentials: %w", err)
 	}
 	body, err := json.MarshalIndent(cf, "", "  ")
@@ -79,10 +79,10 @@ func SaveCredentials(cf *CredentialsFile) error {
 		return fmt.Errorf("auth: encode credentials: %w", err)
 	}
 	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, body, 0o600); err != nil {
+	if err = os.WriteFile(tmp, body, 0o600); err != nil {
 		return fmt.Errorf("auth: write credentials tmp: %w", err)
 	}
-	if err := os.Rename(tmp, path); err != nil {
+	if err = os.Rename(tmp, path); err != nil {
 		return fmt.Errorf("auth: rename credentials: %w", err)
 	}
 	return nil
@@ -132,7 +132,7 @@ func EnsureOperatorToken(endpoint string, signingKey []byte) (bool, string, erro
 		Token:    token,
 		IssuedAt: time.Now().UTC(),
 	}
-	if err := SaveCredentials(cf); err != nil {
+	if err = SaveCredentials(cf); err != nil {
 		return false, "", err
 	}
 	return true, token, nil

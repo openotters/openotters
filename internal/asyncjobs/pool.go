@@ -96,7 +96,11 @@ func (p *Pool) Cancel(jobID string) error {
 	if !ok {
 		return ErrNotRunning
 	}
-	v.(context.CancelFunc)()
+	cancel, ok := v.(context.CancelFunc)
+	if !ok {
+		return fmt.Errorf("cancels map carried unexpected value for %q", jobID)
+	}
+	cancel()
 	return nil
 }
 
@@ -121,7 +125,7 @@ func (p *Pool) Boot(ctx context.Context) error {
 		return fmt.Errorf("Boot: list running: %w", err)
 	}
 
-	if _, err := p.store.MarkOrphaned(ctx, ""); err != nil {
+	if _, err = p.store.MarkOrphaned(ctx, ""); err != nil {
 		return fmt.Errorf("Boot: mark orphaned: %w", err)
 	}
 
@@ -149,7 +153,9 @@ func (p *Pool) Boot(ctx context.Context) error {
 // before they exit (the agent.Exec ctx is what we cancel).
 func (p *Pool) Shutdown(ctx context.Context) error {
 	p.cancels.Range(func(_, v any) bool {
-		v.(context.CancelFunc)()
+		if cancel, ok := v.(context.CancelFunc); ok {
+			cancel()
+		}
 		return true
 	})
 
@@ -209,15 +215,15 @@ func (p *Pool) runOne(jobID string) {
 	}
 
 	jobCtx, cancel := context.WithCancel(bg)
-	p.cancels.Store(jobID, context.CancelFunc(cancel))
+	p.cancels.Store(jobID, cancel)
 	defer func() {
 		p.cancels.Delete(jobID)
 		cancel()
 	}()
 
-	if err := p.store.MarkRunning(bg, jobID, "", time.Now()); err != nil {
+	if markErr := p.store.MarkRunning(bg, jobID, "", time.Now()); markErr != nil {
 		p.logger.Warn("MarkRunning failed",
-			zap.String("id", jobID), zap.Error(err))
+			zap.String("id", jobID), zap.Error(markErr))
 		return
 	}
 

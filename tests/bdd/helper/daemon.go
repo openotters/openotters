@@ -10,6 +10,7 @@ package helper
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -66,7 +67,7 @@ func StartDaemon(t *testing.T, executor string) *Daemon {
 		t:          t,
 	}
 
-	d.cmd = exec.Command(
+	d.cmd = exec.CommandContext(t.Context(),
 		"ottersd", "serve",
 		"--socket-path", socket,
 		"--no-http",
@@ -112,7 +113,7 @@ func (d *Daemon) Run(args ...string) CommandResult {
 	d.t.Helper()
 
 	full := append([]string{"--socket", d.SocketPath}, args...)
-	cmd := exec.Command("otters", full...)
+	cmd := exec.CommandContext(d.t.Context(), "otters", full...)
 	cmd.Env = append(os.Environ(), "HOME="+d.HomeDir)
 
 	var stdout, stderr strings.Builder
@@ -167,7 +168,13 @@ func (d *Daemon) waitReady(timeout time.Duration) error {
 		default:
 		}
 
-		probe := exec.Command("otters", "--socket", d.SocketPath, "info")
+		// G204 false positive: otters is a literal hardcoded value;
+		// d.SocketPath is t.TempDir-derived (test-scoped, no operator
+		// input). Test code only.
+		//
+		//nolint:gosec // hardcoded bin; SocketPath is t.TempDir, not user input
+		probe := exec.CommandContext(d.t.Context(),
+			"otters", "--socket", d.SocketPath, "info")
 		probe.Env = append(os.Environ(), "HOME="+d.HomeDir)
 		if err := probe.Run(); err == nil {
 			return nil
@@ -180,7 +187,8 @@ func (d *Daemon) waitReady(timeout time.Duration) error {
 // asExit is `errors.As(err, &target)` shrunk to one line — kept here so
 // callers don't grow an `import "errors"` for a single use site.
 func asExit(err error, target **exec.ExitError) bool {
-	if e, ok := err.(*exec.ExitError); ok {
+	e := &exec.ExitError{}
+	if errors.As(err, &e) {
 		*target = e
 		return true
 	}

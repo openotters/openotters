@@ -134,37 +134,29 @@ func migrateState(ctx context.Context, db *sql.DB) error {
 		return err
 	}
 
-	// Status rename: the executor enum was rewritten from
-	// {created, running, init_error, pull_error, model_error, stopped,
-	// removing, removed} to {pulling, starting, ready, working, stopped,
-	// failed, removing, removed} so the dashboard / CLI surface stops
-	// reading "Created" as "ready to use". The mappings below are
-	// idempotent: each WHERE clause only matches legacy values, so
-	// re-running the migration after upgrade is a no-op.
-	if _, err := db.ExecContext(ctx,
-		`UPDATE agents SET failure_reason='pull',  status='failed'
-		 WHERE status='pull_error'`); err != nil {
-		return fmt.Errorf("migrate pull_error: %w", err)
-	}
-	if _, err := db.ExecContext(ctx,
-		`UPDATE agents SET failure_reason='init',  status='failed'
-		 WHERE status='init_error'`); err != nil {
-		return fmt.Errorf("migrate init_error: %w", err)
-	}
-	if _, err := db.ExecContext(ctx,
-		`UPDATE agents SET failure_reason='model', status='failed'
-		 WHERE status='model_error'`); err != nil {
-		return fmt.Errorf("migrate model_error: %w", err)
-	}
-	if _, err := db.ExecContext(ctx,
-		`UPDATE agents SET status='starting' WHERE status='created'`); err != nil {
-		return fmt.Errorf("migrate created status: %w", err)
-	}
-	if _, err := db.ExecContext(ctx,
-		`UPDATE agents SET status='ready' WHERE status='running'`); err != nil {
-		return fmt.Errorf("migrate running status: %w", err)
+	if err := migrateLegacyAgentStatus(ctx, db); err != nil {
+		return err
 	}
 
+	if err := migrateImagesTable(ctx, db); err != nil {
+		return err
+	}
+
+	if err := migrateAsyncJobsTable(ctx, db); err != nil {
+		return err
+	}
+
+	if err := migrateAuthTables(ctx, db); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// migrateImagesTable owns the images describe-cache + the
+// dropped-on-upgrade image_kinds table. Extracted from migrateState
+// to keep that function under the funlen bar.
+func migrateImagesTable(ctx context.Context, db *sql.DB) error {
 	// images is the daemon-owned cache of every ref the executor
 	// registry has shown us. Populated at every ingestion site
 	// (build / pull / save) and kept in sync via RefreshImages
@@ -198,9 +190,7 @@ func migrateState(ctx context.Context, db *sql.DB) error {
 	}
 
 	// Idempotent ADD COLUMN for daemons whose images table pre-dates
-	// the describe cache. Cheap PRAGMA inspection in
-	// addColumnIfMissing; lets the dev daemon pick up the new
-	// columns without wiping state.
+	// the describe cache.
 	for _, col := range []struct {
 		name string
 		ddl  string
@@ -227,20 +217,23 @@ func migrateState(ctx context.Context, db *sql.DB) error {
 		return err
 	}
 
+	return nil
+}
+
+// migrateAsyncJobsTable owns the async_jobs table + the legacy
+// sessions index it depends on. Extracted from migrateState.
+func migrateAsyncJobsTable(ctx context.Context, db *sql.DB) error {
 	// async_jobs is the daemon-owned record of every async BIN call
 	// dispatched against an agent's spawn env. The pool reads /
 	// writes status lines here; the boot path replays pending and
 	// orphans abandoned-running rows. Cascade keeps the table
 	// honest when an agent is removed — provided the daemon is run
-	// with --sqlite-foreign-key, which the orchestrator should set.
-	// (Belt-and-braces app-level cleanup also runs from the agent
-	// removal path so the table stays sane regardless of the flag.)
+	// with --sqlite-foreign-key.
 	//
 	// Jobs are attached to the agent only — there is no session_id
 	// column. Submitters that want to associate a job with a chat
 	// session set the io.openotters.session-id label, and the same
-	// label-selector path on ListAsyncJobs filters on it. See the
-	// proto's standard-labels comment for the full reserved set.
+	// label-selector path on ListAsyncJobs filters on it.
 	if _, err := db.ExecContext(ctx, `
 		CREATE TABLE IF NOT EXISTS async_jobs (
 			id            TEXT PRIMARY KEY,
@@ -265,9 +258,6 @@ func migrateState(ctx context.Context, db *sql.DB) error {
 		return err
 	}
 
-	// Idempotent ADD COLUMN for daemons whose async_jobs table
-	// pre-dates labels. Cheap PRAGMA inspection; wins over forcing
-	// dev users to wipe their state DB just to start the daemon.
 	if err := addColumnIfMissing(ctx, db,
 		"async_jobs", "labels_json", "TEXT NOT NULL DEFAULT '{}'",
 	); err != nil {
@@ -275,13 +265,7 @@ func migrateState(ctx context.Context, db *sql.DB) error {
 	}
 
 	// Idempotent DROP COLUMN for daemons whose async_jobs table
-	// pre-dates the session-detachment refactor (jobs were attached
-	// to a session via a NOT NULL session_id column; now they're
-	// attached to the agent only and the relationship — if any — is
-	// expressed via the io.openotters.session-id label). Same
-	// rationale as the labels_json add: dev iteration trumps the
-	// "no retro-compat" purity since wiping the state DB to start
-	// the daemon is friction that shouldn't be necessary.
+	// pre-dates the session-detachment refactor.
 	if err := dropColumnIfPresent(ctx, db, "async_jobs", "session_id"); err != nil {
 		return err
 	}
@@ -299,14 +283,18 @@ func migrateState(ctx context.Context, db *sql.DB) error {
 	}
 
 	// The sessions index table existed solely to resolve session-id
-	// → agent-id at SubmitAsyncJob time, back when jobs were attached
-	// to sessions. With jobs now attached to agents directly (the
-	// session relationship is just a label), the table has no other
-	// callers. Drop it on upgrade; new installs never create it.
+	// → agent-id at SubmitAsyncJob time. With jobs now attached to
+	// agents directly, the table has no other callers.
 	if _, err := db.ExecContext(ctx, `DROP TABLE IF EXISTS sessions`); err != nil {
 		return err
 	}
 
+	return nil
+}
+
+// migrateAuthTables owns the secrets keystore + revoked_tokens
+// list. Extracted from migrateState.
+func migrateAuthTables(ctx context.Context, db *sql.DB) error {
 	// secrets is the daemon's keystore. Single-row use today
 	// (jwt_signing_key); kept generic so future per-secret rows
 	// (rotation keys, OIDC client secrets) slot in without another
@@ -322,12 +310,8 @@ func migrateState(ctx context.Context, db *sql.DB) error {
 	}
 
 	// revoked_tokens is the JWT revocation list. JWTs are
-	// stateless-by-design; the only way to invalidate one before exp
-	// is to remember its jti and check on every validate. Populated
-	// from RemoveAgent (and future token-rotation flows). Boundedly
-	// growing — one row per ever-removed agent — so no GC needed at
-	// expected scale; if rows ever explode, a "revoked_at < ?" purge
-	// after the longest token TTL is safe.
+	// stateless-by-design; the only way to invalidate one before
+	// exp is to remember its jti and check on every validate.
 	if _, err := db.ExecContext(ctx, `
 		CREATE TABLE IF NOT EXISTS revoked_tokens (
 			jti         TEXT PRIMARY KEY,
@@ -450,6 +434,33 @@ func dropColumnIfPresent(ctx context.Context, db *sql.DB, table, column string) 
 	return err
 }
 
+// migrateLegacyAgentStatus rewrites legacy status strings the
+// executor enum no longer uses ({created, running, init_error,
+// pull_error, model_error} → {starting, ready, failed+reason}).
+// Each UPDATE only matches the legacy value it owns, so the function
+// is idempotent — re-running it after upgrade is a no-op.
+//
+// Extracted from migrateState so the latter stays under the funlen
+// 100-line bar.
+func migrateLegacyAgentStatus(ctx context.Context, db *sql.DB) error {
+	mappings := []struct {
+		desc string
+		sql  string
+	}{
+		{"pull_error", `UPDATE agents SET failure_reason='pull',  status='failed' WHERE status='pull_error'`},
+		{"init_error", `UPDATE agents SET failure_reason='init',  status='failed' WHERE status='init_error'`},
+		{"model_error", `UPDATE agents SET failure_reason='model', status='failed' WHERE status='model_error'`},
+		{"created", `UPDATE agents SET status='starting' WHERE status='created'`},
+		{"running", `UPDATE agents SET status='ready'    WHERE status='running'`},
+	}
+	for _, m := range mappings {
+		if _, err := db.ExecContext(ctx, m.sql); err != nil {
+			return fmt.Errorf("migrate %s status: %w", m.desc, err)
+		}
+	}
+	return nil
+}
+
 // addColumnIfMissing is a small helper for schema migrations that only
 // add a single column. sqlite doesn't have IF NOT EXISTS for ALTER
 // TABLE ADD COLUMN, so we inspect PRAGMA table_info and skip when the
@@ -521,7 +532,9 @@ func (s *StateStore) SaveAgent(ctx context.Context, a persistedAgent) error {
 	}
 
 	_, err = s.db.ExecContext(ctx,
-		`INSERT OR REPLACE INTO agents (id, name, agent_name, model, runtime, tag, status, failure_reason, created_at, mounts, labels_json, envs_json, token, token_jti)
+		`INSERT OR REPLACE INTO agents
+		   (id, name, agent_name, model, runtime, tag, status, failure_reason,
+		    created_at, mounts, labels_json, envs_json, token, token_jti)
 		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		a.ID, a.Name, a.AgentName, a.Model, a.Runtime, a.Tag, a.Status,
 		a.FailureReason, a.CreatedAt, string(mounts), string(labels),
@@ -747,7 +760,9 @@ func (s *StateStore) ReplaceAllImages(ctx context.Context, imgs []PersistedImage
 
 func (s *StateStore) ListAgents(ctx context.Context) ([]persistedAgent, error) {
 	rows, err := s.db.QueryContext(ctx,
-		"SELECT id, name, agent_name, model, runtime, tag, status, failure_reason, created_at, mounts, labels_json, envs_json, token, token_jti FROM agents ORDER BY created_at ASC",
+		`SELECT id, name, agent_name, model, runtime, tag, status, failure_reason,
+		        created_at, mounts, labels_json, envs_json, token, token_jti
+		 FROM agents ORDER BY created_at ASC`,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("querying agents: %w", err)

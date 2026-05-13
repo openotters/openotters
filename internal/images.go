@@ -223,48 +223,6 @@ func (d *Daemon) persistedImageToDescribe(row *PersistedImage) *daemonv1.Describ
 	}
 }
 
-func (d *Daemon) describeImageEmbedded(
-	ctx context.Context, ref string,
-) (*daemonv1.DescribeImageResponse, error) {
-	addr := d.registry.Addr()
-
-	repo, tag := splitRef(ref)
-
-	manifestData, digest, err := fetchManifestRaw(ctx, addr, repo, tag)
-	if err != nil {
-		return nil, fmt.Errorf("fetching manifest for %s: %w", ref, err)
-	}
-
-	var manifest v1.Manifest
-	if err = json.Unmarshal(manifestData, &manifest); err != nil {
-		return nil, fmt.Errorf("parsing manifest: %w", err)
-	}
-
-	configData, err := fetchBlob(ctx, addr, repo, manifest.Config.Digest.String())
-	if err != nil {
-		return nil, fmt.Errorf("fetching config: %w", err)
-	}
-
-	var layers []string
-	for _, l := range manifest.Layers {
-		title := l.Annotations["org.opencontainers.image.title"]
-		if title == "" {
-			title = l.Digest.String()[:16]
-		}
-
-		layers = append(layers, fmt.Sprintf("%s (%s, %d bytes)", title, l.MediaType, l.Size))
-	}
-
-	return &daemonv1.DescribeImageResponse{
-		Ref:          ref,
-		Digest:       digest,
-		ArtifactType: manifest.ArtifactType,
-		Config:       string(configData),
-		Layers:       layers,
-		Labels:       manifest.Annotations,
-	}, nil
-}
-
 type manifestInfo struct {
 	digest       string
 	artifactType string
@@ -372,23 +330,6 @@ func fetchManifestRaw(ctx context.Context, addr, repo, tag string) ([]byte, stri
 	}
 
 	return data, resp.Header.Get("Docker-Content-Digest"), nil
-}
-
-func fetchBlob(ctx context.Context, addr, repo, digest string) ([]byte, error) {
-	url := fmt.Sprintf("http://%s/v2/%s/blobs/%s", addr, repo, digest)
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-	if err != nil {
-		return nil, err
-	}
-
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	return readAllCapped(resp.Body)
 }
 
 func splitRef(ref string) (string, string) {

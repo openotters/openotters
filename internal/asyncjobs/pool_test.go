@@ -1,3 +1,8 @@
+// White-box test: drives Pool internals (cancels map, dispatch, the
+// runOne path) directly. Promoting these to the public API just for
+// assertions would widen the surface for no other benefit.
+//
+//nolint:testpackage // intentional white-box access to private pool internals
 package asyncjobs
 
 import (
@@ -84,7 +89,9 @@ func waitForStatus(t *testing.T, store *Store, id string, want Status) *Job {
 	return final
 }
 
-func newPoolFixture(t *testing.T, exec func(ctx context.Context, bin string, args []string, stdin string) executor.ExecResult) (*Pool, *Store, uuid.UUID) {
+type execFunc = func(ctx context.Context, bin string, args []string, stdin string) executor.ExecResult
+
+func newPoolFixture(t *testing.T, exec execFunc) (*Pool, *Store, uuid.UUID) {
 	t.Helper()
 	store, _ := newTestStore(t)
 	agentID := uuid.New()
@@ -143,8 +150,8 @@ func TestPool_Cancel_StopsRunningJob(t *testing.T) {
 	}
 
 	<-started
-	if err := pool.Cancel(id); err != nil {
-		t.Fatalf("Cancel: %v", err)
+	if cancelErr := pool.Cancel(id); cancelErr != nil {
+		t.Fatalf("Cancel: %v", cancelErr)
 	}
 
 	waitForStatus(t, store, id, StatusCancelled)
@@ -173,12 +180,12 @@ func TestPool_Boot_OrphansRunning(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Insert: %v", err)
 	}
-	if err := store.MarkRunning(context.Background(), id, "12345", time.Now().Add(-time.Hour)); err != nil {
-		t.Fatalf("MarkRunning: %v", err)
+	if markErr := store.MarkRunning(context.Background(), id, "12345", time.Now().Add(-time.Hour)); markErr != nil {
+		t.Fatalf("MarkRunning: %v", markErr)
 	}
 
-	if err := pool.Boot(context.Background()); err != nil {
-		t.Fatalf("Boot: %v", err)
+	if bootErr := pool.Boot(context.Background()); bootErr != nil {
+		t.Fatalf("Boot: %v", bootErr)
 	}
 
 	final, _ := store.Get(context.Background(), id)
