@@ -44,7 +44,7 @@ func RegisterInfo(sc *godog.ScenarioContext, s *State) {
 //
 // The line shape produced by `otters info` is:
 //
-//	  Executor:    docker
+//	Executor:    docker
 //
 // so the matcher splits on the colon and trims surrounding whitespace.
 func matchKeyValue(s *State, key string, expected func() string) func() error {

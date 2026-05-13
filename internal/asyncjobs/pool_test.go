@@ -109,7 +109,7 @@ func TestPool_Submit_RunsToCompletion(t *testing.T) {
 		})
 
 	id, err := pool.Submit(context.Background(), Spec{
-		AgentID: agentID.String(),Bin: "echo", Args: []string{"hello"},
+		AgentID: agentID.String(), Bin: "echo", Args: []string{"hello"},
 	})
 	if err != nil {
 		t.Fatalf("Submit: %v", err)
@@ -135,7 +135,7 @@ func TestPool_Cancel_StopsRunningJob(t *testing.T) {
 		})
 
 	id, err := pool.Submit(context.Background(), Spec{
-		AgentID: agentID.String(),Bin: "sleep", Args: []string{"30"},
+		AgentID: agentID.String(), Bin: "sleep", Args: []string{"30"},
 	})
 	if err != nil {
 		t.Fatalf("Submit: %v", err)
@@ -169,7 +169,7 @@ func TestPool_Boot_OrphansRunning(t *testing.T) {
 
 	// Simulate a prior process: insert a row directly in 'running'.
 	id, err := store.Insert(context.Background(), Spec{
-		AgentID: agentID.String(),Bin: "ffmpeg", Args: []string{"-i", "in"},
+		AgentID: agentID.String(), Bin: "ffmpeg", Args: []string{"-i", "in"},
 	})
 	if err != nil {
 		t.Fatalf("Insert: %v", err)
@@ -201,7 +201,7 @@ func TestPool_RunOne_AgentNotRunning_MarksError(t *testing.T) {
 		zap.NewNop())
 
 	id, err := pool.Submit(context.Background(), Spec{
-		AgentID: agentID.String(),Bin: "echo", Args: []string{"hi"},
+		AgentID: agentID.String(), Bin: "echo", Args: []string{"hi"},
 	})
 	if err != nil {
 		t.Fatalf("Submit: %v", err)

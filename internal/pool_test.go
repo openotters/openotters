@@ -87,10 +87,10 @@ type fakeAgent struct {
 }
 
 type fakeOutcome struct {
-	err    error                   // returned by Run/Start
-	status agentpkg.Status         // status set before returning (zero means leave unchanged)
-	reason agentpkg.FailureReason  // when set, calls SetFailure(reason) instead of Set(status)
-	hold   chan struct{}           // if non-nil, Run blocks on it until closed
+	err    error                  // returned by Run/Start
+	status agentpkg.Status        // status set before returning (zero means leave unchanged)
+	reason agentpkg.FailureReason // when set, calls SetFailure(reason) instead of Set(status)
+	hold   chan struct{}          // if non-nil, Run blocks on it until closed
 }
 
 func newFakeAgent(outcomes ...fakeOutcome) *fakeAgent {

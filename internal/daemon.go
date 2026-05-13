@@ -321,12 +321,12 @@ func mountsToProto(ms []agentpkg.Mount) []*daemonv1.Mount {
 }
 
 type Daemon struct {
-	pool       *Pool
-	providers  *ProviderRegistry
-	registry   *EmbeddedRegistry
-	state      *StateStore
-	logger     *zap.Logger
-	executor   string // "system" or "docker"; surfaced by Info().
+	pool      *Pool
+	providers *ProviderRegistry
+	registry  *EmbeddedRegistry
+	state     *StateStore
+	logger    *zap.Logger
+	executor  string // "system" or "docker"; surfaced by Info().
 	// storeFor lets the daemon resolve a per-ref OCI store (docker
 	// image store under the docker executor, embedded HTTP registry
 	// under the system executor). Used by DescribeImage to reach the
@@ -741,10 +741,16 @@ func (d *Daemon) Info() DaemonInfo {
 	for _, ma := range d.agents {
 		if a, ok := d.pool.Get(ma.id); ok {
 			// "Running" for the dashboard counter = ready OR working;
-			// either way the agent is alive and serving traffic.
+			// either way the agent is alive and serving traffic. All
+			// other states (pulling/starting/stopped/failed/removing/
+			// removed) don't count toward the running tally.
 			switch a.Status() {
 			case agentpkg.StatusReady, agentpkg.StatusWorking:
 				running++
+			case agentpkg.StatusPulling, agentpkg.StatusStarting,
+				agentpkg.StatusStopped, agentpkg.StatusFailed,
+				agentpkg.StatusRemoving, agentpkg.StatusRemoved:
+				// not running
 			}
 		}
 	}
