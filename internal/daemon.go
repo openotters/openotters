@@ -1039,6 +1039,15 @@ func (d *Daemon) Restore(ctx context.Context) error {
 			overrides = append(overrides, spec.WithModel(pa.Model))
 		}
 
+		// pa.Runtime holds the effective runtime (operator override or
+		// the Agentfile's baked default) — re-apply it so the runtime
+		// override survives. No-op when the persisted value equals
+		// the baked one; non-trivial when the operator chose a
+		// different runtime.
+		if pa.Runtime != "" {
+			overrides = append(overrides, spec.WithRuntime(pa.Runtime))
+		}
+
 		mounts := mountsFromPersisted(pa.Mounts)
 		envOverrides := envsFromPersisted(pa.Envs)
 
@@ -1600,12 +1609,21 @@ func (d *Daemon) CreateAgent(
 
 	d.agents[id.String()] = ma
 
+	// Effective runtime: operator override wins, otherwise the
+	// Agentfile's baked RUNTIME directive. Persisting the effective
+	// value is what makes the override survive a daemon restart —
+	// af.Agent.Runtime alone loses the operator's choice.
+	effectiveRuntime := af.Agent.Runtime
+	if req.GetRuntime() != "" {
+		effectiveRuntime = req.GetRuntime()
+	}
+
 	if saveErr := d.state.SaveAgent(ctx, persistedAgent{
 		ID:        id.String(),
 		Name:      name,
 		AgentName: agentName,
 		Model:     ma.model,
-		Runtime:   af.Agent.Runtime,
+		Runtime:   effectiveRuntime,
 		Tag:       ma.tag,
 		Status:    statusPulling,
 		CreatedAt: ma.createdAt,
