@@ -957,10 +957,16 @@ export default function ChatPage() {
 						{agent && (
 							<span
 								aria-label={`Agent ${agent.status}`}
-								className={`absolute right-0.5 bottom-0.5 inline-flex h-2.5 w-2.5 ${
-									agent.status === "running"
-										? "rounded-full bg-emerald-500 ring-2 ring-background animate-pulse"
-										: "rounded-full bg-muted-foreground/40 ring-2 ring-background"
+								className={`absolute right-0.5 bottom-0.5 inline-flex h-2.5 w-2.5 rounded-full ring-2 ring-background ${
+									agent.status === "ready"
+										? "bg-emerald-500"
+										: agent.status === "working"
+											? "bg-blue-500 animate-pulse"
+											: agent.status === "pulling" || agent.status === "starting"
+												? "bg-amber-500 animate-pulse"
+												: agent.status === "failed"
+													? "bg-red-500"
+													: "bg-muted-foreground/40"
 								}`}
 							/>
 						)}
