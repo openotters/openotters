@@ -31,7 +31,26 @@ jobs:
           go-version: ${{ matrix.go }}
           cache: true
 
+      - name: Install otters + ottersd onto PATH
+        # The BDD harness (tests/bdd) execs the real CLI binaries via
+        # exec.LookPath and hard-fails when they're missing — the
+        # intent is that a local dev who skipped `task install` gets
+        # a clear "run task install" message rather than a silent
+        # mock-success. In CI we satisfy the same precondition by
+        # installing into the default Go bin dir (already on PATH
+        # via setup-go).
+        run: |
+          go install ./cmd/ottersd
+          go install ./cmd/otters
+
       - name: Run tests with race detector + coverage
+        env:
+          # CI hosts have no docker daemon; opt out of the docker
+          # executor scenarios. The bdd harness fast-fails when
+          # docker is reachable but unconfigured, so the opt-out has
+          # to be explicit — silent skips would mask real
+          # regressions.
+          OPENOTTERS_BDD_SKIP: docker
         run: |
           go test -race -covermode=atomic -coverprofile=coverage.out ./...
 
