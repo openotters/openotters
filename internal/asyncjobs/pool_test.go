@@ -105,7 +105,6 @@ func newPoolFixture(t *testing.T, exec func(ctx context.Context, bin string, arg
 }
 
 func TestPool_Submit_RunsToCompletion(t *testing.T) {
-	t.Parallel()
 	pool, store, agentID := newPoolFixture(t,
 		func(_ context.Context, _ string, _ []string, _ string) executor.ExecResult {
 			return executor.ExecResult{Stdout: "hello\n", ExitCode: 0}
@@ -128,7 +127,6 @@ func TestPool_Submit_RunsToCompletion(t *testing.T) {
 }
 
 func TestPool_Cancel_StopsRunningJob(t *testing.T) {
-	t.Parallel()
 	started := make(chan struct{})
 	pool, store, agentID := newPoolFixture(t,
 		func(ctx context.Context, _ string, _ []string, _ string) executor.ExecResult {
@@ -153,7 +151,6 @@ func TestPool_Cancel_StopsRunningJob(t *testing.T) {
 }
 
 func TestPool_Cancel_UnknownJob_ReturnsErrNotRunning(t *testing.T) {
-	t.Parallel()
 	pool, _, _ := newPoolFixture(t,
 		func(_ context.Context, _ string, _ []string, _ string) executor.ExecResult {
 			return executor.ExecResult{}
@@ -164,7 +161,6 @@ func TestPool_Cancel_UnknownJob_ReturnsErrNotRunning(t *testing.T) {
 }
 
 func TestPool_Boot_OrphansRunning(t *testing.T) {
-	t.Parallel()
 	pool, store, agentID := newPoolFixture(t,
 		func(_ context.Context, _ string, _ []string, _ string) executor.ExecResult {
 			return executor.ExecResult{}
@@ -192,7 +188,6 @@ func TestPool_Boot_OrphansRunning(t *testing.T) {
 }
 
 func TestPool_RunOne_AgentNotRunning_MarksError(t *testing.T) {
-	t.Parallel()
 	store, _ := newTestStore(t)
 	agentID := uuid.New()
 	if _, err := store.db.Exec(`INSERT INTO agents (id, name) VALUES (?, ?)`,
