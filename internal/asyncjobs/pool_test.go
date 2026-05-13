@@ -47,14 +47,17 @@ func (l *fakeLookup) Get(id uuid.UUID) (executor.Agent, bool) {
 // waitFor polls fn() until it returns true or the deadline hits.
 // Useful because the pool dispatches on a goroutine.
 //
-// The 5 s budget is generous on purpose: under `-race` plus the
+// The 10 s budget is generous on purpose: under `-race` plus the
 // parallel scheduler on CI runners (typically 2-vCPU x86_64),
-// pool.runOne can take well over a second to wake up between
-// Submit and the first store write. A 2 s budget was right at the
-// edge and tipped over on CI.
+// pool.runOne + stdout-sink debounce can stretch well past several
+// seconds between Submit and the terminal store write. 2 s was the
+// original budget and tipped over almost immediately; 5 s tipped
+// over on busier runs. 10 s is enough for the worst CI runner
+// without masking real bugs (a hung pool would still surface as a
+// 10-second test).
 func waitFor(t *testing.T, fn func() bool, msg string) {
 	t.Helper()
-	deadline := time.Now().Add(5 * time.Second)
+	deadline := time.Now().Add(10 * time.Second)
 	for time.Now().Before(deadline) {
 		if fn() {
 			return

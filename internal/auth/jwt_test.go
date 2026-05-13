@@ -73,11 +73,24 @@ func TestValidate_RejectsTamperedSignature(t *testing.T) {
 	key := []byte("test-key-32-bytes-aaaaaaaaaaaaaa")
 	tok, _, _ := IssueOperator(key)
 
-	// Flip the last char so the signature mismatches.
-	tampered := tok[:len(tok)-1] + "A"
-	if tampered == tok {
-		tampered = tok[:len(tok)-1] + "B"
+	// JWT shape is <header>.<payload>.<signature>; the signature
+	// segment is base64url-encoded HMAC-SHA256 bytes. We mutate the
+	// front of the signature (a stretch of "A"s = all-zero bytes)
+	// to guarantee a mismatch.
+	//
+	// Naive "flip the last char" doesn't work reliably: base64url's
+	// terminating character only encodes 4 useful bits for a 32-byte
+	// HMAC, so swapping to 'A' or 'B' frequently produces the same
+	// decoded bytes — a flaky test we lived with for a while.
+	parts := strings.Split(tok, ".")
+	if len(parts) != 3 {
+		t.Fatalf("issued token does not look like a JWT: %q", tok)
 	}
+	if len(parts[2]) < 16 {
+		t.Fatalf("signature segment is suspiciously short: %q", parts[2])
+	}
+	parts[2] = strings.Repeat("A", 16) + parts[2][16:]
+	tampered := strings.Join(parts, ".")
 
 	_, err := Validate(key, tampered, neverRevoked)
 	if !errors.Is(err, ErrTokenInvalid) {
