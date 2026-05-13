@@ -51,6 +51,15 @@ jobs:
           # to be explicit — silent skips would mask real
           # regressions.
           OPENOTTERS_BDD_SKIP: docker
+          # Force GOMAXPROCS up — the asyncjobs pool tests use
+          # t.Parallel() heavily and run a lot of goroutines
+          # (dispatcher + per-job worker + stdout sink). On a
+          # 2-vCPU ubuntu runner with the race detector,
+          # scheduling pressure occasionally starves the dispatch
+          # goroutine for >10s. macOS runners (more vCPUs) don't
+          # hit this. Setting GOMAXPROCS=4 gives the scheduler
+          # enough slots to make progress.
+          GOMAXPROCS: '4'
         run: |
           go test -race -covermode=atomic -coverprofile=coverage.out ./...
 
