@@ -108,15 +108,140 @@ type Part =
 
 interface UIMessage {
 	id: string
-	role: "user" | "assistant"
+	// "system" is the runtime's out-of-band compaction notice — not a
+	// user or assistant turn, rendered as a centered divider with an
+	// expand-for-summary button instead of a bubble.
+	role: "user" | "assistant" | "system"
 	// Branches let the user regenerate without losing the prior
 	// answer: each call to "Regenerate" appends a new array of parts
 	// and bumps activeBranch to it; the message UI exposes prev/next
 	// to flip between them. branches[activeBranch] is what renders.
+	// Empty for system rows.
 	branches: Part[][]
 	activeBranch: number
 	createdAt: number // unix seconds
 	failed?: boolean // assistant turn that errored — surfaces a Retry CTA
+	// compaction is set only when role === "system". `text` is the
+	// runtime's notice line ("Memory compacted (summarized). N older
+	// messages were condensed into a summary above."); `summary` is
+	// the linked assistant message body ("[Conversation summary]: …"),
+	// hidden by default and revealed by the row's toggle.
+	compaction?: { text: string; summary?: string }
+}
+
+// Patterns produced by runtime/pkg/memory/compact.go. Stable under
+// our control — string match is fine.
+const COMPACTION_NOTICE_RE = /^\[system\]:\s*Memory compacted/
+const CONVERSATION_SUMMARY_RE = /^\[Conversation summary\]:\s*/
+
+// firstTextContent returns the first text part's content for a
+// hydrated UIMessage, or "" when the active branch has no text.
+function firstTextContent(m: UIMessage): string {
+	const parts = m.branches[m.activeBranch] ?? []
+	for (const p of parts) {
+		if (p.kind === "text") return p.content
+	}
+	return ""
+}
+
+// applyCompactionMarkers folds compactor-emitted bookkeeping into a
+// single non-bubble system row. The compactor (memory/compact.go)
+// stores:
+//   - one assistant message: "[Conversation summary]: <summary>"
+//     (summarize strategy only)
+//   - one trailing user message: "[system]: Memory compacted (…). …"
+// Both render as ordinary bubbles by default, which is wrong — the
+// user didn't say "[system]: …" and the summary isn't a model reply
+// they wrote. Collapse to one system row that owns the disclosure.
+function applyCompactionMarkers(messages: UIMessage[]): UIMessage[] {
+	let summaryIdx = -1
+	let summaryText = ""
+	for (let i = 0; i < messages.length; i++) {
+		const m = messages[i]
+		if (m.role !== "assistant") continue
+		const t = firstTextContent(m)
+		if (CONVERSATION_SUMMARY_RE.test(t)) {
+			summaryIdx = i
+			summaryText = t.replace(CONVERSATION_SUMMARY_RE, "")
+			break
+		}
+	}
+
+	const out: UIMessage[] = []
+	for (let i = 0; i < messages.length; i++) {
+		if (i === summaryIdx) continue
+		const m = messages[i]
+		if (m.role === "user") {
+			const t = firstTextContent(m)
+			if (COMPACTION_NOTICE_RE.test(t)) {
+				out.push({
+					id: m.id,
+					role: "system",
+					branches: [],
+					activeBranch: 0,
+					createdAt: m.createdAt,
+					compaction: {
+						text: t.replace(/^\[system\]:\s*/, ""),
+						summary: summaryIdx >= 0 ? summaryText : undefined,
+					},
+				})
+				continue
+			}
+		}
+		out.push(m)
+	}
+	return out
+}
+
+// CompactionDivider renders the runtime's "memory compacted" notice
+// as a centered system row rather than a chat bubble. The summary
+// (when present) sits behind a disclosure toggle so the conversation
+// timeline stays uncluttered for users who don't need to look.
+function CompactionDivider({
+	compaction,
+}: {
+	compaction: { text: string; summary?: string }
+}) {
+	const [open, setOpen] = useState(false)
+	const hasSummary = Boolean(compaction.summary)
+	return (
+		<div className="my-4 select-text">
+			<div className="flex items-center gap-3 text-muted-foreground text-xs">
+				<div className="h-px flex-1 bg-border" />
+				<div className="flex items-center gap-2">
+					<span className="font-medium uppercase tracking-wider">
+						{compaction.text}
+					</span>
+					{hasSummary && (
+						<Button
+							className="h-6 gap-1 px-2 text-xs"
+							onClick={() => setOpen((v) => !v)}
+							size="sm"
+							type="button"
+							variant="outline">
+							{open ? (
+								<ChevronDown className="h-3 w-3" />
+							) : (
+								<ChevronRight className="h-3 w-3" />
+							)}
+							{open ? "Hide summary" : "Show summary"}
+						</Button>
+					)}
+				</div>
+				<div className="h-px flex-1 bg-border" />
+			</div>
+			{open && hasSummary && (
+				<div className="mx-auto mt-3 max-w-[80%] rounded-lg border bg-muted/40 p-3 text-foreground text-sm">
+					<div className="mb-1 font-medium text-muted-foreground text-xs uppercase tracking-wider">
+						Conversation summary
+					</div>
+					<div className="whitespace-pre-wrap break-words">
+						{compaction.summary}
+					</div>
+				</div>
+			)}
+		</div>
+	)
 }
 
 // formatRelative returns a coarse "Xh ago" string suitable for a
@@ -658,7 +783,7 @@ export default function ChatPage() {
 				}
 			})
 		if (persisted.length > 0) {
-			setMessages(persisted)
+			setMessages(applyCompactionMarkers(persisted))
 		}
 	}, [agentName, sessionId, history.data])
 
@@ -1065,6 +1190,14 @@ export default function ChatPage() {
 						</>
 					)}
 					{messages.map((message, msgIdx) => {
+						if (message.role === "system" && message.compaction) {
+							return (
+								<CompactionDivider
+									compaction={message.compaction}
+									key={message.id}
+								/>
+							)
+						}
 						const isLastAssistant =
 							message.role === "assistant" && msgIdx === messages.length - 1
 						const isStreamingThis =
