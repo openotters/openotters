@@ -1177,14 +1177,12 @@ func (d *Daemon) Build(
 		return nil, fmt.Errorf("agentfile %s: %w", abs, err)
 	}
 
-	f, err := os.Open(abs)
+	source, err := os.ReadFile(abs)
 	if err != nil {
-		return nil, fmt.Errorf("opening %s: %w", abs, err)
+		return nil, fmt.Errorf("reading %s: %w", abs, err)
 	}
 
-	af, err := spec.Parse(f)
-	_ = f.Close()
-
+	af, err := spec.Parse(bytes.NewReader(source))
 	if err != nil {
 		return nil, fmt.Errorf("parsing %s: %w", abs, err)
 	}
@@ -1194,7 +1192,7 @@ func (d *Daemon) Build(
 	// against the build context the user invoked us from.
 	src := osfs.New(filepath.Dir(abs))
 
-	return d.buildAgentfile(ctx, af, src, req.GetTags(), zap.String("path", abs))
+	return d.buildAgentfile(ctx, af, source, src, req.GetTags(), zap.String("path", abs))
 }
 
 // BuildFromBytes is the inline variant used by the web UI: the
@@ -1215,7 +1213,7 @@ func (d *Daemon) BuildFromBytes(
 		return nil, fmt.Errorf("parsing inline agentfile: %w", err)
 	}
 
-	return d.buildAgentfile(ctx, af, memfs.New(), tags,
+	return d.buildAgentfile(ctx, af, content, memfs.New(), tags,
 		zap.Int("inline_bytes", len(content)),
 	)
 }
@@ -1230,6 +1228,7 @@ func (d *Daemon) BuildFromBytes(
 func (d *Daemon) buildAgentfile(
 	ctx context.Context,
 	af *spec.Agentfile,
+	source []byte,
 	src billy.Filesystem,
 	tags []string,
 	extraLogField zap.Field,
@@ -1241,7 +1240,7 @@ func (d *Daemon) buildAgentfile(
 
 	store := d.openBuildStore()
 
-	built, err := agentbuild.Build(ctx, resolved, src, store)
+	built, err := agentbuild.Build(ctx, resolved, source, src, store)
 	if err != nil {
 		return nil, fmt.Errorf("building: %w", err)
 	}
