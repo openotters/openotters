@@ -1673,10 +1673,12 @@ func (d *Daemon) hydrateProvenance(ma *managedAgent) {
 		return
 	}
 
-	if rt.Provenance != nil {
-		ma.imageDigest = rt.Provenance.ImageDigest
-		ma.runtimeRef = rt.Provenance.RuntimeRef
-		ma.runtimeDigest = rt.Provenance.RuntimeDigest
+	if rt.Image != nil {
+		ma.imageDigest = rt.Image.Digest
+	}
+	if rt.Runtime != nil {
+		ma.runtimeRef = rt.Runtime.Ref
+		ma.runtimeDigest = rt.Runtime.Digest
 	}
 
 	if len(rt.Tools) > 0 {
