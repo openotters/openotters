@@ -387,6 +387,13 @@ func runtimeCapsForExtras(extras AgentExtras) []agentpkg.Capability {
 		{Name: "context_show", Description: "Show the content of one context file. Takes a name (e.g. SOUL)."},
 		{Name: "env_list", Description: "List declared environment variable keys + descriptions. Values never returned."},
 		{Name: "mount_list", Description: "List bind mounts (target + description + read-only)."},
+		{
+			Name:        "note_save",
+			Description: "Save a durable fact under a key (persists across sessions). Re-using a key overwrites.",
+		},
+		{Name: "note_list", Description: "List stored note keys with one-line previews."},
+		{Name: "note_show", Description: "Show one note's full content by key."},
+		{Name: "note_delete", Description: "Delete a note by key."},
 	}
 	if extras.DaemonURL != "" && extras.AgentToken != "" {
 		caps = append(caps,
