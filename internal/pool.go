@@ -323,6 +323,15 @@ func (p *Pool) createAgent(
 	ctx context.Context, id uuid.UUID, ref spec.Reference,
 	agentOpts []system.AgentOption, extras AgentExtras, overrides []spec.Override,
 ) (agentpkg.Agent, error) {
+	// Higher-level capabilities the runtime + daemon grant to every
+	// agent. These mirror the named features AGENT.md describes
+	// under "Capabilities" (outbound-network, persistent-memory,
+	// persistent-workspace, async-jobs). Surfaced into agent.yaml's
+	// capabilities: block so `otters inspect` and the dashboard can
+	// read what an agent can do from disk without inspecting the
+	// runtime image. A future Agentfile directive will gate these.
+	caps := daemonCallbackCapsForExtras(extras)
+
 	if sp, ok := p.provider.(*system.Provider); ok {
 		opts := agentOpts
 		if extras.DaemonURL != "" {
@@ -330,6 +339,9 @@ func (p *Pool) createAgent(
 		}
 		if extras.AgentToken != "" {
 			opts = append(opts, system.WithAgentToken(extras.AgentToken))
+		}
+		if len(caps) > 0 {
+			opts = append(opts, system.WithCapabilities(caps))
 		}
 		return sp.CreateWithOptions(ctx, id, ref, opts, overrides...)
 	}
@@ -342,10 +354,44 @@ func (p *Pool) createAgent(
 		if extras.AgentToken != "" {
 			dockerOpts = append(dockerOpts, docker.WithAgentToken(extras.AgentToken))
 		}
+		if len(caps) > 0 {
+			dockerOpts = append(dockerOpts, docker.WithCapabilities(caps))
+		}
 		return dp.CreateWithOptions(ctx, id, ref, dockerOpts, overrides...)
 	}
 
 	return p.provider.Create(ctx, id, ref, overrides...)
+}
+
+// daemonCallbackCapsForExtras returns the named runtime-provided
+// capabilities every daemon-spawned agent has. The list mirrors
+// AGENT.md's Capabilities section so the high-level "what this
+// agent can do" answer reads the same in both surfaces:
+//
+//   - outbound-network: full HTTP/HTTPS/TCP egress (no daemon
+//     gating today).
+//   - persistent-memory: chat history survives daemon restarts
+//     (the runtime's SQLite memory store).
+//   - persistent-workspace: workspace/ and var/lib/ on the agent
+//     root survive across runs.
+//   - async-jobs: job_submit / job_status / job_list / job_cancel
+//     / job_wait / job_watch are registered. Conditional —
+//     requires the daemon to have wired both OTTERSD_URL and an
+//     agent token.
+//
+// A future Agentfile CAPABILITY directive will let operators
+// opt-out of each name; today the only gating is the async-jobs
+// daemon-callback requirement.
+func daemonCallbackCapsForExtras(extras AgentExtras) []string {
+	caps := []string{
+		"outbound-network",
+		"persistent-memory",
+		"persistent-workspace",
+	}
+	if extras.DaemonURL != "" && extras.AgentToken != "" {
+		caps = append(caps, "async-jobs")
+	}
+	return caps
 }
 
 func (p *Pool) runNew(
