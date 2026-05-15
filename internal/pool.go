@@ -323,14 +323,11 @@ func (p *Pool) createAgent(
 	ctx context.Context, id uuid.UUID, ref spec.Reference,
 	agentOpts []system.AgentOption, extras AgentExtras, overrides []spec.Override,
 ) (agentpkg.Agent, error) {
-	// Higher-level capabilities the runtime + daemon grant to every
-	// agent. These mirror the named features AGENT.md describes
-	// under "Capabilities" (outbound-network, persistent-memory,
-	// persistent-workspace, async-jobs). Surfaced into agent.yaml's
-	// capabilities: block so `otters inspect` and the dashboard can
-	// read what an agent can do from disk without inspecting the
-	// runtime image. A future Agentfile directive will gate these.
-	caps := daemonCallbackCapsForExtras(extras)
+	// Runtime-registered tool functions (NOT per-BIN tools — those
+	// live in agent.yaml's tools: block). Surfaced as agent.yaml's
+	// capabilities: block + the Capabilities section of AGENT.md
+	// so the LLM can read what each tool does without invoking it.
+	caps := runtimeCapsForExtras(extras)
 
 	if sp, ok := p.provider.(*system.Provider); ok {
 		opts := agentOpts
@@ -363,33 +360,61 @@ func (p *Pool) createAgent(
 	return p.provider.Create(ctx, id, ref, overrides...)
 }
 
-// daemonCallbackCapsForExtras returns the named runtime-provided
-// capabilities every daemon-spawned agent has. The list mirrors
-// AGENT.md's Capabilities section so the high-level "what this
-// agent can do" answer reads the same in both surfaces:
+// runtimeCapsForExtras returns the LLM-facing tool functions the
+// runtime image registers into its tool loop (NOT per-BIN tools —
+// those live in agent.yaml's tools: block). Each entry carries its
+// description so the model can read what the tool does from
+// agent.yaml without invoking it.
 //
-//   - outbound-network: full HTTP/HTTPS/TCP egress (no daemon
-//     gating today).
-//   - persistent-memory: chat history survives daemon restarts
-//     (the runtime's SQLite memory store).
-//   - persistent-workspace: workspace/ and var/lib/ on the agent
-//     root survive across runs.
-//   - async-jobs: job_submit / job_status / job_list / job_cancel
-//     / job_wait / job_watch are registered. Conditional —
-//     requires the daemon to have wired both OTTERSD_URL and an
-//     agent token.
+// Two groups today:
+//
+//   - introspection tools (context_list / context_show / env_list /
+//     mount_list): always present — the runtime can answer these
+//     from agent.yaml alone, no daemon callback required.
+//   - daemon-callback tools (job_*): conditional on the daemon
+//     supplying both OTTERSD_URL and an agent token. The runtime
+//     gates registration on the same env vars.
+//
+// Keep in sync with runtime/pkg/tool: any tool the runtime
+// registers needs an entry here so it shows up in agent.yaml +
+// AGENT.md, and any tool removed there needs to come off too.
 //
 // A future Agentfile CAPABILITY directive will let operators
-// opt-out of each name; today the only gating is the async-jobs
-// daemon-callback requirement.
-func daemonCallbackCapsForExtras(extras AgentExtras) []string {
-	caps := []string{
-		"outbound-network",
-		"persistent-memory",
-		"persistent-workspace",
+// opt-out of individual entries.
+func runtimeCapsForExtras(extras AgentExtras) []agentpkg.Capability {
+	caps := []agentpkg.Capability{
+		{Name: "context_list", Description: "List the context files declared in agent.yaml (name, file, description)."},
+		{Name: "context_show", Description: "Show the content of one context file. Takes a name (e.g. SOUL)."},
+		{Name: "env_list", Description: "List declared environment variable keys + descriptions. Values never returned."},
+		{Name: "mount_list", Description: "List bind mounts (target + description + read-only)."},
 	}
 	if extras.DaemonURL != "" && extras.AgentToken != "" {
-		caps = append(caps, "async-jobs")
+		caps = append(caps,
+			agentpkg.Capability{
+				Name:        "job_submit",
+				Description: "Submit a BIN as an async job and return a job ID.",
+			},
+			agentpkg.Capability{
+				Name:        "job_status",
+				Description: "Get the status, stdout, stderr, and exit code of a job by ID.",
+			},
+			agentpkg.Capability{
+				Name:        "job_list",
+				Description: "List jobs filtered by status / label.",
+			},
+			agentpkg.Capability{
+				Name:        "job_cancel",
+				Description: "Cancel an in-flight job by ID.",
+			},
+			agentpkg.Capability{
+				Name:        "job_wait",
+				Description: "Block until a job reaches a terminal state, then return its result.",
+			},
+			agentpkg.Capability{
+				Name:        "job_watch",
+				Description: "Stream a job's output live until it terminates.",
+			},
+		)
 	}
 	return caps
 }
