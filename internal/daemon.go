@@ -2003,23 +2003,31 @@ func (d *Daemon) nameExists(name string) bool {
 // string on any failure — callers treat the digest as best-effort
 // metadata, not load-bearing for correctness.
 func (d *Daemon) resolveLocalDigest(ctx context.Context, ref string) string {
-	if ref == "" || d.registry == nil {
+	if ref == "" {
 		return ""
 	}
 
-	addr := d.registry.Addr()
-	repo, tag := splitRef(stripLoopbackPrefixes(ref))
+	// System executor: ask the embedded ORAS registry directly.
+	if d.registry != nil {
+		addr := d.registry.Addr()
+		repo, tag := splitRef(stripLoopbackPrefixes(ref))
 
-	if repo == "" || tag == "" {
-		return ""
+		if repo != "" && tag != "" {
+			if info, err := fetchManifestInfo(ctx, addr, repo, tag); err == nil {
+				return info.digest
+			}
+		}
 	}
 
-	info, err := fetchManifestInfo(ctx, addr, repo, tag)
-	if err != nil {
-		return ""
+	// Fallback (docker executor, or registry lookup miss): pull the
+	// digest from daemon.db's image cache. The daemon stamps the row
+	// at every Pull / Save / Push via upsertImagesFromTags, so any
+	// image the daemon ever materialised is here.
+	if img, err := d.state.GetImage(ctx, ref); err == nil && img != nil {
+		return img.Digest
 	}
 
-	return info.digest
+	return ""
 }
 
 func (d *Daemon) resolve(ref string) (*managedAgent, error) {
