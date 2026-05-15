@@ -394,6 +394,14 @@ func runtimeCapsForExtras(extras AgentExtras) []agentpkg.Capability {
 		{Name: "note_list", Description: "List stored note keys with one-line previews."},
 		{Name: "note_show", Description: "Show one note's full content by key."},
 		{Name: "note_delete", Description: "Delete a note by key."},
+		{
+			Name:        "note_pin",
+			Description: "Pin a note into the system prompt (full content rendered on every step until unpinned).",
+		},
+		{
+			Name:        "note_unpin",
+			Description: "Remove a note from the system prompt. The note stays saved; only auto-inclusion is cleared.",
+		},
 	}
 	if extras.DaemonURL != "" && extras.AgentToken != "" {
 		caps = append(caps,
