@@ -100,6 +100,12 @@ tasks:
       SOCKET:    '{{.SOCKET    | default "/tmp/otters-dev.sock"}}'
       DB:        '{{.DB        | default "/tmp/otters-dev.db"}}'
       REGISTRY:  '{{.REGISTRY  | default "127.0.0.1:5051"}}'
+      # NO_UI defaults to "true" — the canonical dev flow pairs with
+      # `task ui:dev` (hot-reload Next.js on :3000). Set NO_UI=false
+      # to serve the embedded UI directly off the dev daemon's HTTP
+      # listener instead (useful when something else owns :3000 or
+      # you don't want hot reload).
+      NO_UI:     '{{.NO_UI     | default "true"}}'
     cmds:
       - rm -f {{.SOCKET}}
       - >-
@@ -108,7 +114,7 @@ tasks:
         --socket-path {{.SOCKET}}
         --sqlite-path {{.DB}}
         --registry-addr {{.REGISTRY}}
-        --no-ui
+        {{if eq .NO_UI "true"}}--no-ui{{end}}
         {{.CLI_ARGS}}
 
   client:dev:
