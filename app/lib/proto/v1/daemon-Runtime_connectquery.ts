@@ -160,3 +160,34 @@ export const getAsyncJob = Runtime.method.getAsyncJob;
  * @generated from rpc openotters.daemon.v1.Runtime.ListAsyncJobs
  */
 export const listAsyncJobs = Runtime.method.listAsyncJobs;
+
+/**
+ * ── notes (per-agent KV store) ───────────────────────────────────
+ * Operator-facing CRUD for an agent's notes (durable facts the
+ * model wrote via the note_* tools). Each RPC proxies to the per-
+ * agent runtime's gRPC NotesService and surfaces NotFound /
+ * FailedPrecondition cleanly to the UI.
+ *
+ * @generated from rpc openotters.daemon.v1.Runtime.ListAgentNotes
+ */
+export const listAgentNotes = Runtime.method.listAgentNotes;
+
+/**
+ * @generated from rpc openotters.daemon.v1.Runtime.GetAgentNote
+ */
+export const getAgentNote = Runtime.method.getAgentNote;
+
+/**
+ * @generated from rpc openotters.daemon.v1.Runtime.SaveAgentNote
+ */
+export const saveAgentNote = Runtime.method.saveAgentNote;
+
+/**
+ * @generated from rpc openotters.daemon.v1.Runtime.DeleteAgentNote
+ */
+export const deleteAgentNote = Runtime.method.deleteAgentNote;
+
+/**
+ * @generated from rpc openotters.daemon.v1.Runtime.SetAgentNoteInContext
+ */
+export const setAgentNoteInContext = Runtime.method.setAgentNoteInContext;

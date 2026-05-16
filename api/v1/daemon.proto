@@ -65,6 +65,17 @@ service Runtime {
   rpc CancelAsyncJob(CancelAsyncJobRequest) returns (CancelAsyncJobResponse);
   rpc GetAsyncJob(GetAsyncJobRequest)       returns (GetAsyncJobResponse);
   rpc ListAsyncJobs(ListAsyncJobsRequest)   returns (ListAsyncJobsResponse);
+
+  // ── notes (per-agent KV store) ───────────────────────────────────
+  // Operator-facing CRUD for an agent's notes (durable facts the
+  // model wrote via the note_* tools). Each RPC proxies to the per-
+  // agent runtime's gRPC NotesService and surfaces NotFound /
+  // FailedPrecondition cleanly to the UI.
+  rpc ListAgentNotes(ListAgentNotesRequest) returns (ListAgentNotesResponse);
+  rpc GetAgentNote(GetAgentNoteRequest)     returns (GetAgentNoteResponse);
+  rpc SaveAgentNote(SaveAgentNoteRequest)   returns (SaveAgentNoteResponse);
+  rpc DeleteAgentNote(DeleteAgentNoteRequest) returns (DeleteAgentNoteResponse);
+  rpc SetAgentNoteInContext(SetAgentNoteInContextRequest) returns (SetAgentNoteInContextResponse);
   // Server-streaming watch: emits the current AsyncJob immediately,
   // then again on every material change (status, handle, exit_code,
   // stdout, stderr, error, started_at, finished_at), then closes the
@@ -597,4 +608,67 @@ message AsyncJob {
   int64   started_at   = 14;
   int64   finished_at  = 15;
   map<string, string> labels = 16;
+}
+
+// ── notes ──────────────────────────────────────────────────────────
+// Mirrors the runtime's NotesAPI; the daemon proxies each RPC to the
+// per-agent runtime gRPC. `ref` accepts either an agent UUID or a
+// human-readable name (same resolver as ChatWithAgent).
+
+message AgentNote {
+  string key        = 1;
+  string content    = 2;  // empty in list responses; full body in Get / Save
+  string preview    = 3;
+  bool   in_context = 4;
+  int64  created_at = 5;  // unix seconds
+  int64  updated_at = 6;
+}
+
+message ListAgentNotesRequest {
+  string ref             = 1;
+  bool   only_in_context = 2;
+}
+message ListAgentNotesResponse {
+  repeated AgentNote notes = 1;
+}
+
+message GetAgentNoteRequest {
+  string ref = 1;
+  string key = 2;
+}
+message GetAgentNoteResponse {
+  AgentNote note = 1;
+}
+
+message SaveAgentNoteRequest {
+  string ref     = 1;
+  string key     = 2;
+  string content = 3;
+  // 0 → use the agent.yaml-configured caps server-side. Non-zero
+  // overrides for this single call.
+  int32  max_bytes = 4;
+  int32  max_count = 5;
+}
+message SaveAgentNoteResponse {
+  AgentNote note     = 1;
+  bool      overwrote = 2;
+}
+
+message DeleteAgentNoteRequest {
+  string ref = 1;
+  string key = 2;
+}
+message DeleteAgentNoteResponse {
+  // True when the key existed before delete; false on no-op. Both
+  // forms still return a success response — Delete is idempotent.
+  bool deleted = 1;
+}
+
+message SetAgentNoteInContextRequest {
+  string ref        = 1;
+  string key        = 2;
+  bool   in_context = 3;
+}
+message SetAgentNoteInContextResponse {
+  AgentNote note = 1;
 }

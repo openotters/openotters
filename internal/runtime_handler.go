@@ -517,3 +517,100 @@ func mapProviderError(err error) error {
 		return err
 	}
 }
+
+// Notes — operator-facing CRUD for an agent's notes. Each handler
+// resolves the ref, casts the running agent to executor.NotesAPI,
+// and proxies the call through to the per-agent runtime.
+
+func (h *runtimeHandler) ListAgentNotes(
+	ctx context.Context, req *connect.Request[daemonv1.ListAgentNotesRequest],
+) (*connect.Response[daemonv1.ListAgentNotesResponse], error) {
+	all, err := h.daemon.ListAgentNotes(ctx, req.Msg.GetRef(), req.Msg.GetOnlyInContext())
+	if err != nil {
+		return nil, mapNotesError(err)
+	}
+	out := make([]*daemonv1.AgentNote, 0, len(all))
+	for _, n := range all {
+		out = append(out, noteToProto(n))
+	}
+	return connect.NewResponse(&daemonv1.ListAgentNotesResponse{Notes: out}), nil
+}
+
+func (h *runtimeHandler) GetAgentNote(
+	ctx context.Context, req *connect.Request[daemonv1.GetAgentNoteRequest],
+) (*connect.Response[daemonv1.GetAgentNoteResponse], error) {
+	n, err := h.daemon.GetAgentNote(ctx, req.Msg.GetRef(), req.Msg.GetKey())
+	if err != nil {
+		return nil, mapNotesError(err)
+	}
+	return connect.NewResponse(&daemonv1.GetAgentNoteResponse{Note: noteToProto(n)}), nil
+}
+
+func (h *runtimeHandler) SaveAgentNote(
+	ctx context.Context, req *connect.Request[daemonv1.SaveAgentNoteRequest],
+) (*connect.Response[daemonv1.SaveAgentNoteResponse], error) {
+	res, err := h.daemon.SaveAgentNote(
+		ctx, req.Msg.GetRef(), req.Msg.GetKey(), req.Msg.GetContent(),
+		req.Msg.GetMaxBytes(), req.Msg.GetMaxCount(),
+	)
+	if err != nil {
+		return nil, mapNotesError(err)
+	}
+	return connect.NewResponse(&daemonv1.SaveAgentNoteResponse{
+		Note:      noteToProto(res.Note),
+		Overwrote: res.Overwrote,
+	}), nil
+}
+
+func (h *runtimeHandler) DeleteAgentNote(
+	ctx context.Context, req *connect.Request[daemonv1.DeleteAgentNoteRequest],
+) (*connect.Response[daemonv1.DeleteAgentNoteResponse], error) {
+	existed, err := h.daemon.DeleteAgentNote(ctx, req.Msg.GetRef(), req.Msg.GetKey())
+	if err != nil {
+		return nil, mapNotesError(err)
+	}
+	return connect.NewResponse(&daemonv1.DeleteAgentNoteResponse{Deleted: existed}), nil
+}
+
+func (h *runtimeHandler) SetAgentNoteInContext(
+	ctx context.Context, req *connect.Request[daemonv1.SetAgentNoteInContextRequest],
+) (*connect.Response[daemonv1.SetAgentNoteInContextResponse], error) {
+	n, err := h.daemon.SetAgentNoteInContext(
+		ctx, req.Msg.GetRef(), req.Msg.GetKey(), req.Msg.GetInContext(),
+	)
+	if err != nil {
+		return nil, mapNotesError(err)
+	}
+	return connect.NewResponse(&daemonv1.SetAgentNoteInContextResponse{Note: noteToProto(n)}), nil
+}
+
+// noteToProto converts an executor.Note into the wire shape. Unix
+// timestamps so the TS side can keep notes as plain objects without
+// pulling a Timestamp dep.
+func noteToProto(n agentpkg.Note) *daemonv1.AgentNote {
+	pn := &daemonv1.AgentNote{
+		Key:       n.Key,
+		Content:   n.Content,
+		Preview:   n.Preview,
+		InContext: n.InContext,
+	}
+	if !n.CreatedAt.IsZero() {
+		pn.CreatedAt = n.CreatedAt.Unix()
+	}
+	if !n.UpdatedAt.IsZero() {
+		pn.UpdatedAt = n.UpdatedAt.Unix()
+	}
+	return pn
+}
+
+// mapNotesError translates executor sentinels into Connect codes so
+// the UI can render meaningful errors without string-matching.
+func mapNotesError(err error) error {
+	if err == nil {
+		return nil
+	}
+	if errors.Is(err, agentpkg.ErrNoteNotFound) {
+		return connect.NewError(connect.CodeNotFound, err)
+	}
+	return err
+}

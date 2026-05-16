@@ -1988,6 +1988,72 @@ func (d *Daemon) ChatStreamWithAgent(
 	}, cb)
 }
 
+// notesAPI resolves ref to a running agent and casts it to the
+// executor's NotesAPI capability-interface. The error messages
+// embed the agent name so the operator UI can show a useful
+// "agent X does not support notes" instead of a generic 404.
+func (d *Daemon) notesAPI(ref string) (agentpkg.NotesAPI, error) {
+	ma, err := d.resolve(ref)
+	if err != nil {
+		return nil, err
+	}
+	a, ok := d.pool.Get(ma.id)
+	if !ok || a == nil {
+		return nil, fmt.Errorf("agent %q is not running", ma.name)
+	}
+	napi, ok := a.(agentpkg.NotesAPI)
+	if !ok {
+		return nil, fmt.Errorf("agent %q does not support notes", ma.name)
+	}
+	return napi, nil
+}
+
+func (d *Daemon) ListAgentNotes(
+	ctx context.Context, ref string, onlyInContext bool,
+) ([]agentpkg.Note, error) {
+	napi, err := d.notesAPI(ref)
+	if err != nil {
+		return nil, err
+	}
+	return napi.ListNotes(ctx, onlyInContext)
+}
+
+func (d *Daemon) GetAgentNote(ctx context.Context, ref, key string) (agentpkg.Note, error) {
+	napi, err := d.notesAPI(ref)
+	if err != nil {
+		return agentpkg.Note{}, err
+	}
+	return napi.GetNote(ctx, key)
+}
+
+func (d *Daemon) SaveAgentNote(
+	ctx context.Context, ref, key, content string, maxBytes, maxCount int32,
+) (agentpkg.SaveResult, error) {
+	napi, err := d.notesAPI(ref)
+	if err != nil {
+		return agentpkg.SaveResult{}, err
+	}
+	return napi.SaveNote(ctx, key, content, maxBytes, maxCount)
+}
+
+func (d *Daemon) DeleteAgentNote(ctx context.Context, ref, key string) (bool, error) {
+	napi, err := d.notesAPI(ref)
+	if err != nil {
+		return false, err
+	}
+	return napi.DeleteNote(ctx, key)
+}
+
+func (d *Daemon) SetAgentNoteInContext(
+	ctx context.Context, ref, key string, inContext bool,
+) (agentpkg.Note, error) {
+	napi, err := d.notesAPI(ref)
+	if err != nil {
+		return agentpkg.Note{}, err
+	}
+	return napi.SetNoteInContext(ctx, key, inContext)
+}
+
 func (d *Daemon) nameExists(name string) bool {
 	for _, ma := range d.agents {
 		if ma.name == name {

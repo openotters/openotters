@@ -19,38 +19,43 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	Runtime_GetInfo_FullMethodName             = "/openotters.daemon.v1.Runtime/GetInfo"
-	Runtime_BuildAgent_FullMethodName          = "/openotters.daemon.v1.Runtime/BuildAgent"
-	Runtime_BuildToolImage_FullMethodName      = "/openotters.daemon.v1.Runtime/BuildToolImage"
-	Runtime_SaveAgentImage_FullMethodName      = "/openotters.daemon.v1.Runtime/SaveAgentImage"
-	Runtime_PullAgentImage_FullMethodName      = "/openotters.daemon.v1.Runtime/PullAgentImage"
-	Runtime_PushAgentImage_FullMethodName      = "/openotters.daemon.v1.Runtime/PushAgentImage"
-	Runtime_ListImages_FullMethodName          = "/openotters.daemon.v1.Runtime/ListImages"
-	Runtime_RefreshImage_FullMethodName        = "/openotters.daemon.v1.Runtime/RefreshImage"
-	Runtime_RemoveImage_FullMethodName         = "/openotters.daemon.v1.Runtime/RemoveImage"
-	Runtime_DescribeImage_FullMethodName       = "/openotters.daemon.v1.Runtime/DescribeImage"
-	Runtime_CreateAgent_FullMethodName         = "/openotters.daemon.v1.Runtime/CreateAgent"
-	Runtime_ListAgents_FullMethodName          = "/openotters.daemon.v1.Runtime/ListAgents"
-	Runtime_StartAgent_FullMethodName          = "/openotters.daemon.v1.Runtime/StartAgent"
-	Runtime_StopAgent_FullMethodName           = "/openotters.daemon.v1.Runtime/StopAgent"
-	Runtime_RemoveAgent_FullMethodName         = "/openotters.daemon.v1.Runtime/RemoveAgent"
-	Runtime_ChatWithAgent_FullMethodName       = "/openotters.daemon.v1.Runtime/ChatWithAgent"
-	Runtime_PromptObject_FullMethodName        = "/openotters.daemon.v1.Runtime/PromptObject"
-	Runtime_ChatStreamWithAgent_FullMethodName = "/openotters.daemon.v1.Runtime/ChatStreamWithAgent"
-	Runtime_ListSessionMessages_FullMethodName = "/openotters.daemon.v1.Runtime/ListSessionMessages"
-	Runtime_ListSessions_FullMethodName        = "/openotters.daemon.v1.Runtime/ListSessions"
-	Runtime_DeleteSession_FullMethodName       = "/openotters.daemon.v1.Runtime/DeleteSession"
-	Runtime_GetAgentLogs_FullMethodName        = "/openotters.daemon.v1.Runtime/GetAgentLogs"
-	Runtime_ListModels_FullMethodName          = "/openotters.daemon.v1.Runtime/ListModels"
-	Runtime_ListProviders_FullMethodName       = "/openotters.daemon.v1.Runtime/ListProviders"
-	Runtime_AddProvider_FullMethodName         = "/openotters.daemon.v1.Runtime/AddProvider"
-	Runtime_UpdateProvider_FullMethodName      = "/openotters.daemon.v1.Runtime/UpdateProvider"
-	Runtime_RemoveProvider_FullMethodName      = "/openotters.daemon.v1.Runtime/RemoveProvider"
-	Runtime_SubmitAsyncJob_FullMethodName      = "/openotters.daemon.v1.Runtime/SubmitAsyncJob"
-	Runtime_CancelAsyncJob_FullMethodName      = "/openotters.daemon.v1.Runtime/CancelAsyncJob"
-	Runtime_GetAsyncJob_FullMethodName         = "/openotters.daemon.v1.Runtime/GetAsyncJob"
-	Runtime_ListAsyncJobs_FullMethodName       = "/openotters.daemon.v1.Runtime/ListAsyncJobs"
-	Runtime_WatchAsyncJob_FullMethodName       = "/openotters.daemon.v1.Runtime/WatchAsyncJob"
+	Runtime_GetInfo_FullMethodName               = "/openotters.daemon.v1.Runtime/GetInfo"
+	Runtime_BuildAgent_FullMethodName            = "/openotters.daemon.v1.Runtime/BuildAgent"
+	Runtime_BuildToolImage_FullMethodName        = "/openotters.daemon.v1.Runtime/BuildToolImage"
+	Runtime_SaveAgentImage_FullMethodName        = "/openotters.daemon.v1.Runtime/SaveAgentImage"
+	Runtime_PullAgentImage_FullMethodName        = "/openotters.daemon.v1.Runtime/PullAgentImage"
+	Runtime_PushAgentImage_FullMethodName        = "/openotters.daemon.v1.Runtime/PushAgentImage"
+	Runtime_ListImages_FullMethodName            = "/openotters.daemon.v1.Runtime/ListImages"
+	Runtime_RefreshImage_FullMethodName          = "/openotters.daemon.v1.Runtime/RefreshImage"
+	Runtime_RemoveImage_FullMethodName           = "/openotters.daemon.v1.Runtime/RemoveImage"
+	Runtime_DescribeImage_FullMethodName         = "/openotters.daemon.v1.Runtime/DescribeImage"
+	Runtime_CreateAgent_FullMethodName           = "/openotters.daemon.v1.Runtime/CreateAgent"
+	Runtime_ListAgents_FullMethodName            = "/openotters.daemon.v1.Runtime/ListAgents"
+	Runtime_StartAgent_FullMethodName            = "/openotters.daemon.v1.Runtime/StartAgent"
+	Runtime_StopAgent_FullMethodName             = "/openotters.daemon.v1.Runtime/StopAgent"
+	Runtime_RemoveAgent_FullMethodName           = "/openotters.daemon.v1.Runtime/RemoveAgent"
+	Runtime_ChatWithAgent_FullMethodName         = "/openotters.daemon.v1.Runtime/ChatWithAgent"
+	Runtime_PromptObject_FullMethodName          = "/openotters.daemon.v1.Runtime/PromptObject"
+	Runtime_ChatStreamWithAgent_FullMethodName   = "/openotters.daemon.v1.Runtime/ChatStreamWithAgent"
+	Runtime_ListSessionMessages_FullMethodName   = "/openotters.daemon.v1.Runtime/ListSessionMessages"
+	Runtime_ListSessions_FullMethodName          = "/openotters.daemon.v1.Runtime/ListSessions"
+	Runtime_DeleteSession_FullMethodName         = "/openotters.daemon.v1.Runtime/DeleteSession"
+	Runtime_GetAgentLogs_FullMethodName          = "/openotters.daemon.v1.Runtime/GetAgentLogs"
+	Runtime_ListModels_FullMethodName            = "/openotters.daemon.v1.Runtime/ListModels"
+	Runtime_ListProviders_FullMethodName         = "/openotters.daemon.v1.Runtime/ListProviders"
+	Runtime_AddProvider_FullMethodName           = "/openotters.daemon.v1.Runtime/AddProvider"
+	Runtime_UpdateProvider_FullMethodName        = "/openotters.daemon.v1.Runtime/UpdateProvider"
+	Runtime_RemoveProvider_FullMethodName        = "/openotters.daemon.v1.Runtime/RemoveProvider"
+	Runtime_SubmitAsyncJob_FullMethodName        = "/openotters.daemon.v1.Runtime/SubmitAsyncJob"
+	Runtime_CancelAsyncJob_FullMethodName        = "/openotters.daemon.v1.Runtime/CancelAsyncJob"
+	Runtime_GetAsyncJob_FullMethodName           = "/openotters.daemon.v1.Runtime/GetAsyncJob"
+	Runtime_ListAsyncJobs_FullMethodName         = "/openotters.daemon.v1.Runtime/ListAsyncJobs"
+	Runtime_ListAgentNotes_FullMethodName        = "/openotters.daemon.v1.Runtime/ListAgentNotes"
+	Runtime_GetAgentNote_FullMethodName          = "/openotters.daemon.v1.Runtime/GetAgentNote"
+	Runtime_SaveAgentNote_FullMethodName         = "/openotters.daemon.v1.Runtime/SaveAgentNote"
+	Runtime_DeleteAgentNote_FullMethodName       = "/openotters.daemon.v1.Runtime/DeleteAgentNote"
+	Runtime_SetAgentNoteInContext_FullMethodName = "/openotters.daemon.v1.Runtime/SetAgentNoteInContext"
+	Runtime_WatchAsyncJob_FullMethodName         = "/openotters.daemon.v1.Runtime/WatchAsyncJob"
 )
 
 // RuntimeClient is the client API for Runtime service.
@@ -94,6 +99,16 @@ type RuntimeClient interface {
 	CancelAsyncJob(ctx context.Context, in *CancelAsyncJobRequest, opts ...grpc.CallOption) (*CancelAsyncJobResponse, error)
 	GetAsyncJob(ctx context.Context, in *GetAsyncJobRequest, opts ...grpc.CallOption) (*GetAsyncJobResponse, error)
 	ListAsyncJobs(ctx context.Context, in *ListAsyncJobsRequest, opts ...grpc.CallOption) (*ListAsyncJobsResponse, error)
+	// ── notes (per-agent KV store) ───────────────────────────────────
+	// Operator-facing CRUD for an agent's notes (durable facts the
+	// model wrote via the note_* tools). Each RPC proxies to the per-
+	// agent runtime's gRPC NotesService and surfaces NotFound /
+	// FailedPrecondition cleanly to the UI.
+	ListAgentNotes(ctx context.Context, in *ListAgentNotesRequest, opts ...grpc.CallOption) (*ListAgentNotesResponse, error)
+	GetAgentNote(ctx context.Context, in *GetAgentNoteRequest, opts ...grpc.CallOption) (*GetAgentNoteResponse, error)
+	SaveAgentNote(ctx context.Context, in *SaveAgentNoteRequest, opts ...grpc.CallOption) (*SaveAgentNoteResponse, error)
+	DeleteAgentNote(ctx context.Context, in *DeleteAgentNoteRequest, opts ...grpc.CallOption) (*DeleteAgentNoteResponse, error)
+	SetAgentNoteInContext(ctx context.Context, in *SetAgentNoteInContextRequest, opts ...grpc.CallOption) (*SetAgentNoteInContextResponse, error)
 	// Server-streaming watch: emits the current AsyncJob immediately,
 	// then again on every material change (status, handle, exit_code,
 	// stdout, stderr, error, started_at, finished_at), then closes the
@@ -431,6 +446,56 @@ func (c *runtimeClient) ListAsyncJobs(ctx context.Context, in *ListAsyncJobsRequ
 	return out, nil
 }
 
+func (c *runtimeClient) ListAgentNotes(ctx context.Context, in *ListAgentNotesRequest, opts ...grpc.CallOption) (*ListAgentNotesResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListAgentNotesResponse)
+	err := c.cc.Invoke(ctx, Runtime_ListAgentNotes_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *runtimeClient) GetAgentNote(ctx context.Context, in *GetAgentNoteRequest, opts ...grpc.CallOption) (*GetAgentNoteResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetAgentNoteResponse)
+	err := c.cc.Invoke(ctx, Runtime_GetAgentNote_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *runtimeClient) SaveAgentNote(ctx context.Context, in *SaveAgentNoteRequest, opts ...grpc.CallOption) (*SaveAgentNoteResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SaveAgentNoteResponse)
+	err := c.cc.Invoke(ctx, Runtime_SaveAgentNote_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *runtimeClient) DeleteAgentNote(ctx context.Context, in *DeleteAgentNoteRequest, opts ...grpc.CallOption) (*DeleteAgentNoteResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(DeleteAgentNoteResponse)
+	err := c.cc.Invoke(ctx, Runtime_DeleteAgentNote_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *runtimeClient) SetAgentNoteInContext(ctx context.Context, in *SetAgentNoteInContextRequest, opts ...grpc.CallOption) (*SetAgentNoteInContextResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SetAgentNoteInContextResponse)
+	err := c.cc.Invoke(ctx, Runtime_SetAgentNoteInContext_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *runtimeClient) WatchAsyncJob(ctx context.Context, in *WatchAsyncJobRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[WatchAsyncJobResponse], error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	stream, err := c.cc.NewStream(ctx, &Runtime_ServiceDesc.Streams[1], Runtime_WatchAsyncJob_FullMethodName, cOpts...)
@@ -491,6 +556,16 @@ type RuntimeServer interface {
 	CancelAsyncJob(context.Context, *CancelAsyncJobRequest) (*CancelAsyncJobResponse, error)
 	GetAsyncJob(context.Context, *GetAsyncJobRequest) (*GetAsyncJobResponse, error)
 	ListAsyncJobs(context.Context, *ListAsyncJobsRequest) (*ListAsyncJobsResponse, error)
+	// ── notes (per-agent KV store) ───────────────────────────────────
+	// Operator-facing CRUD for an agent's notes (durable facts the
+	// model wrote via the note_* tools). Each RPC proxies to the per-
+	// agent runtime's gRPC NotesService and surfaces NotFound /
+	// FailedPrecondition cleanly to the UI.
+	ListAgentNotes(context.Context, *ListAgentNotesRequest) (*ListAgentNotesResponse, error)
+	GetAgentNote(context.Context, *GetAgentNoteRequest) (*GetAgentNoteResponse, error)
+	SaveAgentNote(context.Context, *SaveAgentNoteRequest) (*SaveAgentNoteResponse, error)
+	DeleteAgentNote(context.Context, *DeleteAgentNoteRequest) (*DeleteAgentNoteResponse, error)
+	SetAgentNoteInContext(context.Context, *SetAgentNoteInContextRequest) (*SetAgentNoteInContextResponse, error)
 	// Server-streaming watch: emits the current AsyncJob immediately,
 	// then again on every material change (status, handle, exit_code,
 	// stdout, stderr, error, started_at, finished_at), then closes the
@@ -601,6 +676,21 @@ func (UnimplementedRuntimeServer) GetAsyncJob(context.Context, *GetAsyncJobReque
 }
 func (UnimplementedRuntimeServer) ListAsyncJobs(context.Context, *ListAsyncJobsRequest) (*ListAsyncJobsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListAsyncJobs not implemented")
+}
+func (UnimplementedRuntimeServer) ListAgentNotes(context.Context, *ListAgentNotesRequest) (*ListAgentNotesResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListAgentNotes not implemented")
+}
+func (UnimplementedRuntimeServer) GetAgentNote(context.Context, *GetAgentNoteRequest) (*GetAgentNoteResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetAgentNote not implemented")
+}
+func (UnimplementedRuntimeServer) SaveAgentNote(context.Context, *SaveAgentNoteRequest) (*SaveAgentNoteResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method SaveAgentNote not implemented")
+}
+func (UnimplementedRuntimeServer) DeleteAgentNote(context.Context, *DeleteAgentNoteRequest) (*DeleteAgentNoteResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method DeleteAgentNote not implemented")
+}
+func (UnimplementedRuntimeServer) SetAgentNoteInContext(context.Context, *SetAgentNoteInContextRequest) (*SetAgentNoteInContextResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method SetAgentNoteInContext not implemented")
 }
 func (UnimplementedRuntimeServer) WatchAsyncJob(*WatchAsyncJobRequest, grpc.ServerStreamingServer[WatchAsyncJobResponse]) error {
 	return status.Error(codes.Unimplemented, "method WatchAsyncJob not implemented")
@@ -1177,6 +1267,96 @@ func _Runtime_ListAsyncJobs_Handler(srv interface{}, ctx context.Context, dec fu
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Runtime_ListAgentNotes_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListAgentNotesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(RuntimeServer).ListAgentNotes(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Runtime_ListAgentNotes_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(RuntimeServer).ListAgentNotes(ctx, req.(*ListAgentNotesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Runtime_GetAgentNote_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetAgentNoteRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(RuntimeServer).GetAgentNote(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Runtime_GetAgentNote_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(RuntimeServer).GetAgentNote(ctx, req.(*GetAgentNoteRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Runtime_SaveAgentNote_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SaveAgentNoteRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(RuntimeServer).SaveAgentNote(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Runtime_SaveAgentNote_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(RuntimeServer).SaveAgentNote(ctx, req.(*SaveAgentNoteRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Runtime_DeleteAgentNote_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DeleteAgentNoteRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(RuntimeServer).DeleteAgentNote(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Runtime_DeleteAgentNote_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(RuntimeServer).DeleteAgentNote(ctx, req.(*DeleteAgentNoteRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Runtime_SetAgentNoteInContext_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SetAgentNoteInContextRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(RuntimeServer).SetAgentNoteInContext(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Runtime_SetAgentNoteInContext_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(RuntimeServer).SetAgentNoteInContext(ctx, req.(*SetAgentNoteInContextRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _Runtime_WatchAsyncJob_Handler(srv interface{}, stream grpc.ServerStream) error {
 	m := new(WatchAsyncJobRequest)
 	if err := stream.RecvMsg(m); err != nil {
@@ -1314,6 +1494,26 @@ var Runtime_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ListAsyncJobs",
 			Handler:    _Runtime_ListAsyncJobs_Handler,
+		},
+		{
+			MethodName: "ListAgentNotes",
+			Handler:    _Runtime_ListAgentNotes_Handler,
+		},
+		{
+			MethodName: "GetAgentNote",
+			Handler:    _Runtime_GetAgentNote_Handler,
+		},
+		{
+			MethodName: "SaveAgentNote",
+			Handler:    _Runtime_SaveAgentNote_Handler,
+		},
+		{
+			MethodName: "DeleteAgentNote",
+			Handler:    _Runtime_DeleteAgentNote_Handler,
+		},
+		{
+			MethodName: "SetAgentNoteInContext",
+			Handler:    _Runtime_SetAgentNoteInContext_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

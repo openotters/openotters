@@ -97,6 +97,17 @@ const (
 	RuntimeGetAsyncJobProcedure = "/openotters.daemon.v1.Runtime/GetAsyncJob"
 	// RuntimeListAsyncJobsProcedure is the fully-qualified name of the Runtime's ListAsyncJobs RPC.
 	RuntimeListAsyncJobsProcedure = "/openotters.daemon.v1.Runtime/ListAsyncJobs"
+	// RuntimeListAgentNotesProcedure is the fully-qualified name of the Runtime's ListAgentNotes RPC.
+	RuntimeListAgentNotesProcedure = "/openotters.daemon.v1.Runtime/ListAgentNotes"
+	// RuntimeGetAgentNoteProcedure is the fully-qualified name of the Runtime's GetAgentNote RPC.
+	RuntimeGetAgentNoteProcedure = "/openotters.daemon.v1.Runtime/GetAgentNote"
+	// RuntimeSaveAgentNoteProcedure is the fully-qualified name of the Runtime's SaveAgentNote RPC.
+	RuntimeSaveAgentNoteProcedure = "/openotters.daemon.v1.Runtime/SaveAgentNote"
+	// RuntimeDeleteAgentNoteProcedure is the fully-qualified name of the Runtime's DeleteAgentNote RPC.
+	RuntimeDeleteAgentNoteProcedure = "/openotters.daemon.v1.Runtime/DeleteAgentNote"
+	// RuntimeSetAgentNoteInContextProcedure is the fully-qualified name of the Runtime's
+	// SetAgentNoteInContext RPC.
+	RuntimeSetAgentNoteInContextProcedure = "/openotters.daemon.v1.Runtime/SetAgentNoteInContext"
 	// RuntimeWatchAsyncJobProcedure is the fully-qualified name of the Runtime's WatchAsyncJob RPC.
 	RuntimeWatchAsyncJobProcedure = "/openotters.daemon.v1.Runtime/WatchAsyncJob"
 )
@@ -140,6 +151,16 @@ type RuntimeClient interface {
 	CancelAsyncJob(context.Context, *connect.Request[v1.CancelAsyncJobRequest]) (*connect.Response[v1.CancelAsyncJobResponse], error)
 	GetAsyncJob(context.Context, *connect.Request[v1.GetAsyncJobRequest]) (*connect.Response[v1.GetAsyncJobResponse], error)
 	ListAsyncJobs(context.Context, *connect.Request[v1.ListAsyncJobsRequest]) (*connect.Response[v1.ListAsyncJobsResponse], error)
+	// ── notes (per-agent KV store) ───────────────────────────────────
+	// Operator-facing CRUD for an agent's notes (durable facts the
+	// model wrote via the note_* tools). Each RPC proxies to the per-
+	// agent runtime's gRPC NotesService and surfaces NotFound /
+	// FailedPrecondition cleanly to the UI.
+	ListAgentNotes(context.Context, *connect.Request[v1.ListAgentNotesRequest]) (*connect.Response[v1.ListAgentNotesResponse], error)
+	GetAgentNote(context.Context, *connect.Request[v1.GetAgentNoteRequest]) (*connect.Response[v1.GetAgentNoteResponse], error)
+	SaveAgentNote(context.Context, *connect.Request[v1.SaveAgentNoteRequest]) (*connect.Response[v1.SaveAgentNoteResponse], error)
+	DeleteAgentNote(context.Context, *connect.Request[v1.DeleteAgentNoteRequest]) (*connect.Response[v1.DeleteAgentNoteResponse], error)
+	SetAgentNoteInContext(context.Context, *connect.Request[v1.SetAgentNoteInContextRequest]) (*connect.Response[v1.SetAgentNoteInContextResponse], error)
 	// Server-streaming watch: emits the current AsyncJob immediately,
 	// then again on every material change (status, handle, exit_code,
 	// stdout, stderr, error, started_at, finished_at), then closes the
@@ -347,6 +368,36 @@ func NewRuntimeClient(httpClient connect.HTTPClient, baseURL string, opts ...con
 			connect.WithSchema(runtimeMethods.ByName("ListAsyncJobs")),
 			connect.WithClientOptions(opts...),
 		),
+		listAgentNotes: connect.NewClient[v1.ListAgentNotesRequest, v1.ListAgentNotesResponse](
+			httpClient,
+			baseURL+RuntimeListAgentNotesProcedure,
+			connect.WithSchema(runtimeMethods.ByName("ListAgentNotes")),
+			connect.WithClientOptions(opts...),
+		),
+		getAgentNote: connect.NewClient[v1.GetAgentNoteRequest, v1.GetAgentNoteResponse](
+			httpClient,
+			baseURL+RuntimeGetAgentNoteProcedure,
+			connect.WithSchema(runtimeMethods.ByName("GetAgentNote")),
+			connect.WithClientOptions(opts...),
+		),
+		saveAgentNote: connect.NewClient[v1.SaveAgentNoteRequest, v1.SaveAgentNoteResponse](
+			httpClient,
+			baseURL+RuntimeSaveAgentNoteProcedure,
+			connect.WithSchema(runtimeMethods.ByName("SaveAgentNote")),
+			connect.WithClientOptions(opts...),
+		),
+		deleteAgentNote: connect.NewClient[v1.DeleteAgentNoteRequest, v1.DeleteAgentNoteResponse](
+			httpClient,
+			baseURL+RuntimeDeleteAgentNoteProcedure,
+			connect.WithSchema(runtimeMethods.ByName("DeleteAgentNote")),
+			connect.WithClientOptions(opts...),
+		),
+		setAgentNoteInContext: connect.NewClient[v1.SetAgentNoteInContextRequest, v1.SetAgentNoteInContextResponse](
+			httpClient,
+			baseURL+RuntimeSetAgentNoteInContextProcedure,
+			connect.WithSchema(runtimeMethods.ByName("SetAgentNoteInContext")),
+			connect.WithClientOptions(opts...),
+		),
 		watchAsyncJob: connect.NewClient[v1.WatchAsyncJobRequest, v1.WatchAsyncJobResponse](
 			httpClient,
 			baseURL+RuntimeWatchAsyncJobProcedure,
@@ -358,38 +409,43 @@ func NewRuntimeClient(httpClient connect.HTTPClient, baseURL string, opts ...con
 
 // runtimeClient implements RuntimeClient.
 type runtimeClient struct {
-	getInfo             *connect.Client[v1.GetInfoRequest, v1.GetInfoResponse]
-	buildAgent          *connect.Client[v1.BuildAgentRequest, v1.BuildAgentResponse]
-	buildToolImage      *connect.Client[v1.BuildToolImageRequest, v1.BuildToolImageResponse]
-	saveAgentImage      *connect.Client[v1.SaveAgentImageRequest, v1.SaveAgentImageResponse]
-	pullAgentImage      *connect.Client[v1.PullRequest, v1.PullResponse]
-	pushAgentImage      *connect.Client[v1.PushRequest, v1.PushResponse]
-	listImages          *connect.Client[v1.ListImagesRequest, v1.ListImagesResponse]
-	refreshImage        *connect.Client[v1.RefreshImageRequest, v1.RefreshImageResponse]
-	removeImage         *connect.Client[v1.RemoveImageRequest, v1.RemoveImageResponse]
-	describeImage       *connect.Client[v1.DescribeImageRequest, v1.DescribeImageResponse]
-	createAgent         *connect.Client[v1.CreateAgentRequest, v1.CreateAgentResponse]
-	listAgents          *connect.Client[v1.ListAgentsRequest, v1.ListAgentsResponse]
-	startAgent          *connect.Client[v1.StartAgentRequest, v1.StartAgentResponse]
-	stopAgent           *connect.Client[v1.StopAgentRequest, v1.StopAgentResponse]
-	removeAgent         *connect.Client[v1.RemoveAgentRequest, v1.RemoveAgentResponse]
-	chatWithAgent       *connect.Client[v1.ChatRequest, v1.ChatResponse]
-	promptObject        *connect.Client[v1.PromptObjectRequest, v1.PromptObjectResponse]
-	chatStreamWithAgent *connect.Client[v1.ChatStreamRequest, v1.ChatStreamEvent]
-	listSessionMessages *connect.Client[v1.ListSessionMessagesRequest, v1.ListSessionMessagesResponse]
-	listSessions        *connect.Client[v1.ListSessionsRequest, v1.ListSessionsResponse]
-	deleteSession       *connect.Client[v1.DeleteSessionRequest, v1.DeleteSessionResponse]
-	getAgentLogs        *connect.Client[v1.GetAgentLogsRequest, v1.GetAgentLogsResponse]
-	listModels          *connect.Client[v1.ListModelsRequest, v1.ListModelsResponse]
-	listProviders       *connect.Client[v1.ListProvidersRequest, v1.ListProvidersResponse]
-	addProvider         *connect.Client[v1.AddProviderRequest, v1.AddProviderResponse]
-	updateProvider      *connect.Client[v1.UpdateProviderRequest, v1.UpdateProviderResponse]
-	removeProvider      *connect.Client[v1.RemoveProviderRequest, v1.RemoveProviderResponse]
-	submitAsyncJob      *connect.Client[v1.SubmitAsyncJobRequest, v1.SubmitAsyncJobResponse]
-	cancelAsyncJob      *connect.Client[v1.CancelAsyncJobRequest, v1.CancelAsyncJobResponse]
-	getAsyncJob         *connect.Client[v1.GetAsyncJobRequest, v1.GetAsyncJobResponse]
-	listAsyncJobs       *connect.Client[v1.ListAsyncJobsRequest, v1.ListAsyncJobsResponse]
-	watchAsyncJob       *connect.Client[v1.WatchAsyncJobRequest, v1.WatchAsyncJobResponse]
+	getInfo               *connect.Client[v1.GetInfoRequest, v1.GetInfoResponse]
+	buildAgent            *connect.Client[v1.BuildAgentRequest, v1.BuildAgentResponse]
+	buildToolImage        *connect.Client[v1.BuildToolImageRequest, v1.BuildToolImageResponse]
+	saveAgentImage        *connect.Client[v1.SaveAgentImageRequest, v1.SaveAgentImageResponse]
+	pullAgentImage        *connect.Client[v1.PullRequest, v1.PullResponse]
+	pushAgentImage        *connect.Client[v1.PushRequest, v1.PushResponse]
+	listImages            *connect.Client[v1.ListImagesRequest, v1.ListImagesResponse]
+	refreshImage          *connect.Client[v1.RefreshImageRequest, v1.RefreshImageResponse]
+	removeImage           *connect.Client[v1.RemoveImageRequest, v1.RemoveImageResponse]
+	describeImage         *connect.Client[v1.DescribeImageRequest, v1.DescribeImageResponse]
+	createAgent           *connect.Client[v1.CreateAgentRequest, v1.CreateAgentResponse]
+	listAgents            *connect.Client[v1.ListAgentsRequest, v1.ListAgentsResponse]
+	startAgent            *connect.Client[v1.StartAgentRequest, v1.StartAgentResponse]
+	stopAgent             *connect.Client[v1.StopAgentRequest, v1.StopAgentResponse]
+	removeAgent           *connect.Client[v1.RemoveAgentRequest, v1.RemoveAgentResponse]
+	chatWithAgent         *connect.Client[v1.ChatRequest, v1.ChatResponse]
+	promptObject          *connect.Client[v1.PromptObjectRequest, v1.PromptObjectResponse]
+	chatStreamWithAgent   *connect.Client[v1.ChatStreamRequest, v1.ChatStreamEvent]
+	listSessionMessages   *connect.Client[v1.ListSessionMessagesRequest, v1.ListSessionMessagesResponse]
+	listSessions          *connect.Client[v1.ListSessionsRequest, v1.ListSessionsResponse]
+	deleteSession         *connect.Client[v1.DeleteSessionRequest, v1.DeleteSessionResponse]
+	getAgentLogs          *connect.Client[v1.GetAgentLogsRequest, v1.GetAgentLogsResponse]
+	listModels            *connect.Client[v1.ListModelsRequest, v1.ListModelsResponse]
+	listProviders         *connect.Client[v1.ListProvidersRequest, v1.ListProvidersResponse]
+	addProvider           *connect.Client[v1.AddProviderRequest, v1.AddProviderResponse]
+	updateProvider        *connect.Client[v1.UpdateProviderRequest, v1.UpdateProviderResponse]
+	removeProvider        *connect.Client[v1.RemoveProviderRequest, v1.RemoveProviderResponse]
+	submitAsyncJob        *connect.Client[v1.SubmitAsyncJobRequest, v1.SubmitAsyncJobResponse]
+	cancelAsyncJob        *connect.Client[v1.CancelAsyncJobRequest, v1.CancelAsyncJobResponse]
+	getAsyncJob           *connect.Client[v1.GetAsyncJobRequest, v1.GetAsyncJobResponse]
+	listAsyncJobs         *connect.Client[v1.ListAsyncJobsRequest, v1.ListAsyncJobsResponse]
+	listAgentNotes        *connect.Client[v1.ListAgentNotesRequest, v1.ListAgentNotesResponse]
+	getAgentNote          *connect.Client[v1.GetAgentNoteRequest, v1.GetAgentNoteResponse]
+	saveAgentNote         *connect.Client[v1.SaveAgentNoteRequest, v1.SaveAgentNoteResponse]
+	deleteAgentNote       *connect.Client[v1.DeleteAgentNoteRequest, v1.DeleteAgentNoteResponse]
+	setAgentNoteInContext *connect.Client[v1.SetAgentNoteInContextRequest, v1.SetAgentNoteInContextResponse]
+	watchAsyncJob         *connect.Client[v1.WatchAsyncJobRequest, v1.WatchAsyncJobResponse]
 }
 
 // GetInfo calls openotters.daemon.v1.Runtime.GetInfo.
@@ -547,6 +603,31 @@ func (c *runtimeClient) ListAsyncJobs(ctx context.Context, req *connect.Request[
 	return c.listAsyncJobs.CallUnary(ctx, req)
 }
 
+// ListAgentNotes calls openotters.daemon.v1.Runtime.ListAgentNotes.
+func (c *runtimeClient) ListAgentNotes(ctx context.Context, req *connect.Request[v1.ListAgentNotesRequest]) (*connect.Response[v1.ListAgentNotesResponse], error) {
+	return c.listAgentNotes.CallUnary(ctx, req)
+}
+
+// GetAgentNote calls openotters.daemon.v1.Runtime.GetAgentNote.
+func (c *runtimeClient) GetAgentNote(ctx context.Context, req *connect.Request[v1.GetAgentNoteRequest]) (*connect.Response[v1.GetAgentNoteResponse], error) {
+	return c.getAgentNote.CallUnary(ctx, req)
+}
+
+// SaveAgentNote calls openotters.daemon.v1.Runtime.SaveAgentNote.
+func (c *runtimeClient) SaveAgentNote(ctx context.Context, req *connect.Request[v1.SaveAgentNoteRequest]) (*connect.Response[v1.SaveAgentNoteResponse], error) {
+	return c.saveAgentNote.CallUnary(ctx, req)
+}
+
+// DeleteAgentNote calls openotters.daemon.v1.Runtime.DeleteAgentNote.
+func (c *runtimeClient) DeleteAgentNote(ctx context.Context, req *connect.Request[v1.DeleteAgentNoteRequest]) (*connect.Response[v1.DeleteAgentNoteResponse], error) {
+	return c.deleteAgentNote.CallUnary(ctx, req)
+}
+
+// SetAgentNoteInContext calls openotters.daemon.v1.Runtime.SetAgentNoteInContext.
+func (c *runtimeClient) SetAgentNoteInContext(ctx context.Context, req *connect.Request[v1.SetAgentNoteInContextRequest]) (*connect.Response[v1.SetAgentNoteInContextResponse], error) {
+	return c.setAgentNoteInContext.CallUnary(ctx, req)
+}
+
 // WatchAsyncJob calls openotters.daemon.v1.Runtime.WatchAsyncJob.
 func (c *runtimeClient) WatchAsyncJob(ctx context.Context, req *connect.Request[v1.WatchAsyncJobRequest]) (*connect.ServerStreamForClient[v1.WatchAsyncJobResponse], error) {
 	return c.watchAsyncJob.CallServerStream(ctx, req)
@@ -591,6 +672,16 @@ type RuntimeHandler interface {
 	CancelAsyncJob(context.Context, *connect.Request[v1.CancelAsyncJobRequest]) (*connect.Response[v1.CancelAsyncJobResponse], error)
 	GetAsyncJob(context.Context, *connect.Request[v1.GetAsyncJobRequest]) (*connect.Response[v1.GetAsyncJobResponse], error)
 	ListAsyncJobs(context.Context, *connect.Request[v1.ListAsyncJobsRequest]) (*connect.Response[v1.ListAsyncJobsResponse], error)
+	// ── notes (per-agent KV store) ───────────────────────────────────
+	// Operator-facing CRUD for an agent's notes (durable facts the
+	// model wrote via the note_* tools). Each RPC proxies to the per-
+	// agent runtime's gRPC NotesService and surfaces NotFound /
+	// FailedPrecondition cleanly to the UI.
+	ListAgentNotes(context.Context, *connect.Request[v1.ListAgentNotesRequest]) (*connect.Response[v1.ListAgentNotesResponse], error)
+	GetAgentNote(context.Context, *connect.Request[v1.GetAgentNoteRequest]) (*connect.Response[v1.GetAgentNoteResponse], error)
+	SaveAgentNote(context.Context, *connect.Request[v1.SaveAgentNoteRequest]) (*connect.Response[v1.SaveAgentNoteResponse], error)
+	DeleteAgentNote(context.Context, *connect.Request[v1.DeleteAgentNoteRequest]) (*connect.Response[v1.DeleteAgentNoteResponse], error)
+	SetAgentNoteInContext(context.Context, *connect.Request[v1.SetAgentNoteInContextRequest]) (*connect.Response[v1.SetAgentNoteInContextResponse], error)
 	// Server-streaming watch: emits the current AsyncJob immediately,
 	// then again on every material change (status, handle, exit_code,
 	// stdout, stderr, error, started_at, finished_at), then closes the
@@ -794,6 +885,36 @@ func NewRuntimeHandler(svc RuntimeHandler, opts ...connect.HandlerOption) (strin
 		connect.WithSchema(runtimeMethods.ByName("ListAsyncJobs")),
 		connect.WithHandlerOptions(opts...),
 	)
+	runtimeListAgentNotesHandler := connect.NewUnaryHandler(
+		RuntimeListAgentNotesProcedure,
+		svc.ListAgentNotes,
+		connect.WithSchema(runtimeMethods.ByName("ListAgentNotes")),
+		connect.WithHandlerOptions(opts...),
+	)
+	runtimeGetAgentNoteHandler := connect.NewUnaryHandler(
+		RuntimeGetAgentNoteProcedure,
+		svc.GetAgentNote,
+		connect.WithSchema(runtimeMethods.ByName("GetAgentNote")),
+		connect.WithHandlerOptions(opts...),
+	)
+	runtimeSaveAgentNoteHandler := connect.NewUnaryHandler(
+		RuntimeSaveAgentNoteProcedure,
+		svc.SaveAgentNote,
+		connect.WithSchema(runtimeMethods.ByName("SaveAgentNote")),
+		connect.WithHandlerOptions(opts...),
+	)
+	runtimeDeleteAgentNoteHandler := connect.NewUnaryHandler(
+		RuntimeDeleteAgentNoteProcedure,
+		svc.DeleteAgentNote,
+		connect.WithSchema(runtimeMethods.ByName("DeleteAgentNote")),
+		connect.WithHandlerOptions(opts...),
+	)
+	runtimeSetAgentNoteInContextHandler := connect.NewUnaryHandler(
+		RuntimeSetAgentNoteInContextProcedure,
+		svc.SetAgentNoteInContext,
+		connect.WithSchema(runtimeMethods.ByName("SetAgentNoteInContext")),
+		connect.WithHandlerOptions(opts...),
+	)
 	runtimeWatchAsyncJobHandler := connect.NewServerStreamHandler(
 		RuntimeWatchAsyncJobProcedure,
 		svc.WatchAsyncJob,
@@ -864,6 +985,16 @@ func NewRuntimeHandler(svc RuntimeHandler, opts ...connect.HandlerOption) (strin
 			runtimeGetAsyncJobHandler.ServeHTTP(w, r)
 		case RuntimeListAsyncJobsProcedure:
 			runtimeListAsyncJobsHandler.ServeHTTP(w, r)
+		case RuntimeListAgentNotesProcedure:
+			runtimeListAgentNotesHandler.ServeHTTP(w, r)
+		case RuntimeGetAgentNoteProcedure:
+			runtimeGetAgentNoteHandler.ServeHTTP(w, r)
+		case RuntimeSaveAgentNoteProcedure:
+			runtimeSaveAgentNoteHandler.ServeHTTP(w, r)
+		case RuntimeDeleteAgentNoteProcedure:
+			runtimeDeleteAgentNoteHandler.ServeHTTP(w, r)
+		case RuntimeSetAgentNoteInContextProcedure:
+			runtimeSetAgentNoteInContextHandler.ServeHTTP(w, r)
 		case RuntimeWatchAsyncJobProcedure:
 			runtimeWatchAsyncJobHandler.ServeHTTP(w, r)
 		default:
@@ -997,6 +1128,26 @@ func (UnimplementedRuntimeHandler) GetAsyncJob(context.Context, *connect.Request
 
 func (UnimplementedRuntimeHandler) ListAsyncJobs(context.Context, *connect.Request[v1.ListAsyncJobsRequest]) (*connect.Response[v1.ListAsyncJobsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("openotters.daemon.v1.Runtime.ListAsyncJobs is not implemented"))
+}
+
+func (UnimplementedRuntimeHandler) ListAgentNotes(context.Context, *connect.Request[v1.ListAgentNotesRequest]) (*connect.Response[v1.ListAgentNotesResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("openotters.daemon.v1.Runtime.ListAgentNotes is not implemented"))
+}
+
+func (UnimplementedRuntimeHandler) GetAgentNote(context.Context, *connect.Request[v1.GetAgentNoteRequest]) (*connect.Response[v1.GetAgentNoteResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("openotters.daemon.v1.Runtime.GetAgentNote is not implemented"))
+}
+
+func (UnimplementedRuntimeHandler) SaveAgentNote(context.Context, *connect.Request[v1.SaveAgentNoteRequest]) (*connect.Response[v1.SaveAgentNoteResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("openotters.daemon.v1.Runtime.SaveAgentNote is not implemented"))
+}
+
+func (UnimplementedRuntimeHandler) DeleteAgentNote(context.Context, *connect.Request[v1.DeleteAgentNoteRequest]) (*connect.Response[v1.DeleteAgentNoteResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("openotters.daemon.v1.Runtime.DeleteAgentNote is not implemented"))
+}
+
+func (UnimplementedRuntimeHandler) SetAgentNoteInContext(context.Context, *connect.Request[v1.SetAgentNoteInContextRequest]) (*connect.Response[v1.SetAgentNoteInContextResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("openotters.daemon.v1.Runtime.SetAgentNoteInContext is not implemented"))
 }
 
 func (UnimplementedRuntimeHandler) WatchAsyncJob(context.Context, *connect.Request[v1.WatchAsyncJobRequest], *connect.ServerStream[v1.WatchAsyncJobResponse]) error {
