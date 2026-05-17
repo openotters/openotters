@@ -34,14 +34,18 @@ type BinBuild struct {
 
 	// Optional OCI image-spec annotations. Each maps 1:1 to the
 	// matching org.opencontainers.image.<key> annotation; empty
-	// values omit the annotation rather than stamping "".
-	Version       string `help:"Packaged software version (org.opencontainers.image.version)" default:""`
-	Revision      string `help:"Source-control revision, typically a git SHA (org.opencontainers.image.revision)" default:""`
-	Licenses      string `help:"SPDX license expression (org.opencontainers.image.licenses), e.g. 'Apache-2.0'" default:""`
-	Vendor        string `help:"Distributing entity (org.opencontainers.image.vendor)" default:""`
-	Authors       string `help:"Comma-separated contact details for image authors (org.opencontainers.image.authors)" default:""`
-	URL           string `help:"Project URL (org.opencontainers.image.url)" default:""`
-	Documentation string `help:"Documentation URL (org.opencontainers.image.documentation)" default:""`
+	// values omit the annotation rather than stamping "". The
+	// flag names are prefixed with `image-` so they live in the
+	// org.opencontainers.image.* namespace conceptually AND avoid
+	// colliding with Kong-global flags (notably --version, which
+	// is reserved by the top-level CLI for "print otters version").
+	Version       string `name:"image-version"       help:"Packaged software version (org.opencontainers.image.version)" default:""`
+	Revision      string `name:"image-revision"      help:"Source-control revision, typically a git SHA (org.opencontainers.image.revision)" default:""`
+	Licenses      string `name:"image-licenses"      help:"SPDX license expression (org.opencontainers.image.licenses), e.g. 'MIT'" default:""`
+	Vendor        string `name:"image-vendor"        help:"Distributing entity (org.opencontainers.image.vendor)" default:""`
+	Authors       string `name:"image-authors"       help:"Comma-separated contact details for image authors (org.opencontainers.image.authors)" default:""`
+	URL           string `name:"image-url"           help:"Project URL (org.opencontainers.image.url)" default:""`
+	Documentation string `name:"image-documentation" help:"Documentation URL (org.opencontainers.image.documentation)" default:""`
 
 	Tags      []string `short:"t" help:"Local tags (default: <name>:latest)" optional:""`
 	Platforms []string `arg:"" name:"platform" help:"One or more <os>/<arch>:<bin-path> entries (e.g. linux/amd64:/tmp/jq-linux-amd64)"`
