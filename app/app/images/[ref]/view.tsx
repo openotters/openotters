@@ -2,6 +2,12 @@
 
 import { ArtifactDetailView } from "@/components/artifact-detail-view"
 import {
+	Accordion,
+	AccordionContent,
+	AccordionItem,
+	AccordionTrigger,
+} from "@/components/ui/accordion"
+import {
 	Card,
 	CardContent,
 	CardDescription,
@@ -21,32 +27,86 @@ export default function ImageDetailPage() {
 			extraSections={(describe) => {
 				if (!describe) return null
 				const envs = parseEnvsFromConfig(describe.config)
-				if (envs.length === 0) return null
+				const contexts = parseContextsFromConfig(describe.config)
 				return (
-					<Card>
-						<CardHeader>
-							<CardTitle className="text-base">Environment</CardTitle>
-							<CardDescription>
-								OS environment variables set on the spawned agent process. Built from{" "}
-								<code className="font-mono text-xs">ENV</code> directives in the source Agentfile.
-							</CardDescription>
-						</CardHeader>
-						<CardContent>
-							<div className="space-y-2 text-sm">
-								{envs.map((env) => (
-									<div className="flex items-start justify-between gap-6" key={env.key}>
-										<div className="flex flex-col">
-											<span className="break-all font-mono text-xs">{env.key}</span>
-											{env.description && (
-												<span className="text-muted-foreground text-xs">{env.description}</span>
-											)}
-										</div>
-										<span className="break-all text-right font-mono text-xs">{env.value}</span>
+					<>
+						{contexts.length > 0 && (
+							<Card>
+								<CardHeader>
+									<CardTitle className="text-base">Contexts</CardTitle>
+									<CardDescription>
+										Markdown files baked into the agent at{" "}
+										<code className="font-mono text-xs">/etc/context/</code> and loaded
+										into the model's system prompt at run time. Click a name to view its
+										content as the model sees it.
+									</CardDescription>
+								</CardHeader>
+								<CardContent>
+									<Accordion className="w-full" collapsible type="single">
+										{contexts.map((ctx) => (
+											<AccordionItem key={ctx.name} value={ctx.name}>
+												<AccordionTrigger>
+													<div className="flex min-w-0 flex-1 flex-col items-start gap-0.5 pr-3 text-left">
+														<span className="break-all font-medium font-mono text-sm">
+															{ctx.name}
+														</span>
+														{ctx.description && (
+															<span className="text-muted-foreground text-xs">
+																{ctx.description}
+															</span>
+														)}
+													</div>
+												</AccordionTrigger>
+												<AccordionContent>
+													{ctx.content ? (
+														<pre className="overflow-x-auto whitespace-pre-wrap break-words rounded-md bg-muted p-3 font-mono text-xs">
+															{ctx.content}
+														</pre>
+													) : (
+														<p className="text-muted-foreground text-sm italic">
+															No content recorded for this context.
+														</p>
+													)}
+												</AccordionContent>
+											</AccordionItem>
+										))}
+									</Accordion>
+								</CardContent>
+							</Card>
+						)}
+
+						{envs.length > 0 && (
+							<Card>
+								<CardHeader>
+									<CardTitle className="text-base">Environment</CardTitle>
+									<CardDescription>
+										OS environment variables set on the spawned agent process. Built from{" "}
+										<code className="font-mono text-xs">ENV</code> directives in the
+										source Agentfile.
+									</CardDescription>
+								</CardHeader>
+								<CardContent>
+									<div className="space-y-2 text-sm">
+										{envs.map((env) => (
+											<div className="flex items-start justify-between gap-6" key={env.key}>
+												<div className="flex flex-col">
+													<span className="break-all font-mono text-xs">{env.key}</span>
+													{env.description && (
+														<span className="text-muted-foreground text-xs">
+															{env.description}
+														</span>
+													)}
+												</div>
+												<span className="break-all text-right font-mono text-xs">
+													{env.value}
+												</span>
+											</div>
+										))}
 									</div>
-								))}
-							</div>
-						</CardContent>
-					</Card>
+								</CardContent>
+							</Card>
+						)}
+					</>
 				)
 			}}
 			kind="agent"
@@ -59,6 +119,12 @@ interface EnvDecl {
 	key: string
 	value: string
 	description?: string
+}
+
+interface ContextDecl {
+	name: string
+	description?: string
+	content?: string
 }
 
 // parseEnvsFromConfig extracts ENV declarations from the JSON config
@@ -76,6 +142,32 @@ function parseEnvsFromConfig(configJSON: string): EnvDecl[] {
 				value: e.value,
 				description: typeof e.description === "string" ? e.description : undefined,
 			}))
+	} catch {
+		return []
+	}
+}
+
+// parseContextsFromConfig extracts the agent's CONTEXT declarations
+// from the JSON config blob — each one is a markdown file baked into
+// the image at /etc/context/<name>.md and loaded into the model's
+// system prompt at runtime. Same tolerance posture as
+// parseEnvsFromConfig: any parse failure yields an empty array so
+// the UI never panics on a malformed config.
+function parseContextsFromConfig(configJSON: string): ContextDecl[] {
+	try {
+		const parsed = JSON.parse(configJSON)
+		const contexts = parsed?.agent?.contexts
+		if (!Array.isArray(contexts)) return []
+		const out: ContextDecl[] = []
+		for (const c of contexts) {
+			if (typeof c?.name !== "string") continue
+			out.push({
+				name: c.name,
+				description: typeof c.description === "string" ? c.description : undefined,
+				content: typeof c.content === "string" ? c.content : undefined,
+			})
+		}
+		return out
 	} catch {
 		return []
 	}
