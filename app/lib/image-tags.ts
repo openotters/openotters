@@ -70,6 +70,55 @@ export function groupImagesByDigest<T extends TaggedImage>(images: T[]): ImageGr
 	return groups.sort((a, b) => a.primary.ref.localeCompare(b.primary.ref))
 }
 
+// NameGroup represents one repository (e.g.
+// `ghcr.io/openotters/runtime`) collapsed across every tag the daemon
+// returned. The listing pages render one card per NameGroup so the
+// operator sees images by what they ARE (a runtime, a curl) instead
+// of one row per tag.
+export interface NameGroup<T extends TaggedImage> {
+	// name is the repository path with no tag, e.g.
+	// `ghcr.io/openotters/runtime`.
+	name: string
+	// digests is every distinct digest seen under this name, each with
+	// its tag set. Sorted by createdAt desc (newest digest first).
+	digests: ImageGroup<T>[]
+	// primary is the representative entry used for the listing card —
+	// the `:latest` tag's row if present, else the newest digest's
+	// primary, falling back to digests[0].primary.
+	primary: T
+}
+
+// groupImagesByName collapses every input row into one NameGroup per
+// repository, with each digest's tag set preserved as an inner
+// ImageGroup. Used by the /bins and /images list pages to surface one
+// card per image instead of one per tag.
+export function groupImagesByName<T extends TaggedImage>(images: T[]): NameGroup<T>[] {
+	const byName = new Map<string, T[]>()
+	for (const img of images) {
+		const n = parseRefName(img.ref)
+		const list = byName.get(n) ?? []
+		list.push(img)
+		byName.set(n, list)
+	}
+
+	const groups: NameGroup<T>[] = []
+	for (const [name, entries] of byName) {
+		const digests = groupImagesByDigest(entries).sort((a, b) => {
+			if (a.primary.createdAt !== b.primary.createdAt) {
+				return Number(b.primary.createdAt - a.primary.createdAt)
+			}
+			return a.primary.ref.localeCompare(b.primary.ref)
+		})
+
+		const latest = entries.find((i) => i.ref.endsWith(":latest"))
+		const primary = latest ?? digests[0]?.primary ?? entries[0]
+
+		groups.push({ name, digests, primary })
+	}
+
+	return groups.sort((a, b) => a.name.localeCompare(b.name))
+}
+
 // refsForDigest returns every ref in the list that shares a digest
 // with the given target ref. Used by the detail views to render the
 // "tags pointing at this image" card.

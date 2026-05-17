@@ -28,7 +28,7 @@ import {
 	CardTitle,
 } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
-import { parseRefTag, versionsForRef } from "@/lib/image-tags"
+import { groupImagesByDigest, parseRefName, parseRefTag } from "@/lib/image-tags"
 import {
 	describeImage,
 	listImages,
@@ -175,7 +175,23 @@ export function ArtifactDetailView({ ref, kind, extraSections, versionAction }: 
 		return null
 	}
 
-	const versions = versionsForRef(all.filter((i) => i.artifactType === cfg.artifactType), ref)
+	// Group every entry sharing this image's repo NAME by digest, so
+	// the Versions card shows one row per distinct image (with its
+	// tag set rendered as badges) instead of one row per tag. The
+	// :latest digest floats to the top; the rest sort newest-first.
+	const name = parseRefName(ref)
+	const siblings = all.filter(
+		(i) => i.artifactType === cfg.artifactType && parseRefName(i.ref) === name,
+	)
+	const digestGroups = groupImagesByDigest(siblings).sort((a, b) => {
+		const aLatest = a.refs.some((r) => r.endsWith(":latest"))
+		const bLatest = b.refs.some((r) => r.endsWith(":latest"))
+		if (aLatest !== bLatest) return aLatest ? -1 : 1
+		if (a.primary.createdAt !== b.primary.createdAt) {
+			return Number(b.primary.createdAt - a.primary.createdAt)
+		}
+		return a.primary.ref.localeCompare(b.primary.ref)
+	})
 	const Icon = cfg.Icon
 
 	return (
@@ -214,68 +230,82 @@ export function ArtifactDetailView({ ref, kind, extraSections, versionAction }: 
 				<CardHeader>
 					<CardTitle className="text-base">Versions</CardTitle>
 					<CardDescription>
-						{versions.length} version{versions.length === 1 ? "" : "s"} of this {cfg.cliNoun}{" "}
-						in the registry. Pull, push, or delete each tag independently.
+						{digestGroups.length} digest{digestGroups.length === 1 ? "" : "s"} of this{" "}
+						{cfg.cliNoun} in the registry. Each row is one image; tags pointing at the same
+						digest are grouped together. Pull, push, or delete a digest (all its tags) as a
+						unit, or click a tag to focus its row.
 					</CardDescription>
 				</CardHeader>
 				<CardContent className="space-y-2">
-					{versions.map((v) => {
-						const tag = parseRefTag(v.ref) || "(no tag)"
-						const isCurrent = v.ref === artifact.ref
-						const isAlias = v.digest === artifact.digest && !isCurrent
-						const pullPending = pull.isPending && pull.variables?.ref === v.ref
-						const pushPending = push.isPending && push.variables?.ref === v.ref
-						const removePending = remove.isPending && remove.variables?.ref === v.ref
+					{digestGroups.map((dg) => {
+						const digest = dg.primary.digest
+						const isCurrent = digest === artifact.digest
+						// All refs share the same digest, so the operation is
+						// idempotent for the digest — but each ref still needs
+						// its own RPC. Use the primary ref as the proxy for
+						// pending-state tracking (the listing only renders one
+						// pending state per row anyway).
+						const proxyRef = dg.primary.ref
+						const pullPending = pull.isPending && pull.variables?.ref === proxyRef
+						const pushPending = push.isPending && push.variables?.ref === proxyRef
+						const removePending = remove.isPending && dg.refs.includes(remove.variables?.ref ?? "")
 						return (
 							<div
 								className={`flex flex-wrap items-center gap-3 rounded-lg border p-3 ${isCurrent ? "border-primary/40 bg-primary/5" : "border-border"}`}
-								key={v.ref}>
+								key={digest}>
 								<div className="min-w-0 flex-1">
-									<div className="flex items-center gap-2">
-										<Link
-											className="font-mono font-medium text-sm hover:underline"
-											href={cfg.detailHref(v.ref)}>
-											{tag}
-										</Link>
+									<div className="flex flex-wrap items-center gap-2">
+										{dg.refs.map((r) => {
+											const t = parseRefTag(r) || "(no tag)"
+											return (
+												<Link
+													className="hover:underline"
+													href={cfg.detailHref(r)}
+													key={r}>
+													<Badge
+														className="font-mono text-xs"
+														variant={r === artifact.ref ? "default" : "outline"}>
+														{t}
+													</Badge>
+												</Link>
+											)
+										})}
 										{isCurrent && (
 											<Badge className="text-xs" variant="default">
 												current
 											</Badge>
 										)}
-										{isAlias && (
-											<Badge className="text-xs" variant="secondary">
-												same digest
-											</Badge>
-										)}
 									</div>
 									<div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-muted-foreground text-xs">
-										<span className="break-all font-mono">{v.digest.substring(0, 19)}…</span>
+										<span className="break-all font-mono">
+											{dg.primary.digest.substring(0, 19)}…
+										</span>
 										<span className="inline-flex items-center gap-1">
 											<HardDrive className="h-3 w-3" />
-											{formatSize(v.size)}
+											{formatSize(dg.primary.size)}
 										</span>
 										<span className="inline-flex items-center gap-1">
 											<Clock className="h-3 w-3" />
-											{cfg.pulledLabel} {formatDate(v.createdAt)}
+											{cfg.pulledLabel} {formatDate(dg.primary.createdAt)}
 										</span>
 									</div>
 								</div>
 								<div className="flex items-center gap-1">
-									{versionAction?.(v.ref)}
+									{versionAction?.(proxyRef)}
 									<Button
 										disabled={pullPending}
-										onClick={() => pull.mutate({ ref: v.ref })}
+										onClick={() => pull.mutate({ ref: proxyRef })}
 										size="sm"
-										title={`Pull ${v.ref} from remote registry`}
+										title={`Pull ${proxyRef} from remote registry`}
 										variant="outline">
 										<Download className={`h-4 w-4 ${pullPending ? "animate-pulse" : ""}`} />
 										<span className="sr-only">Pull</span>
 									</Button>
 									<Button
 										disabled={pushPending}
-										onClick={() => push.mutate({ ref: v.ref })}
+										onClick={() => push.mutate({ ref: proxyRef })}
 										size="sm"
-										title={`Push ${v.ref} to remote registry`}
+										title={`Push ${proxyRef} to remote registry`}
 										variant="outline">
 										<Upload className={`h-4 w-4 ${pushPending ? "animate-pulse" : ""}`} />
 										<span className="sr-only">Push</span>
@@ -283,23 +313,28 @@ export function ArtifactDetailView({ ref, kind, extraSections, versionAction }: 
 									<ConfirmDelete
 										description={
 											<>
-												This removes <code className="font-mono text-xs">{v.ref}</code> from
-												the local registry.{" "}
-												{v.digest === artifact.digest && versions.some((other) => other.ref !== v.ref && other.digest === v.digest) ? (
-													<>Other tags pointing at the same digest will be untagged too.</>
-												) : null}
+												This removes every tag pointing at digest{" "}
+												<code className="font-mono text-xs">
+													{dg.primary.digest.substring(0, 19)}…
+												</code>{" "}
+												({dg.refs.length} tag{dg.refs.length === 1 ? "" : "s"}) from the
+												local registry.
 											</>
 										}
-										onConfirm={() => remove.mutate({ ref: v.ref })}
+										onConfirm={() => {
+											for (const r of dg.refs) {
+												remove.mutate({ ref: r })
+											}
+										}}
 										pending={removePending}
-										title={`Delete ${parseRefTag(v.ref) || v.ref}?`}
+										title={`Delete digest?`}
 										trigger={(open) => (
 											<Button
 												className="text-destructive hover:text-destructive"
 												disabled={removePending}
 												onClick={open}
 												size="sm"
-												title={`Delete ${v.ref} from local registry`}
+												title={`Delete every tag at digest ${dg.primary.digest.substring(0, 19)}…`}
 												variant="outline">
 												<Trash2 className="h-4 w-4" />
 												<span className="sr-only">Delete</span>

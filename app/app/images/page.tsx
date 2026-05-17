@@ -30,7 +30,7 @@ import {
 	DropdownMenuSeparator,
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { groupImagesByDigest } from "@/lib/image-tags"
+import { groupImagesByName } from "@/lib/image-tags"
 import {
 	listImages,
 	pullAgentImage,
@@ -93,7 +93,7 @@ export default function ImagesPage() {
 	const groups = useMemo(() => {
 		const all = data?.images ?? []
 		const filtered = all.filter((i) => i.artifactType === AGENT_ARTIFACT_TYPE)
-		return groupImagesByDigest(filtered)
+		return groupImagesByName(filtered)
 	}, [data])
 
 	return (
@@ -152,13 +152,13 @@ export default function ImagesPage() {
 				<div className="grid gap-4">
 					{groups.map((group) => {
 						const image = group.primary
-						const extraTags = group.refs.length - 1
+						const versions = group.digests.length
 						return (
-							<Card className="group transition-colors hover:bg-muted/50" key={image.digest}>
+							<Card className="group transition-colors hover:bg-muted/50" key={group.name}>
 								<CardHeader className="pb-3">
 									<div className="flex items-start justify-between">
 										<Link
-											aria-label={`Open ${image.ref} details`}
+											aria-label={`Open ${group.name} details`}
 											className="flex flex-1 items-center gap-3"
 											href={`/images/${encodeURIComponent(image.ref)}`}>
 											<div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
@@ -167,14 +167,12 @@ export default function ImagesPage() {
 											<div className="min-w-0 flex-1">
 												<div className="flex items-center gap-2">
 													<CardTitle className="font-medium text-base">
-														{image.ref}
+														{group.name}
 													</CardTitle>
-													{extraTags > 0 && (
-														<Badge className="font-mono text-xs" variant="secondary">
-															<Tag className="mr-1 h-3 w-3" />
-															+{extraTags}
-														</Badge>
-													)}
+													<Badge className="font-mono text-xs" variant="secondary">
+														<Tag className="mr-1 h-3 w-3" />
+														{versions} version{versions === 1 ? "" : "s"}
+													</Badge>
 												</div>
 												<CardDescription className="font-mono text-xs">
 													{image.digest.substring(0, 19)}…
@@ -204,12 +202,19 @@ export default function ImagesPage() {
 												<ConfirmDelete
 													description={
 														<>
-															This removes{" "}
-															<code className="font-mono text-xs">{image.ref}</code> and all
-															tags pointing at the same digest.
+															This removes every tag under{" "}
+															<code className="font-mono text-xs">{group.name}</code> from the
+															local registry ({versions} version
+															{versions === 1 ? "" : "s"}).
 														</>
 													}
-													onConfirm={() => remove.mutate({ ref: image.ref })}
+													onConfirm={() => {
+														for (const dg of group.digests) {
+															for (const ref of dg.refs) {
+																remove.mutate({ ref })
+															}
+														}
+													}}
 													pending={remove.isPending}
 													title="Delete image?"
 													trigger={(open) => (
