@@ -1,7 +1,7 @@
 "use client"
 
 import { createClient } from "@connectrpc/connect"
-import { Pause, Play } from "lucide-react"
+import { Pause, Play, X } from "lucide-react"
 import { useEffect, useMemo, useRef, useState } from "react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -23,6 +23,13 @@ import {
 	SelectValue,
 } from "@/components/ui/select"
 import {
+	Sheet,
+	SheetContent,
+	SheetDescription,
+	SheetHeader,
+	SheetTitle,
+} from "@/components/ui/sheet"
+import {
 	Table,
 	TableBody,
 	TableCell,
@@ -33,6 +40,18 @@ import {
 import type { RPCCallEvent } from "@/lib/proto/v1/daemon_pb"
 import { Runtime } from "@/lib/proto/v1/daemon_pb"
 import { transport } from "@/lib/transport"
+
+// BufferedEvent wraps each captured RPCCallEvent with a stable
+// client-assigned id. Reusing the proto's timestampUnixMs as a React
+// key resets row identity when two events land in the same
+// millisecond (the table re-keys every row, unmounting and
+// remounting), and that's what was throwing scroll position back to
+// the top on every push. A monotonic counter sidesteps the problem
+// without relying on server-side IDs.
+interface BufferedEvent {
+	id: number
+	event: RPCCallEvent
+}
 
 // Maximum events kept client-side. The server replays up to 200 on
 // (re)subscribe, then streams live. The buffer caps memory growth on
@@ -62,13 +81,19 @@ const emptyFilters: Filters = {
 export function RpcMonitor() {
 	const [filters, setFilters] = useState<Filters>(emptyFilters)
 	const [paused, setPaused] = useState(false)
-	const [events, setEvents] = useState<RPCCallEvent[]>([])
+	const [events, setEvents] = useState<BufferedEvent[]>([])
 	const [error, setError] = useState<string | null>(null)
+	const [selected, setSelected] = useState<BufferedEvent | null>(null)
 
 	// Ref so the streaming loop can read the pause flag without
 	// re-subscribing every time the user clicks.
 	const pausedRef = useRef(paused)
 	pausedRef.current = paused
+
+	// Monotonic counter for stable React keys. Persists across
+	// subscription restarts so a "Clear" + new burst doesn't collide
+	// with old ids the React reconciler is still cleaning up.
+	const idRef = useRef(0)
 
 	// Stable filter signature so the subscription only restarts on
 	// real changes — typing into a free-text input doesn't fire on
@@ -106,8 +131,9 @@ export function RpcMonitor() {
 					{ signal: controller.signal },
 				)) {
 					if (pausedRef.current) continue
+					const id = idRef.current++
 					setEvents((prev) => {
-						const next = [ev, ...prev]
+						const next = [{ id, event: ev }, ...prev]
 						return next.length > CLIENT_BUFFER_SIZE
 							? next.slice(0, CLIENT_BUFFER_SIZE)
 							: next
@@ -140,6 +166,15 @@ export function RpcMonitor() {
 					<div className="flex items-center gap-2">
 						<Badge variant="secondary">{ratePerSec.toFixed(1)} /s</Badge>
 						<Badge variant="outline">{events.length} buffered</Badge>
+						<Button
+							disabled={events.length === 0}
+							onClick={() => setEvents([])}
+							size="sm"
+							variant="outline"
+						>
+							<X className="mr-1 h-3 w-3" />
+							Clear
+						</Button>
 						<Button
 							onClick={() => setPaused((p) => !p)}
 							size="sm"
@@ -183,13 +218,96 @@ export function RpcMonitor() {
 									</TableCell>
 								</TableRow>
 							) : (
-								events.map((ev, i) => <RpcRow event={ev} key={`${ev.timestampUnixMs}-${i}`} />)
+								events.map((be) => (
+									<RpcRow
+										event={be.event}
+										key={be.id}
+										onClick={() => setSelected(be)}
+										selected={selected?.id === be.id}
+									/>
+								))
 							)}
 						</TableBody>
 					</Table>
 				</ScrollArea>
 			</CardContent>
+
+			<Sheet onOpenChange={(open) => !open && setSelected(null)} open={selected !== null}>
+				<SheetContent className="w-[480px] sm:max-w-[480px]">
+					{selected && <EventDetails event={selected.event} />}
+				</SheetContent>
+			</Sheet>
 		</Card>
+	)
+}
+
+// EventDetails renders every captured field for one RPC call as a
+// labelled list. The recorder never captures payloads or headers —
+// what we show here is the full set of fields the middleware logs;
+// there's no hidden detail we're holding back.
+function EventDetails({ event }: { event: RPCCallEvent }) {
+	const ts = new Date(Number(event.timestampUnixMs))
+	const durationMs = Number(event.durationUs) / 1000
+	const totalBytes = Number(event.bytesIn) + Number(event.bytesOut)
+
+	const rows: Array<{ label: string; value: React.ReactNode }> = [
+		{ label: "Time", value: <span className="font-mono">{ts.toISOString()}</span> },
+		{
+			label: "Procedure",
+			value: (
+				<span className="break-all font-mono text-xs">
+					{event.service}.{event.procedure}
+				</span>
+			),
+		},
+		{
+			label: "Caller",
+			value: <span className="font-mono">{event.caller || "anonymous"}</span>,
+		},
+		{
+			label: "Status",
+			value: (
+				<Badge variant={event.status === "ok" ? "secondary" : "destructive"}>
+					{event.status}
+				</Badge>
+			),
+		},
+		{ label: "Stream type", value: event.streamType },
+		{ label: "Duration", value: `${durationMs.toFixed(3)} ms` },
+		{ label: "Bytes in", value: event.bytesIn.toString() },
+		{ label: "Bytes out", value: event.bytesOut.toString() },
+		{ label: "Total bytes", value: formatBytes(totalBytes) },
+	]
+
+	if (event.errMessage) {
+		rows.push({
+			label: "Error",
+			value: (
+				<pre className="whitespace-pre-wrap break-words text-destructive text-xs">
+					{event.errMessage}
+				</pre>
+			),
+		})
+	}
+
+	return (
+		<>
+			<SheetHeader>
+				<SheetTitle>RPC details</SheetTitle>
+				<SheetDescription>
+					Metadata captured by the daemon's HTTP middleware. Payloads and headers are never
+					recorded.
+				</SheetDescription>
+			</SheetHeader>
+			<dl className="mt-4 space-y-3">
+				{rows.map((row) => (
+					<div className="grid grid-cols-[120px_1fr] gap-2" key={row.label}>
+						<dt className="text-muted-foreground text-sm">{row.label}</dt>
+						<dd className="text-sm">{row.value}</dd>
+					</div>
+				))}
+			</dl>
+		</>
 	)
 }
 
@@ -263,7 +381,15 @@ function FilterBar({
 	)
 }
 
-function RpcRow({ event }: { event: RPCCallEvent }) {
+function RpcRow({
+	event,
+	onClick,
+	selected,
+}: {
+	event: RPCCallEvent
+	onClick: () => void
+	selected: boolean
+}) {
 	const t = new Date(Number(event.timestampUnixMs)).toLocaleTimeString(undefined, {
 		hour12: false,
 	})
@@ -276,7 +402,12 @@ function RpcRow({ event }: { event: RPCCallEvent }) {
 	const isErr = event.status !== "ok"
 
 	return (
-		<TableRow className={isErr ? "bg-destructive/5" : ""}>
+		<TableRow
+			className={`cursor-pointer ${isErr ? "bg-destructive/5" : ""} ${
+				selected ? "bg-muted" : ""
+			}`}
+			onClick={onClick}
+		>
 			<TableCell className="font-mono text-xs">{t}</TableCell>
 			<TableCell className="font-mono text-xs">
 				<span className="text-muted-foreground">{event.service}.</span>
@@ -308,12 +439,12 @@ function formatBytes(n: number): string {
 
 // useRate returns an estimated events-per-second rate based on the
 // last K events' timestamps. Live UI signal; not load-bearing.
-function useRate(events: RPCCallEvent[]): number {
+function useRate(events: BufferedEvent[]): number {
 	return useMemo(() => {
 		if (events.length < 2) return 0
 		const recent = events.slice(0, Math.min(50, events.length))
-		const newest = Number(recent[0].timestampUnixMs)
-		const oldest = Number(recent[recent.length - 1].timestampUnixMs)
+		const newest = Number(recent[0].event.timestampUnixMs)
+		const oldest = Number(recent[recent.length - 1].event.timestampUnixMs)
 		const dtMs = newest - oldest
 		if (dtMs <= 0) return 0
 		return (recent.length / dtMs) * 1000
