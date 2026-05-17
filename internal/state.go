@@ -150,6 +150,66 @@ func migrateState(ctx context.Context, db *sql.DB) error {
 		return err
 	}
 
+	if err := migrateAgentStateTables(ctx, db); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// migrateAgentStateTables owns the per-agent persistent state the
+// runtime used to keep in its own per-agent sqlite file. Moving it
+// here lets the daemon serve the operator UI directly (no per-agent
+// gRPC proxy hop) and lets the per-agent FHS stay read-mostly
+// (zero writeable sqlite inside the agent's root once the runtime
+// switches to the daemon-backed store).
+//
+// Both tables are scoped by agent_id; RemoveAgent cascades DELETEs
+// in this file's runtime — see deleteAgent below.
+func migrateAgentStateTables(ctx context.Context, db *sql.DB) error {
+	stmts := []string{
+		// agent_messages — chat history + branches, replacing the
+		// runtime's per-agent messages table. id is daemon-owned
+		// AUTOINCREMENT so messages are globally orderable; the
+		// composite lookup index by (agent_id, session_id, id) drives
+		// every GetMessages / ListMessages read.
+		`CREATE TABLE IF NOT EXISTS agent_messages (
+			id            INTEGER PRIMARY KEY AUTOINCREMENT,
+			agent_id      TEXT NOT NULL,
+			session_id    TEXT NOT NULL,
+			role          TEXT NOT NULL,
+			content       TEXT NOT NULL,
+			branches_json TEXT NOT NULL DEFAULT '[]',
+			active_branch INTEGER NOT NULL DEFAULT 0,
+			created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_agent_messages_lookup
+			ON agent_messages(agent_id, session_id, id)`,
+
+		// agent_notes — the per-agent durable KV. Primary key is
+		// (agent_id, key) so a key is unique per agent but reusable
+		// across agents (every agent gets its own "k8s-cluster"
+		// note independent of another's).
+		`CREATE TABLE IF NOT EXISTS agent_notes (
+			agent_id   TEXT NOT NULL,
+			key        TEXT NOT NULL,
+			content    TEXT NOT NULL,
+			preview    TEXT NOT NULL DEFAULT '',
+			in_context INTEGER NOT NULL DEFAULT 0,
+			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+			updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+			PRIMARY KEY (agent_id, key)
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_agent_notes_updated
+			ON agent_notes(agent_id, updated_at DESC)`,
+		`CREATE INDEX IF NOT EXISTS idx_agent_notes_in_context
+			ON agent_notes(agent_id, in_context) WHERE in_context = 1`,
+	}
+	for _, s := range stmts {
+		if _, err := db.ExecContext(ctx, s); err != nil {
+			return fmt.Errorf("agent state schema: %w", err)
+		}
+	}
 	return nil
 }
 
@@ -545,6 +605,22 @@ func (s *StateStore) SaveAgent(ctx context.Context, a persistedAgent) error {
 }
 
 func (s *StateStore) RemoveAgent(ctx context.Context, id string) error {
+	// Cascade the agent's persistent state (messages + notes) so
+	// agent_id collisions can't surface stale rows under a new
+	// UUID. Best-effort: log-and-continue on the secondary deletes;
+	// the primary DELETE FROM agents is the source of truth for
+	// "agent exists".
+	if _, err := s.db.ExecContext(ctx,
+		"DELETE FROM agent_messages WHERE agent_id = ?", id,
+	); err != nil {
+		return fmt.Errorf("cascade agent_messages: %w", err)
+	}
+	if _, err := s.db.ExecContext(ctx,
+		"DELETE FROM agent_notes WHERE agent_id = ?", id,
+	); err != nil {
+		return fmt.Errorf("cascade agent_notes: %w", err)
+	}
+
 	_, err := s.db.ExecContext(ctx,
 		"DELETE FROM agents WHERE id = ?", id,
 	)
