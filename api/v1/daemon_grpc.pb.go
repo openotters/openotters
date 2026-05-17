@@ -1585,3 +1585,605 @@ var Runtime_ServiceDesc = grpc.ServiceDesc{
 	},
 	Metadata: "v1/daemon.proto",
 }
+
+const (
+	AgentState_ListMessages_FullMethodName          = "/openotters.daemon.v1.AgentState/ListMessages"
+	AgentState_AppendMessage_FullMethodName         = "/openotters.daemon.v1.AgentState/AppendMessage"
+	AgentState_ReplaceMessages_FullMethodName       = "/openotters.daemon.v1.AgentState/ReplaceMessages"
+	AgentState_UpdateMessageBranches_FullMethodName = "/openotters.daemon.v1.AgentState/UpdateMessageBranches"
+	AgentState_LastAssistantMessage_FullMethodName  = "/openotters.daemon.v1.AgentState/LastAssistantMessage"
+	AgentState_CountMessages_FullMethodName         = "/openotters.daemon.v1.AgentState/CountMessages"
+	AgentState_ListSessions_FullMethodName          = "/openotters.daemon.v1.AgentState/ListSessions"
+	AgentState_DeleteSession_FullMethodName         = "/openotters.daemon.v1.AgentState/DeleteSession"
+	AgentState_ListNotes_FullMethodName             = "/openotters.daemon.v1.AgentState/ListNotes"
+	AgentState_GetNote_FullMethodName               = "/openotters.daemon.v1.AgentState/GetNote"
+	AgentState_SaveNote_FullMethodName              = "/openotters.daemon.v1.AgentState/SaveNote"
+	AgentState_DeleteNote_FullMethodName            = "/openotters.daemon.v1.AgentState/DeleteNote"
+	AgentState_SetNoteInContext_FullMethodName      = "/openotters.daemon.v1.AgentState/SetNoteInContext"
+	AgentState_CountNotes_FullMethodName            = "/openotters.daemon.v1.AgentState/CountNotes"
+)
+
+// AgentStateClient is the client API for AgentState service.
+//
+// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
+type AgentStateClient interface {
+	// Messages — chat history + branches.
+	ListMessages(ctx context.Context, in *StateListMessagesRequest, opts ...grpc.CallOption) (*StateListMessagesResponse, error)
+	AppendMessage(ctx context.Context, in *StateAppendMessageRequest, opts ...grpc.CallOption) (*StateAppendMessageResponse, error)
+	ReplaceMessages(ctx context.Context, in *StateReplaceMessagesRequest, opts ...grpc.CallOption) (*StateReplaceMessagesResponse, error)
+	UpdateMessageBranches(ctx context.Context, in *StateUpdateBranchesRequest, opts ...grpc.CallOption) (*StateUpdateBranchesResponse, error)
+	LastAssistantMessage(ctx context.Context, in *StateLastAssistantRequest, opts ...grpc.CallOption) (*StateLastAssistantResponse, error)
+	CountMessages(ctx context.Context, in *StateCountMessagesRequest, opts ...grpc.CallOption) (*StateCountMessagesResponse, error)
+	// Sessions — derived from messages (no separate table).
+	ListSessions(ctx context.Context, in *StateListSessionsRequest, opts ...grpc.CallOption) (*StateListSessionsResponse, error)
+	DeleteSession(ctx context.Context, in *StateDeleteSessionRequest, opts ...grpc.CallOption) (*StateDeleteSessionResponse, error)
+	// Notes — the per-agent KV.
+	ListNotes(ctx context.Context, in *StateListNotesRequest, opts ...grpc.CallOption) (*StateListNotesResponse, error)
+	GetNote(ctx context.Context, in *StateGetNoteRequest, opts ...grpc.CallOption) (*StateGetNoteResponse, error)
+	SaveNote(ctx context.Context, in *StateSaveNoteRequest, opts ...grpc.CallOption) (*StateSaveNoteResponse, error)
+	DeleteNote(ctx context.Context, in *StateDeleteNoteRequest, opts ...grpc.CallOption) (*StateDeleteNoteResponse, error)
+	SetNoteInContext(ctx context.Context, in *StateSetNoteInContextRequest, opts ...grpc.CallOption) (*StateSetNoteInContextResponse, error)
+	CountNotes(ctx context.Context, in *StateCountNotesRequest, opts ...grpc.CallOption) (*StateCountNotesResponse, error)
+}
+
+type agentStateClient struct {
+	cc grpc.ClientConnInterface
+}
+
+func NewAgentStateClient(cc grpc.ClientConnInterface) AgentStateClient {
+	return &agentStateClient{cc}
+}
+
+func (c *agentStateClient) ListMessages(ctx context.Context, in *StateListMessagesRequest, opts ...grpc.CallOption) (*StateListMessagesResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(StateListMessagesResponse)
+	err := c.cc.Invoke(ctx, AgentState_ListMessages_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *agentStateClient) AppendMessage(ctx context.Context, in *StateAppendMessageRequest, opts ...grpc.CallOption) (*StateAppendMessageResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(StateAppendMessageResponse)
+	err := c.cc.Invoke(ctx, AgentState_AppendMessage_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *agentStateClient) ReplaceMessages(ctx context.Context, in *StateReplaceMessagesRequest, opts ...grpc.CallOption) (*StateReplaceMessagesResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(StateReplaceMessagesResponse)
+	err := c.cc.Invoke(ctx, AgentState_ReplaceMessages_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *agentStateClient) UpdateMessageBranches(ctx context.Context, in *StateUpdateBranchesRequest, opts ...grpc.CallOption) (*StateUpdateBranchesResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(StateUpdateBranchesResponse)
+	err := c.cc.Invoke(ctx, AgentState_UpdateMessageBranches_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *agentStateClient) LastAssistantMessage(ctx context.Context, in *StateLastAssistantRequest, opts ...grpc.CallOption) (*StateLastAssistantResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(StateLastAssistantResponse)
+	err := c.cc.Invoke(ctx, AgentState_LastAssistantMessage_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *agentStateClient) CountMessages(ctx context.Context, in *StateCountMessagesRequest, opts ...grpc.CallOption) (*StateCountMessagesResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(StateCountMessagesResponse)
+	err := c.cc.Invoke(ctx, AgentState_CountMessages_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *agentStateClient) ListSessions(ctx context.Context, in *StateListSessionsRequest, opts ...grpc.CallOption) (*StateListSessionsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(StateListSessionsResponse)
+	err := c.cc.Invoke(ctx, AgentState_ListSessions_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *agentStateClient) DeleteSession(ctx context.Context, in *StateDeleteSessionRequest, opts ...grpc.CallOption) (*StateDeleteSessionResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(StateDeleteSessionResponse)
+	err := c.cc.Invoke(ctx, AgentState_DeleteSession_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *agentStateClient) ListNotes(ctx context.Context, in *StateListNotesRequest, opts ...grpc.CallOption) (*StateListNotesResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(StateListNotesResponse)
+	err := c.cc.Invoke(ctx, AgentState_ListNotes_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *agentStateClient) GetNote(ctx context.Context, in *StateGetNoteRequest, opts ...grpc.CallOption) (*StateGetNoteResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(StateGetNoteResponse)
+	err := c.cc.Invoke(ctx, AgentState_GetNote_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *agentStateClient) SaveNote(ctx context.Context, in *StateSaveNoteRequest, opts ...grpc.CallOption) (*StateSaveNoteResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(StateSaveNoteResponse)
+	err := c.cc.Invoke(ctx, AgentState_SaveNote_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *agentStateClient) DeleteNote(ctx context.Context, in *StateDeleteNoteRequest, opts ...grpc.CallOption) (*StateDeleteNoteResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(StateDeleteNoteResponse)
+	err := c.cc.Invoke(ctx, AgentState_DeleteNote_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *agentStateClient) SetNoteInContext(ctx context.Context, in *StateSetNoteInContextRequest, opts ...grpc.CallOption) (*StateSetNoteInContextResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(StateSetNoteInContextResponse)
+	err := c.cc.Invoke(ctx, AgentState_SetNoteInContext_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *agentStateClient) CountNotes(ctx context.Context, in *StateCountNotesRequest, opts ...grpc.CallOption) (*StateCountNotesResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(StateCountNotesResponse)
+	err := c.cc.Invoke(ctx, AgentState_CountNotes_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// AgentStateServer is the server API for AgentState service.
+// All implementations must embed UnimplementedAgentStateServer
+// for forward compatibility.
+type AgentStateServer interface {
+	// Messages — chat history + branches.
+	ListMessages(context.Context, *StateListMessagesRequest) (*StateListMessagesResponse, error)
+	AppendMessage(context.Context, *StateAppendMessageRequest) (*StateAppendMessageResponse, error)
+	ReplaceMessages(context.Context, *StateReplaceMessagesRequest) (*StateReplaceMessagesResponse, error)
+	UpdateMessageBranches(context.Context, *StateUpdateBranchesRequest) (*StateUpdateBranchesResponse, error)
+	LastAssistantMessage(context.Context, *StateLastAssistantRequest) (*StateLastAssistantResponse, error)
+	CountMessages(context.Context, *StateCountMessagesRequest) (*StateCountMessagesResponse, error)
+	// Sessions — derived from messages (no separate table).
+	ListSessions(context.Context, *StateListSessionsRequest) (*StateListSessionsResponse, error)
+	DeleteSession(context.Context, *StateDeleteSessionRequest) (*StateDeleteSessionResponse, error)
+	// Notes — the per-agent KV.
+	ListNotes(context.Context, *StateListNotesRequest) (*StateListNotesResponse, error)
+	GetNote(context.Context, *StateGetNoteRequest) (*StateGetNoteResponse, error)
+	SaveNote(context.Context, *StateSaveNoteRequest) (*StateSaveNoteResponse, error)
+	DeleteNote(context.Context, *StateDeleteNoteRequest) (*StateDeleteNoteResponse, error)
+	SetNoteInContext(context.Context, *StateSetNoteInContextRequest) (*StateSetNoteInContextResponse, error)
+	CountNotes(context.Context, *StateCountNotesRequest) (*StateCountNotesResponse, error)
+	mustEmbedUnimplementedAgentStateServer()
+}
+
+// UnimplementedAgentStateServer must be embedded to have
+// forward compatible implementations.
+//
+// NOTE: this should be embedded by value instead of pointer to avoid a nil
+// pointer dereference when methods are called.
+type UnimplementedAgentStateServer struct{}
+
+func (UnimplementedAgentStateServer) ListMessages(context.Context, *StateListMessagesRequest) (*StateListMessagesResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListMessages not implemented")
+}
+func (UnimplementedAgentStateServer) AppendMessage(context.Context, *StateAppendMessageRequest) (*StateAppendMessageResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method AppendMessage not implemented")
+}
+func (UnimplementedAgentStateServer) ReplaceMessages(context.Context, *StateReplaceMessagesRequest) (*StateReplaceMessagesResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ReplaceMessages not implemented")
+}
+func (UnimplementedAgentStateServer) UpdateMessageBranches(context.Context, *StateUpdateBranchesRequest) (*StateUpdateBranchesResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method UpdateMessageBranches not implemented")
+}
+func (UnimplementedAgentStateServer) LastAssistantMessage(context.Context, *StateLastAssistantRequest) (*StateLastAssistantResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method LastAssistantMessage not implemented")
+}
+func (UnimplementedAgentStateServer) CountMessages(context.Context, *StateCountMessagesRequest) (*StateCountMessagesResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method CountMessages not implemented")
+}
+func (UnimplementedAgentStateServer) ListSessions(context.Context, *StateListSessionsRequest) (*StateListSessionsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListSessions not implemented")
+}
+func (UnimplementedAgentStateServer) DeleteSession(context.Context, *StateDeleteSessionRequest) (*StateDeleteSessionResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method DeleteSession not implemented")
+}
+func (UnimplementedAgentStateServer) ListNotes(context.Context, *StateListNotesRequest) (*StateListNotesResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListNotes not implemented")
+}
+func (UnimplementedAgentStateServer) GetNote(context.Context, *StateGetNoteRequest) (*StateGetNoteResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetNote not implemented")
+}
+func (UnimplementedAgentStateServer) SaveNote(context.Context, *StateSaveNoteRequest) (*StateSaveNoteResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method SaveNote not implemented")
+}
+func (UnimplementedAgentStateServer) DeleteNote(context.Context, *StateDeleteNoteRequest) (*StateDeleteNoteResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method DeleteNote not implemented")
+}
+func (UnimplementedAgentStateServer) SetNoteInContext(context.Context, *StateSetNoteInContextRequest) (*StateSetNoteInContextResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method SetNoteInContext not implemented")
+}
+func (UnimplementedAgentStateServer) CountNotes(context.Context, *StateCountNotesRequest) (*StateCountNotesResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method CountNotes not implemented")
+}
+func (UnimplementedAgentStateServer) mustEmbedUnimplementedAgentStateServer() {}
+func (UnimplementedAgentStateServer) testEmbeddedByValue()                    {}
+
+// UnsafeAgentStateServer may be embedded to opt out of forward compatibility for this service.
+// Use of this interface is not recommended, as added methods to AgentStateServer will
+// result in compilation errors.
+type UnsafeAgentStateServer interface {
+	mustEmbedUnimplementedAgentStateServer()
+}
+
+func RegisterAgentStateServer(s grpc.ServiceRegistrar, srv AgentStateServer) {
+	// If the following call panics, it indicates UnimplementedAgentStateServer was
+	// embedded by pointer and is nil.  This will cause panics if an
+	// unimplemented method is ever invoked, so we test this at initialization
+	// time to prevent it from happening at runtime later due to I/O.
+	if t, ok := srv.(interface{ testEmbeddedByValue() }); ok {
+		t.testEmbeddedByValue()
+	}
+	s.RegisterService(&AgentState_ServiceDesc, srv)
+}
+
+func _AgentState_ListMessages_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(StateListMessagesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AgentStateServer).ListMessages(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AgentState_ListMessages_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AgentStateServer).ListMessages(ctx, req.(*StateListMessagesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AgentState_AppendMessage_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(StateAppendMessageRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AgentStateServer).AppendMessage(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AgentState_AppendMessage_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AgentStateServer).AppendMessage(ctx, req.(*StateAppendMessageRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AgentState_ReplaceMessages_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(StateReplaceMessagesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AgentStateServer).ReplaceMessages(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AgentState_ReplaceMessages_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AgentStateServer).ReplaceMessages(ctx, req.(*StateReplaceMessagesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AgentState_UpdateMessageBranches_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(StateUpdateBranchesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AgentStateServer).UpdateMessageBranches(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AgentState_UpdateMessageBranches_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AgentStateServer).UpdateMessageBranches(ctx, req.(*StateUpdateBranchesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AgentState_LastAssistantMessage_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(StateLastAssistantRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AgentStateServer).LastAssistantMessage(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AgentState_LastAssistantMessage_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AgentStateServer).LastAssistantMessage(ctx, req.(*StateLastAssistantRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AgentState_CountMessages_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(StateCountMessagesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AgentStateServer).CountMessages(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AgentState_CountMessages_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AgentStateServer).CountMessages(ctx, req.(*StateCountMessagesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AgentState_ListSessions_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(StateListSessionsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AgentStateServer).ListSessions(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AgentState_ListSessions_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AgentStateServer).ListSessions(ctx, req.(*StateListSessionsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AgentState_DeleteSession_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(StateDeleteSessionRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AgentStateServer).DeleteSession(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AgentState_DeleteSession_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AgentStateServer).DeleteSession(ctx, req.(*StateDeleteSessionRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AgentState_ListNotes_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(StateListNotesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AgentStateServer).ListNotes(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AgentState_ListNotes_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AgentStateServer).ListNotes(ctx, req.(*StateListNotesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AgentState_GetNote_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(StateGetNoteRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AgentStateServer).GetNote(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AgentState_GetNote_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AgentStateServer).GetNote(ctx, req.(*StateGetNoteRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AgentState_SaveNote_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(StateSaveNoteRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AgentStateServer).SaveNote(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AgentState_SaveNote_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AgentStateServer).SaveNote(ctx, req.(*StateSaveNoteRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AgentState_DeleteNote_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(StateDeleteNoteRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AgentStateServer).DeleteNote(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AgentState_DeleteNote_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AgentStateServer).DeleteNote(ctx, req.(*StateDeleteNoteRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AgentState_SetNoteInContext_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(StateSetNoteInContextRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AgentStateServer).SetNoteInContext(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AgentState_SetNoteInContext_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AgentStateServer).SetNoteInContext(ctx, req.(*StateSetNoteInContextRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AgentState_CountNotes_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(StateCountNotesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AgentStateServer).CountNotes(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AgentState_CountNotes_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AgentStateServer).CountNotes(ctx, req.(*StateCountNotesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+// AgentState_ServiceDesc is the grpc.ServiceDesc for AgentState service.
+// It's only intended for direct use with grpc.RegisterService,
+// and not to be introspected or modified (even as a copy)
+var AgentState_ServiceDesc = grpc.ServiceDesc{
+	ServiceName: "openotters.daemon.v1.AgentState",
+	HandlerType: (*AgentStateServer)(nil),
+	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "ListMessages",
+			Handler:    _AgentState_ListMessages_Handler,
+		},
+		{
+			MethodName: "AppendMessage",
+			Handler:    _AgentState_AppendMessage_Handler,
+		},
+		{
+			MethodName: "ReplaceMessages",
+			Handler:    _AgentState_ReplaceMessages_Handler,
+		},
+		{
+			MethodName: "UpdateMessageBranches",
+			Handler:    _AgentState_UpdateMessageBranches_Handler,
+		},
+		{
+			MethodName: "LastAssistantMessage",
+			Handler:    _AgentState_LastAssistantMessage_Handler,
+		},
+		{
+			MethodName: "CountMessages",
+			Handler:    _AgentState_CountMessages_Handler,
+		},
+		{
+			MethodName: "ListSessions",
+			Handler:    _AgentState_ListSessions_Handler,
+		},
+		{
+			MethodName: "DeleteSession",
+			Handler:    _AgentState_DeleteSession_Handler,
+		},
+		{
+			MethodName: "ListNotes",
+			Handler:    _AgentState_ListNotes_Handler,
+		},
+		{
+			MethodName: "GetNote",
+			Handler:    _AgentState_GetNote_Handler,
+		},
+		{
+			MethodName: "SaveNote",
+			Handler:    _AgentState_SaveNote_Handler,
+		},
+		{
+			MethodName: "DeleteNote",
+			Handler:    _AgentState_DeleteNote_Handler,
+		},
+		{
+			MethodName: "SetNoteInContext",
+			Handler:    _AgentState_SetNoteInContext_Handler,
+		},
+		{
+			MethodName: "CountNotes",
+			Handler:    _AgentState_CountNotes_Handler,
+		},
+	},
+	Streams:  []grpc.StreamDesc{},
+	Metadata: "v1/daemon.proto",
+}

@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"connectrpc.com/connect"
 	"github.com/merlindorin/go-shared/pkg/cmd"
 	"go.uber.org/zap"
 	"golang.org/x/net/http2"
@@ -196,10 +197,21 @@ func (d *Serve) Run(ctx context.Context, common *cmd.Commons, sqlite *cmd.SQLite
 		internal.NewRuntimeHandler(dm, providers),
 	)
 
+	// AgentState — the per-agent persistent store the runtime calls
+	// over the same authenticated TCP endpoint as the job-callback
+	// tools. AgentScopedInterceptor pins agent_id from the JWT
+	// claim; without it, the handler would have to trust a request
+	// field. Operator tokens are rejected at the interceptor.
+	agentStatePath, agentStateHandler := daemonv1connect.NewAgentStateHandler(
+		internal.NewAgentStateHandler(state),
+		connect.WithInterceptors(auth.NewAgentScopedInterceptor()),
+	)
+
 	// Unix-socket mux: API only. The CLI never asks for `/`, so we
 	// keep the UI handler off this transport.
 	apiMux := http.NewServeMux()
 	apiMux.Handle(connectPath, connectHandler)
+	apiMux.Handle(agentStatePath, agentStateHandler)
 
 	// JWT auth is enforced on EVERY listener — including the unix
 	// socket. The agent's runtime reaches the daemon through the
@@ -255,7 +267,12 @@ func (d *Serve) Run(ctx context.Context, common *cmd.Commons, sqlite *cmd.SQLite
 	var tcpSrv *http.Server
 
 	if !d.NoHTTP && d.HTTPAddr != "" {
-		srv, startErr := d.startTCPListener(ctx, logger, connectPath, connectHandler, jwtIcp, signingKey, dm.Recorder())
+		srv, startErr := d.startTCPListener(
+			ctx, logger,
+			connectPath, connectHandler,
+			agentStatePath, agentStateHandler,
+			jwtIcp, signingKey, dm.Recorder(),
+		)
 		if startErr != nil {
 			return startErr
 		}
@@ -304,6 +321,8 @@ func (d *Serve) startTCPListener(
 	logger *zap.Logger,
 	connectPath string,
 	connectHandler http.Handler,
+	agentStatePath string,
+	agentStateHandler http.Handler,
 	jwtIcp *auth.JWTInterceptor,
 	signingKey []byte,
 	recorder *observability.Recorder,
@@ -342,6 +361,13 @@ func (d *Serve) startTCPListener(
 	apiInner := autoBearer(opTok, jwtIcp.Wrap(connectHandler))
 	apiAlias := autoBearer(opTok, jwtIcp.Wrap(http.StripPrefix("/api", connectHandler)))
 
+	// AgentState mounts: same auth chain as Runtime, plus the
+	// Connect AgentScoped interceptor (already applied inside the
+	// handler factory) which rejects operator tokens at the
+	// per-RPC layer.
+	agentStateInner := autoBearer(opTok, jwtIcp.Wrap(agentStateHandler))
+	agentStateAlias := autoBearer(opTok, jwtIcp.Wrap(http.StripPrefix("/api", agentStateHandler)))
+
 	// Wrap the API mounts with the recorder middleware (outside
 	// auth) so the RPC monitor sees every call hitting this
 	// listener. The UI handler at "/" stays unrecorded — static
@@ -350,6 +376,8 @@ func (d *Serve) startTCPListener(
 		recorderMw := observability.NewMiddleware(recorder)
 		apiInner = recorderMw.Wrap(apiInner)
 		apiAlias = recorderMw.Wrap(apiAlias)
+		agentStateInner = recorderMw.Wrap(agentStateInner)
+		agentStateAlias = recorderMw.Wrap(agentStateAlias)
 	}
 
 	// Same h2c-vs-jwt ordering rule as the unix listener: jwt INSIDE
@@ -357,6 +385,8 @@ func (d *Serve) startTCPListener(
 	// touches headers.
 	tcpMux.Handle(connectPath, apiInner)
 	tcpMux.Handle("/api"+connectPath, apiAlias)
+	tcpMux.Handle(agentStatePath, agentStateInner)
+	tcpMux.Handle("/api"+agentStatePath, agentStateAlias)
 
 	if !d.NoUI {
 		tcpMux.Handle("/", webui.Handler(d.UIPath))

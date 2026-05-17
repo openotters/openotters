@@ -726,3 +726,173 @@ message StreamRPCCallsRequest {
   // live. Clamped to ring capacity.
   int32  replay_recent     = 7;
 }
+
+// ── AgentState service ───────────────────────────────────────────
+// Called only by per-agent runtimes via the same JWT they use for
+// the job-tool callback. Every RPC is scoped server-side to the
+// JWT's agent_ref claim — no request carries an agent_id field, so
+// a compromised agent can't read or mutate another agent's state.
+//
+// The runtime's pkg/memory.Store and pkg/notes.Store interfaces
+// move from local sqlite (per-agent FHS) to daemon-backed gRPC.
+// This service is the wire image of those two stores combined.
+
+service AgentState {
+  // Messages — chat history + branches.
+  rpc ListMessages(StateListMessagesRequest)         returns (StateListMessagesResponse);
+  rpc AppendMessage(StateAppendMessageRequest)       returns (StateAppendMessageResponse);
+  rpc ReplaceMessages(StateReplaceMessagesRequest)   returns (StateReplaceMessagesResponse);
+  rpc UpdateMessageBranches(StateUpdateBranchesRequest) returns (StateUpdateBranchesResponse);
+  rpc LastAssistantMessage(StateLastAssistantRequest) returns (StateLastAssistantResponse);
+  rpc CountMessages(StateCountMessagesRequest)       returns (StateCountMessagesResponse);
+
+  // Sessions — derived from messages (no separate table).
+  rpc ListSessions(StateListSessionsRequest)         returns (StateListSessionsResponse);
+  rpc DeleteSession(StateDeleteSessionRequest)       returns (StateDeleteSessionResponse);
+
+  // Notes — the per-agent KV.
+  rpc ListNotes(StateListNotesRequest)               returns (StateListNotesResponse);
+  rpc GetNote(StateGetNoteRequest)                   returns (StateGetNoteResponse);
+  rpc SaveNote(StateSaveNoteRequest)                 returns (StateSaveNoteResponse);
+  rpc DeleteNote(StateDeleteNoteRequest)             returns (StateDeleteNoteResponse);
+  rpc SetNoteInContext(StateSetNoteInContextRequest) returns (StateSetNoteInContextResponse);
+  rpc CountNotes(StateCountNotesRequest)             returns (StateCountNotesResponse);
+}
+
+// MessageRow is the wire form of one row in agent_messages. The
+// runtime hydrates `content` + `branches_json` into typed fantasy
+// parts; the daemon never inspects them.
+message MessageRow {
+  int64  id            = 1;
+  string session_id    = 2;
+  string role          = 3;
+  string content       = 4;
+  string branches_json = 5;
+  int32  active_branch = 6;
+  int64  created_unix  = 7;
+}
+
+message StateListMessagesRequest {
+  string session_id = 1;
+  // 0 = server default (matches the runtime's existing LIMIT 50).
+  int32  limit      = 2;
+}
+message StateListMessagesResponse {
+  repeated MessageRow messages = 1;
+}
+
+message StateAppendMessageRequest {
+  string session_id = 1;
+  string role       = 2;
+  string content    = 3;
+}
+message StateAppendMessageResponse {
+  int64 id = 1;
+}
+
+message StateReplaceMessagesRequest {
+  string session_id = 1;
+  // Compactor calls this with the full survivor set after a
+  // summarise / slide. Server replaces all rows for the session
+  // atomically; the previous order is lost.
+  repeated MessageRow messages = 2;
+}
+message StateReplaceMessagesResponse {}
+
+message StateUpdateBranchesRequest {
+  int64  id            = 1;
+  string content       = 2;
+  string branches_json = 3;
+  int32  active_branch = 4;
+}
+message StateUpdateBranchesResponse {}
+
+message StateLastAssistantRequest {
+  string session_id = 1;
+}
+message StateLastAssistantResponse {
+  // Present when the session has at least one assistant turn.
+  MessageRow message = 1;
+  bool       found   = 2;
+}
+
+message StateCountMessagesRequest {
+  string session_id = 1;
+}
+message StateCountMessagesResponse {
+  int32 count = 1;
+}
+
+message StateSessionInfo {
+  string id            = 1;
+  int32  message_count = 2;
+  int64  last_active   = 3; // unix seconds
+}
+
+message StateListSessionsRequest {}
+message StateListSessionsResponse {
+  repeated StateSessionInfo sessions = 1;
+}
+
+message StateDeleteSessionRequest {
+  string session_id = 1;
+}
+message StateDeleteSessionResponse {}
+
+// NoteRow mirrors notes.Note. Content is omitted in ListNotes
+// responses to keep payloads small (callers issue GetNote for
+// bodies).
+message NoteRow {
+  string key        = 1;
+  string content    = 2;
+  string preview    = 3;
+  bool   in_context = 4;
+  int64  created_unix = 5;
+  int64  updated_unix = 6;
+}
+
+message StateListNotesRequest {
+  bool only_in_context = 1;
+}
+message StateListNotesResponse {
+  repeated NoteRow notes = 1;
+}
+
+message StateGetNoteRequest {
+  string key = 1;
+}
+message StateGetNoteResponse {
+  NoteRow note = 1;
+}
+
+message StateSaveNoteRequest {
+  string key       = 1;
+  string content   = 2;
+  // Quotas mirror the runtime's Save signature. 0 = no cap.
+  int32  max_bytes = 3;
+  int32  max_count = 4;
+}
+message StateSaveNoteResponse {
+  NoteRow note      = 1;
+  bool    overwrote = 2;
+}
+
+message StateDeleteNoteRequest {
+  string key = 1;
+}
+message StateDeleteNoteResponse {
+  bool existed = 1;
+}
+
+message StateSetNoteInContextRequest {
+  string key        = 1;
+  bool   in_context = 2;
+}
+message StateSetNoteInContextResponse {
+  NoteRow note = 1;
+}
+
+message StateCountNotesRequest {}
+message StateCountNotesResponse {
+  int32 count = 1;
+}

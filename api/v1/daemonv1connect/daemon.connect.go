@@ -23,6 +23,8 @@ const _ = connect.IsAtLeastVersion1_13_0
 const (
 	// RuntimeName is the fully-qualified name of the Runtime service.
 	RuntimeName = "openotters.daemon.v1.Runtime"
+	// AgentStateName is the fully-qualified name of the AgentState service.
+	AgentStateName = "openotters.daemon.v1.AgentState"
 )
 
 // These constants are the fully-qualified names of the RPCs defined in this package. They're
@@ -112,6 +114,41 @@ const (
 	RuntimeStreamRPCCallsProcedure = "/openotters.daemon.v1.Runtime/StreamRPCCalls"
 	// RuntimeWatchAsyncJobProcedure is the fully-qualified name of the Runtime's WatchAsyncJob RPC.
 	RuntimeWatchAsyncJobProcedure = "/openotters.daemon.v1.Runtime/WatchAsyncJob"
+	// AgentStateListMessagesProcedure is the fully-qualified name of the AgentState's ListMessages RPC.
+	AgentStateListMessagesProcedure = "/openotters.daemon.v1.AgentState/ListMessages"
+	// AgentStateAppendMessageProcedure is the fully-qualified name of the AgentState's AppendMessage
+	// RPC.
+	AgentStateAppendMessageProcedure = "/openotters.daemon.v1.AgentState/AppendMessage"
+	// AgentStateReplaceMessagesProcedure is the fully-qualified name of the AgentState's
+	// ReplaceMessages RPC.
+	AgentStateReplaceMessagesProcedure = "/openotters.daemon.v1.AgentState/ReplaceMessages"
+	// AgentStateUpdateMessageBranchesProcedure is the fully-qualified name of the AgentState's
+	// UpdateMessageBranches RPC.
+	AgentStateUpdateMessageBranchesProcedure = "/openotters.daemon.v1.AgentState/UpdateMessageBranches"
+	// AgentStateLastAssistantMessageProcedure is the fully-qualified name of the AgentState's
+	// LastAssistantMessage RPC.
+	AgentStateLastAssistantMessageProcedure = "/openotters.daemon.v1.AgentState/LastAssistantMessage"
+	// AgentStateCountMessagesProcedure is the fully-qualified name of the AgentState's CountMessages
+	// RPC.
+	AgentStateCountMessagesProcedure = "/openotters.daemon.v1.AgentState/CountMessages"
+	// AgentStateListSessionsProcedure is the fully-qualified name of the AgentState's ListSessions RPC.
+	AgentStateListSessionsProcedure = "/openotters.daemon.v1.AgentState/ListSessions"
+	// AgentStateDeleteSessionProcedure is the fully-qualified name of the AgentState's DeleteSession
+	// RPC.
+	AgentStateDeleteSessionProcedure = "/openotters.daemon.v1.AgentState/DeleteSession"
+	// AgentStateListNotesProcedure is the fully-qualified name of the AgentState's ListNotes RPC.
+	AgentStateListNotesProcedure = "/openotters.daemon.v1.AgentState/ListNotes"
+	// AgentStateGetNoteProcedure is the fully-qualified name of the AgentState's GetNote RPC.
+	AgentStateGetNoteProcedure = "/openotters.daemon.v1.AgentState/GetNote"
+	// AgentStateSaveNoteProcedure is the fully-qualified name of the AgentState's SaveNote RPC.
+	AgentStateSaveNoteProcedure = "/openotters.daemon.v1.AgentState/SaveNote"
+	// AgentStateDeleteNoteProcedure is the fully-qualified name of the AgentState's DeleteNote RPC.
+	AgentStateDeleteNoteProcedure = "/openotters.daemon.v1.AgentState/DeleteNote"
+	// AgentStateSetNoteInContextProcedure is the fully-qualified name of the AgentState's
+	// SetNoteInContext RPC.
+	AgentStateSetNoteInContextProcedure = "/openotters.daemon.v1.AgentState/SetNoteInContext"
+	// AgentStateCountNotesProcedure is the fully-qualified name of the AgentState's CountNotes RPC.
+	AgentStateCountNotesProcedure = "/openotters.daemon.v1.AgentState/CountNotes"
 )
 
 // RuntimeClient is a client for the openotters.daemon.v1.Runtime service.
@@ -1194,4 +1231,418 @@ func (UnimplementedRuntimeHandler) StreamRPCCalls(context.Context, *connect.Requ
 
 func (UnimplementedRuntimeHandler) WatchAsyncJob(context.Context, *connect.Request[v1.WatchAsyncJobRequest], *connect.ServerStream[v1.WatchAsyncJobResponse]) error {
 	return connect.NewError(connect.CodeUnimplemented, errors.New("openotters.daemon.v1.Runtime.WatchAsyncJob is not implemented"))
+}
+
+// AgentStateClient is a client for the openotters.daemon.v1.AgentState service.
+type AgentStateClient interface {
+	// Messages — chat history + branches.
+	ListMessages(context.Context, *connect.Request[v1.StateListMessagesRequest]) (*connect.Response[v1.StateListMessagesResponse], error)
+	AppendMessage(context.Context, *connect.Request[v1.StateAppendMessageRequest]) (*connect.Response[v1.StateAppendMessageResponse], error)
+	ReplaceMessages(context.Context, *connect.Request[v1.StateReplaceMessagesRequest]) (*connect.Response[v1.StateReplaceMessagesResponse], error)
+	UpdateMessageBranches(context.Context, *connect.Request[v1.StateUpdateBranchesRequest]) (*connect.Response[v1.StateUpdateBranchesResponse], error)
+	LastAssistantMessage(context.Context, *connect.Request[v1.StateLastAssistantRequest]) (*connect.Response[v1.StateLastAssistantResponse], error)
+	CountMessages(context.Context, *connect.Request[v1.StateCountMessagesRequest]) (*connect.Response[v1.StateCountMessagesResponse], error)
+	// Sessions — derived from messages (no separate table).
+	ListSessions(context.Context, *connect.Request[v1.StateListSessionsRequest]) (*connect.Response[v1.StateListSessionsResponse], error)
+	DeleteSession(context.Context, *connect.Request[v1.StateDeleteSessionRequest]) (*connect.Response[v1.StateDeleteSessionResponse], error)
+	// Notes — the per-agent KV.
+	ListNotes(context.Context, *connect.Request[v1.StateListNotesRequest]) (*connect.Response[v1.StateListNotesResponse], error)
+	GetNote(context.Context, *connect.Request[v1.StateGetNoteRequest]) (*connect.Response[v1.StateGetNoteResponse], error)
+	SaveNote(context.Context, *connect.Request[v1.StateSaveNoteRequest]) (*connect.Response[v1.StateSaveNoteResponse], error)
+	DeleteNote(context.Context, *connect.Request[v1.StateDeleteNoteRequest]) (*connect.Response[v1.StateDeleteNoteResponse], error)
+	SetNoteInContext(context.Context, *connect.Request[v1.StateSetNoteInContextRequest]) (*connect.Response[v1.StateSetNoteInContextResponse], error)
+	CountNotes(context.Context, *connect.Request[v1.StateCountNotesRequest]) (*connect.Response[v1.StateCountNotesResponse], error)
+}
+
+// NewAgentStateClient constructs a client for the openotters.daemon.v1.AgentState service. By
+// default, it uses the Connect protocol with the binary Protobuf Codec, asks for gzipped responses,
+// and sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply the
+// connect.WithGRPC() or connect.WithGRPCWeb() options.
+//
+// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
+// http://api.acme.com or https://acme.com/grpc).
+func NewAgentStateClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) AgentStateClient {
+	baseURL = strings.TrimRight(baseURL, "/")
+	agentStateMethods := v1.File_v1_daemon_proto.Services().ByName("AgentState").Methods()
+	return &agentStateClient{
+		listMessages: connect.NewClient[v1.StateListMessagesRequest, v1.StateListMessagesResponse](
+			httpClient,
+			baseURL+AgentStateListMessagesProcedure,
+			connect.WithSchema(agentStateMethods.ByName("ListMessages")),
+			connect.WithClientOptions(opts...),
+		),
+		appendMessage: connect.NewClient[v1.StateAppendMessageRequest, v1.StateAppendMessageResponse](
+			httpClient,
+			baseURL+AgentStateAppendMessageProcedure,
+			connect.WithSchema(agentStateMethods.ByName("AppendMessage")),
+			connect.WithClientOptions(opts...),
+		),
+		replaceMessages: connect.NewClient[v1.StateReplaceMessagesRequest, v1.StateReplaceMessagesResponse](
+			httpClient,
+			baseURL+AgentStateReplaceMessagesProcedure,
+			connect.WithSchema(agentStateMethods.ByName("ReplaceMessages")),
+			connect.WithClientOptions(opts...),
+		),
+		updateMessageBranches: connect.NewClient[v1.StateUpdateBranchesRequest, v1.StateUpdateBranchesResponse](
+			httpClient,
+			baseURL+AgentStateUpdateMessageBranchesProcedure,
+			connect.WithSchema(agentStateMethods.ByName("UpdateMessageBranches")),
+			connect.WithClientOptions(opts...),
+		),
+		lastAssistantMessage: connect.NewClient[v1.StateLastAssistantRequest, v1.StateLastAssistantResponse](
+			httpClient,
+			baseURL+AgentStateLastAssistantMessageProcedure,
+			connect.WithSchema(agentStateMethods.ByName("LastAssistantMessage")),
+			connect.WithClientOptions(opts...),
+		),
+		countMessages: connect.NewClient[v1.StateCountMessagesRequest, v1.StateCountMessagesResponse](
+			httpClient,
+			baseURL+AgentStateCountMessagesProcedure,
+			connect.WithSchema(agentStateMethods.ByName("CountMessages")),
+			connect.WithClientOptions(opts...),
+		),
+		listSessions: connect.NewClient[v1.StateListSessionsRequest, v1.StateListSessionsResponse](
+			httpClient,
+			baseURL+AgentStateListSessionsProcedure,
+			connect.WithSchema(agentStateMethods.ByName("ListSessions")),
+			connect.WithClientOptions(opts...),
+		),
+		deleteSession: connect.NewClient[v1.StateDeleteSessionRequest, v1.StateDeleteSessionResponse](
+			httpClient,
+			baseURL+AgentStateDeleteSessionProcedure,
+			connect.WithSchema(agentStateMethods.ByName("DeleteSession")),
+			connect.WithClientOptions(opts...),
+		),
+		listNotes: connect.NewClient[v1.StateListNotesRequest, v1.StateListNotesResponse](
+			httpClient,
+			baseURL+AgentStateListNotesProcedure,
+			connect.WithSchema(agentStateMethods.ByName("ListNotes")),
+			connect.WithClientOptions(opts...),
+		),
+		getNote: connect.NewClient[v1.StateGetNoteRequest, v1.StateGetNoteResponse](
+			httpClient,
+			baseURL+AgentStateGetNoteProcedure,
+			connect.WithSchema(agentStateMethods.ByName("GetNote")),
+			connect.WithClientOptions(opts...),
+		),
+		saveNote: connect.NewClient[v1.StateSaveNoteRequest, v1.StateSaveNoteResponse](
+			httpClient,
+			baseURL+AgentStateSaveNoteProcedure,
+			connect.WithSchema(agentStateMethods.ByName("SaveNote")),
+			connect.WithClientOptions(opts...),
+		),
+		deleteNote: connect.NewClient[v1.StateDeleteNoteRequest, v1.StateDeleteNoteResponse](
+			httpClient,
+			baseURL+AgentStateDeleteNoteProcedure,
+			connect.WithSchema(agentStateMethods.ByName("DeleteNote")),
+			connect.WithClientOptions(opts...),
+		),
+		setNoteInContext: connect.NewClient[v1.StateSetNoteInContextRequest, v1.StateSetNoteInContextResponse](
+			httpClient,
+			baseURL+AgentStateSetNoteInContextProcedure,
+			connect.WithSchema(agentStateMethods.ByName("SetNoteInContext")),
+			connect.WithClientOptions(opts...),
+		),
+		countNotes: connect.NewClient[v1.StateCountNotesRequest, v1.StateCountNotesResponse](
+			httpClient,
+			baseURL+AgentStateCountNotesProcedure,
+			connect.WithSchema(agentStateMethods.ByName("CountNotes")),
+			connect.WithClientOptions(opts...),
+		),
+	}
+}
+
+// agentStateClient implements AgentStateClient.
+type agentStateClient struct {
+	listMessages          *connect.Client[v1.StateListMessagesRequest, v1.StateListMessagesResponse]
+	appendMessage         *connect.Client[v1.StateAppendMessageRequest, v1.StateAppendMessageResponse]
+	replaceMessages       *connect.Client[v1.StateReplaceMessagesRequest, v1.StateReplaceMessagesResponse]
+	updateMessageBranches *connect.Client[v1.StateUpdateBranchesRequest, v1.StateUpdateBranchesResponse]
+	lastAssistantMessage  *connect.Client[v1.StateLastAssistantRequest, v1.StateLastAssistantResponse]
+	countMessages         *connect.Client[v1.StateCountMessagesRequest, v1.StateCountMessagesResponse]
+	listSessions          *connect.Client[v1.StateListSessionsRequest, v1.StateListSessionsResponse]
+	deleteSession         *connect.Client[v1.StateDeleteSessionRequest, v1.StateDeleteSessionResponse]
+	listNotes             *connect.Client[v1.StateListNotesRequest, v1.StateListNotesResponse]
+	getNote               *connect.Client[v1.StateGetNoteRequest, v1.StateGetNoteResponse]
+	saveNote              *connect.Client[v1.StateSaveNoteRequest, v1.StateSaveNoteResponse]
+	deleteNote            *connect.Client[v1.StateDeleteNoteRequest, v1.StateDeleteNoteResponse]
+	setNoteInContext      *connect.Client[v1.StateSetNoteInContextRequest, v1.StateSetNoteInContextResponse]
+	countNotes            *connect.Client[v1.StateCountNotesRequest, v1.StateCountNotesResponse]
+}
+
+// ListMessages calls openotters.daemon.v1.AgentState.ListMessages.
+func (c *agentStateClient) ListMessages(ctx context.Context, req *connect.Request[v1.StateListMessagesRequest]) (*connect.Response[v1.StateListMessagesResponse], error) {
+	return c.listMessages.CallUnary(ctx, req)
+}
+
+// AppendMessage calls openotters.daemon.v1.AgentState.AppendMessage.
+func (c *agentStateClient) AppendMessage(ctx context.Context, req *connect.Request[v1.StateAppendMessageRequest]) (*connect.Response[v1.StateAppendMessageResponse], error) {
+	return c.appendMessage.CallUnary(ctx, req)
+}
+
+// ReplaceMessages calls openotters.daemon.v1.AgentState.ReplaceMessages.
+func (c *agentStateClient) ReplaceMessages(ctx context.Context, req *connect.Request[v1.StateReplaceMessagesRequest]) (*connect.Response[v1.StateReplaceMessagesResponse], error) {
+	return c.replaceMessages.CallUnary(ctx, req)
+}
+
+// UpdateMessageBranches calls openotters.daemon.v1.AgentState.UpdateMessageBranches.
+func (c *agentStateClient) UpdateMessageBranches(ctx context.Context, req *connect.Request[v1.StateUpdateBranchesRequest]) (*connect.Response[v1.StateUpdateBranchesResponse], error) {
+	return c.updateMessageBranches.CallUnary(ctx, req)
+}
+
+// LastAssistantMessage calls openotters.daemon.v1.AgentState.LastAssistantMessage.
+func (c *agentStateClient) LastAssistantMessage(ctx context.Context, req *connect.Request[v1.StateLastAssistantRequest]) (*connect.Response[v1.StateLastAssistantResponse], error) {
+	return c.lastAssistantMessage.CallUnary(ctx, req)
+}
+
+// CountMessages calls openotters.daemon.v1.AgentState.CountMessages.
+func (c *agentStateClient) CountMessages(ctx context.Context, req *connect.Request[v1.StateCountMessagesRequest]) (*connect.Response[v1.StateCountMessagesResponse], error) {
+	return c.countMessages.CallUnary(ctx, req)
+}
+
+// ListSessions calls openotters.daemon.v1.AgentState.ListSessions.
+func (c *agentStateClient) ListSessions(ctx context.Context, req *connect.Request[v1.StateListSessionsRequest]) (*connect.Response[v1.StateListSessionsResponse], error) {
+	return c.listSessions.CallUnary(ctx, req)
+}
+
+// DeleteSession calls openotters.daemon.v1.AgentState.DeleteSession.
+func (c *agentStateClient) DeleteSession(ctx context.Context, req *connect.Request[v1.StateDeleteSessionRequest]) (*connect.Response[v1.StateDeleteSessionResponse], error) {
+	return c.deleteSession.CallUnary(ctx, req)
+}
+
+// ListNotes calls openotters.daemon.v1.AgentState.ListNotes.
+func (c *agentStateClient) ListNotes(ctx context.Context, req *connect.Request[v1.StateListNotesRequest]) (*connect.Response[v1.StateListNotesResponse], error) {
+	return c.listNotes.CallUnary(ctx, req)
+}
+
+// GetNote calls openotters.daemon.v1.AgentState.GetNote.
+func (c *agentStateClient) GetNote(ctx context.Context, req *connect.Request[v1.StateGetNoteRequest]) (*connect.Response[v1.StateGetNoteResponse], error) {
+	return c.getNote.CallUnary(ctx, req)
+}
+
+// SaveNote calls openotters.daemon.v1.AgentState.SaveNote.
+func (c *agentStateClient) SaveNote(ctx context.Context, req *connect.Request[v1.StateSaveNoteRequest]) (*connect.Response[v1.StateSaveNoteResponse], error) {
+	return c.saveNote.CallUnary(ctx, req)
+}
+
+// DeleteNote calls openotters.daemon.v1.AgentState.DeleteNote.
+func (c *agentStateClient) DeleteNote(ctx context.Context, req *connect.Request[v1.StateDeleteNoteRequest]) (*connect.Response[v1.StateDeleteNoteResponse], error) {
+	return c.deleteNote.CallUnary(ctx, req)
+}
+
+// SetNoteInContext calls openotters.daemon.v1.AgentState.SetNoteInContext.
+func (c *agentStateClient) SetNoteInContext(ctx context.Context, req *connect.Request[v1.StateSetNoteInContextRequest]) (*connect.Response[v1.StateSetNoteInContextResponse], error) {
+	return c.setNoteInContext.CallUnary(ctx, req)
+}
+
+// CountNotes calls openotters.daemon.v1.AgentState.CountNotes.
+func (c *agentStateClient) CountNotes(ctx context.Context, req *connect.Request[v1.StateCountNotesRequest]) (*connect.Response[v1.StateCountNotesResponse], error) {
+	return c.countNotes.CallUnary(ctx, req)
+}
+
+// AgentStateHandler is an implementation of the openotters.daemon.v1.AgentState service.
+type AgentStateHandler interface {
+	// Messages — chat history + branches.
+	ListMessages(context.Context, *connect.Request[v1.StateListMessagesRequest]) (*connect.Response[v1.StateListMessagesResponse], error)
+	AppendMessage(context.Context, *connect.Request[v1.StateAppendMessageRequest]) (*connect.Response[v1.StateAppendMessageResponse], error)
+	ReplaceMessages(context.Context, *connect.Request[v1.StateReplaceMessagesRequest]) (*connect.Response[v1.StateReplaceMessagesResponse], error)
+	UpdateMessageBranches(context.Context, *connect.Request[v1.StateUpdateBranchesRequest]) (*connect.Response[v1.StateUpdateBranchesResponse], error)
+	LastAssistantMessage(context.Context, *connect.Request[v1.StateLastAssistantRequest]) (*connect.Response[v1.StateLastAssistantResponse], error)
+	CountMessages(context.Context, *connect.Request[v1.StateCountMessagesRequest]) (*connect.Response[v1.StateCountMessagesResponse], error)
+	// Sessions — derived from messages (no separate table).
+	ListSessions(context.Context, *connect.Request[v1.StateListSessionsRequest]) (*connect.Response[v1.StateListSessionsResponse], error)
+	DeleteSession(context.Context, *connect.Request[v1.StateDeleteSessionRequest]) (*connect.Response[v1.StateDeleteSessionResponse], error)
+	// Notes — the per-agent KV.
+	ListNotes(context.Context, *connect.Request[v1.StateListNotesRequest]) (*connect.Response[v1.StateListNotesResponse], error)
+	GetNote(context.Context, *connect.Request[v1.StateGetNoteRequest]) (*connect.Response[v1.StateGetNoteResponse], error)
+	SaveNote(context.Context, *connect.Request[v1.StateSaveNoteRequest]) (*connect.Response[v1.StateSaveNoteResponse], error)
+	DeleteNote(context.Context, *connect.Request[v1.StateDeleteNoteRequest]) (*connect.Response[v1.StateDeleteNoteResponse], error)
+	SetNoteInContext(context.Context, *connect.Request[v1.StateSetNoteInContextRequest]) (*connect.Response[v1.StateSetNoteInContextResponse], error)
+	CountNotes(context.Context, *connect.Request[v1.StateCountNotesRequest]) (*connect.Response[v1.StateCountNotesResponse], error)
+}
+
+// NewAgentStateHandler builds an HTTP handler from the service implementation. It returns the path
+// on which to mount the handler and the handler itself.
+//
+// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
+// and JSON codecs. They also support gzip compression.
+func NewAgentStateHandler(svc AgentStateHandler, opts ...connect.HandlerOption) (string, http.Handler) {
+	agentStateMethods := v1.File_v1_daemon_proto.Services().ByName("AgentState").Methods()
+	agentStateListMessagesHandler := connect.NewUnaryHandler(
+		AgentStateListMessagesProcedure,
+		svc.ListMessages,
+		connect.WithSchema(agentStateMethods.ByName("ListMessages")),
+		connect.WithHandlerOptions(opts...),
+	)
+	agentStateAppendMessageHandler := connect.NewUnaryHandler(
+		AgentStateAppendMessageProcedure,
+		svc.AppendMessage,
+		connect.WithSchema(agentStateMethods.ByName("AppendMessage")),
+		connect.WithHandlerOptions(opts...),
+	)
+	agentStateReplaceMessagesHandler := connect.NewUnaryHandler(
+		AgentStateReplaceMessagesProcedure,
+		svc.ReplaceMessages,
+		connect.WithSchema(agentStateMethods.ByName("ReplaceMessages")),
+		connect.WithHandlerOptions(opts...),
+	)
+	agentStateUpdateMessageBranchesHandler := connect.NewUnaryHandler(
+		AgentStateUpdateMessageBranchesProcedure,
+		svc.UpdateMessageBranches,
+		connect.WithSchema(agentStateMethods.ByName("UpdateMessageBranches")),
+		connect.WithHandlerOptions(opts...),
+	)
+	agentStateLastAssistantMessageHandler := connect.NewUnaryHandler(
+		AgentStateLastAssistantMessageProcedure,
+		svc.LastAssistantMessage,
+		connect.WithSchema(agentStateMethods.ByName("LastAssistantMessage")),
+		connect.WithHandlerOptions(opts...),
+	)
+	agentStateCountMessagesHandler := connect.NewUnaryHandler(
+		AgentStateCountMessagesProcedure,
+		svc.CountMessages,
+		connect.WithSchema(agentStateMethods.ByName("CountMessages")),
+		connect.WithHandlerOptions(opts...),
+	)
+	agentStateListSessionsHandler := connect.NewUnaryHandler(
+		AgentStateListSessionsProcedure,
+		svc.ListSessions,
+		connect.WithSchema(agentStateMethods.ByName("ListSessions")),
+		connect.WithHandlerOptions(opts...),
+	)
+	agentStateDeleteSessionHandler := connect.NewUnaryHandler(
+		AgentStateDeleteSessionProcedure,
+		svc.DeleteSession,
+		connect.WithSchema(agentStateMethods.ByName("DeleteSession")),
+		connect.WithHandlerOptions(opts...),
+	)
+	agentStateListNotesHandler := connect.NewUnaryHandler(
+		AgentStateListNotesProcedure,
+		svc.ListNotes,
+		connect.WithSchema(agentStateMethods.ByName("ListNotes")),
+		connect.WithHandlerOptions(opts...),
+	)
+	agentStateGetNoteHandler := connect.NewUnaryHandler(
+		AgentStateGetNoteProcedure,
+		svc.GetNote,
+		connect.WithSchema(agentStateMethods.ByName("GetNote")),
+		connect.WithHandlerOptions(opts...),
+	)
+	agentStateSaveNoteHandler := connect.NewUnaryHandler(
+		AgentStateSaveNoteProcedure,
+		svc.SaveNote,
+		connect.WithSchema(agentStateMethods.ByName("SaveNote")),
+		connect.WithHandlerOptions(opts...),
+	)
+	agentStateDeleteNoteHandler := connect.NewUnaryHandler(
+		AgentStateDeleteNoteProcedure,
+		svc.DeleteNote,
+		connect.WithSchema(agentStateMethods.ByName("DeleteNote")),
+		connect.WithHandlerOptions(opts...),
+	)
+	agentStateSetNoteInContextHandler := connect.NewUnaryHandler(
+		AgentStateSetNoteInContextProcedure,
+		svc.SetNoteInContext,
+		connect.WithSchema(agentStateMethods.ByName("SetNoteInContext")),
+		connect.WithHandlerOptions(opts...),
+	)
+	agentStateCountNotesHandler := connect.NewUnaryHandler(
+		AgentStateCountNotesProcedure,
+		svc.CountNotes,
+		connect.WithSchema(agentStateMethods.ByName("CountNotes")),
+		connect.WithHandlerOptions(opts...),
+	)
+	return "/openotters.daemon.v1.AgentState/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case AgentStateListMessagesProcedure:
+			agentStateListMessagesHandler.ServeHTTP(w, r)
+		case AgentStateAppendMessageProcedure:
+			agentStateAppendMessageHandler.ServeHTTP(w, r)
+		case AgentStateReplaceMessagesProcedure:
+			agentStateReplaceMessagesHandler.ServeHTTP(w, r)
+		case AgentStateUpdateMessageBranchesProcedure:
+			agentStateUpdateMessageBranchesHandler.ServeHTTP(w, r)
+		case AgentStateLastAssistantMessageProcedure:
+			agentStateLastAssistantMessageHandler.ServeHTTP(w, r)
+		case AgentStateCountMessagesProcedure:
+			agentStateCountMessagesHandler.ServeHTTP(w, r)
+		case AgentStateListSessionsProcedure:
+			agentStateListSessionsHandler.ServeHTTP(w, r)
+		case AgentStateDeleteSessionProcedure:
+			agentStateDeleteSessionHandler.ServeHTTP(w, r)
+		case AgentStateListNotesProcedure:
+			agentStateListNotesHandler.ServeHTTP(w, r)
+		case AgentStateGetNoteProcedure:
+			agentStateGetNoteHandler.ServeHTTP(w, r)
+		case AgentStateSaveNoteProcedure:
+			agentStateSaveNoteHandler.ServeHTTP(w, r)
+		case AgentStateDeleteNoteProcedure:
+			agentStateDeleteNoteHandler.ServeHTTP(w, r)
+		case AgentStateSetNoteInContextProcedure:
+			agentStateSetNoteInContextHandler.ServeHTTP(w, r)
+		case AgentStateCountNotesProcedure:
+			agentStateCountNotesHandler.ServeHTTP(w, r)
+		default:
+			http.NotFound(w, r)
+		}
+	})
+}
+
+// UnimplementedAgentStateHandler returns CodeUnimplemented from all methods.
+type UnimplementedAgentStateHandler struct{}
+
+func (UnimplementedAgentStateHandler) ListMessages(context.Context, *connect.Request[v1.StateListMessagesRequest]) (*connect.Response[v1.StateListMessagesResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("openotters.daemon.v1.AgentState.ListMessages is not implemented"))
+}
+
+func (UnimplementedAgentStateHandler) AppendMessage(context.Context, *connect.Request[v1.StateAppendMessageRequest]) (*connect.Response[v1.StateAppendMessageResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("openotters.daemon.v1.AgentState.AppendMessage is not implemented"))
+}
+
+func (UnimplementedAgentStateHandler) ReplaceMessages(context.Context, *connect.Request[v1.StateReplaceMessagesRequest]) (*connect.Response[v1.StateReplaceMessagesResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("openotters.daemon.v1.AgentState.ReplaceMessages is not implemented"))
+}
+
+func (UnimplementedAgentStateHandler) UpdateMessageBranches(context.Context, *connect.Request[v1.StateUpdateBranchesRequest]) (*connect.Response[v1.StateUpdateBranchesResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("openotters.daemon.v1.AgentState.UpdateMessageBranches is not implemented"))
+}
+
+func (UnimplementedAgentStateHandler) LastAssistantMessage(context.Context, *connect.Request[v1.StateLastAssistantRequest]) (*connect.Response[v1.StateLastAssistantResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("openotters.daemon.v1.AgentState.LastAssistantMessage is not implemented"))
+}
+
+func (UnimplementedAgentStateHandler) CountMessages(context.Context, *connect.Request[v1.StateCountMessagesRequest]) (*connect.Response[v1.StateCountMessagesResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("openotters.daemon.v1.AgentState.CountMessages is not implemented"))
+}
+
+func (UnimplementedAgentStateHandler) ListSessions(context.Context, *connect.Request[v1.StateListSessionsRequest]) (*connect.Response[v1.StateListSessionsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("openotters.daemon.v1.AgentState.ListSessions is not implemented"))
+}
+
+func (UnimplementedAgentStateHandler) DeleteSession(context.Context, *connect.Request[v1.StateDeleteSessionRequest]) (*connect.Response[v1.StateDeleteSessionResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("openotters.daemon.v1.AgentState.DeleteSession is not implemented"))
+}
+
+func (UnimplementedAgentStateHandler) ListNotes(context.Context, *connect.Request[v1.StateListNotesRequest]) (*connect.Response[v1.StateListNotesResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("openotters.daemon.v1.AgentState.ListNotes is not implemented"))
+}
+
+func (UnimplementedAgentStateHandler) GetNote(context.Context, *connect.Request[v1.StateGetNoteRequest]) (*connect.Response[v1.StateGetNoteResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("openotters.daemon.v1.AgentState.GetNote is not implemented"))
+}
+
+func (UnimplementedAgentStateHandler) SaveNote(context.Context, *connect.Request[v1.StateSaveNoteRequest]) (*connect.Response[v1.StateSaveNoteResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("openotters.daemon.v1.AgentState.SaveNote is not implemented"))
+}
+
+func (UnimplementedAgentStateHandler) DeleteNote(context.Context, *connect.Request[v1.StateDeleteNoteRequest]) (*connect.Response[v1.StateDeleteNoteResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("openotters.daemon.v1.AgentState.DeleteNote is not implemented"))
+}
+
+func (UnimplementedAgentStateHandler) SetNoteInContext(context.Context, *connect.Request[v1.StateSetNoteInContextRequest]) (*connect.Response[v1.StateSetNoteInContextResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("openotters.daemon.v1.AgentState.SetNoteInContext is not implemented"))
+}
+
+func (UnimplementedAgentStateHandler) CountNotes(context.Context, *connect.Request[v1.StateCountNotesRequest]) (*connect.Response[v1.StateCountNotesResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("openotters.daemon.v1.AgentState.CountNotes is not implemented"))
 }
