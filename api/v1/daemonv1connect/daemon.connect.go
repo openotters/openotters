@@ -108,6 +108,8 @@ const (
 	// RuntimeSetAgentNoteInContextProcedure is the fully-qualified name of the Runtime's
 	// SetAgentNoteInContext RPC.
 	RuntimeSetAgentNoteInContextProcedure = "/openotters.daemon.v1.Runtime/SetAgentNoteInContext"
+	// RuntimeStreamRPCCallsProcedure is the fully-qualified name of the Runtime's StreamRPCCalls RPC.
+	RuntimeStreamRPCCallsProcedure = "/openotters.daemon.v1.Runtime/StreamRPCCalls"
 	// RuntimeWatchAsyncJobProcedure is the fully-qualified name of the Runtime's WatchAsyncJob RPC.
 	RuntimeWatchAsyncJobProcedure = "/openotters.daemon.v1.Runtime/WatchAsyncJob"
 )
@@ -161,6 +163,14 @@ type RuntimeClient interface {
 	SaveAgentNote(context.Context, *connect.Request[v1.SaveAgentNoteRequest]) (*connect.Response[v1.SaveAgentNoteResponse], error)
 	DeleteAgentNote(context.Context, *connect.Request[v1.DeleteAgentNoteRequest]) (*connect.Response[v1.DeleteAgentNoteResponse], error)
 	SetAgentNoteInContext(context.Context, *connect.Request[v1.SetAgentNoteInContextRequest]) (*connect.Response[v1.SetAgentNoteInContextResponse], error)
+	// ── observability ────────────────────────────────────────────────
+	// StreamRPCCalls tails the daemon's in-memory RPC ring buffer.
+	// Operator-only (rejected for agent tokens). Always-on:
+	// every Connect call hitting the daemon — including auth-failed
+	// and future RPCs — is captured by the HTTP middleware without
+	// any per-handler wiring; nothing is excluded except calls to
+	// StreamRPCCalls itself (no feedback loop).
+	StreamRPCCalls(context.Context, *connect.Request[v1.StreamRPCCallsRequest]) (*connect.ServerStreamForClient[v1.RPCCallEvent], error)
 	// Server-streaming watch: emits the current AsyncJob immediately,
 	// then again on every material change (status, handle, exit_code,
 	// stdout, stderr, error, started_at, finished_at), then closes the
@@ -398,6 +408,12 @@ func NewRuntimeClient(httpClient connect.HTTPClient, baseURL string, opts ...con
 			connect.WithSchema(runtimeMethods.ByName("SetAgentNoteInContext")),
 			connect.WithClientOptions(opts...),
 		),
+		streamRPCCalls: connect.NewClient[v1.StreamRPCCallsRequest, v1.RPCCallEvent](
+			httpClient,
+			baseURL+RuntimeStreamRPCCallsProcedure,
+			connect.WithSchema(runtimeMethods.ByName("StreamRPCCalls")),
+			connect.WithClientOptions(opts...),
+		),
 		watchAsyncJob: connect.NewClient[v1.WatchAsyncJobRequest, v1.WatchAsyncJobResponse](
 			httpClient,
 			baseURL+RuntimeWatchAsyncJobProcedure,
@@ -445,6 +461,7 @@ type runtimeClient struct {
 	saveAgentNote         *connect.Client[v1.SaveAgentNoteRequest, v1.SaveAgentNoteResponse]
 	deleteAgentNote       *connect.Client[v1.DeleteAgentNoteRequest, v1.DeleteAgentNoteResponse]
 	setAgentNoteInContext *connect.Client[v1.SetAgentNoteInContextRequest, v1.SetAgentNoteInContextResponse]
+	streamRPCCalls        *connect.Client[v1.StreamRPCCallsRequest, v1.RPCCallEvent]
 	watchAsyncJob         *connect.Client[v1.WatchAsyncJobRequest, v1.WatchAsyncJobResponse]
 }
 
@@ -628,6 +645,11 @@ func (c *runtimeClient) SetAgentNoteInContext(ctx context.Context, req *connect.
 	return c.setAgentNoteInContext.CallUnary(ctx, req)
 }
 
+// StreamRPCCalls calls openotters.daemon.v1.Runtime.StreamRPCCalls.
+func (c *runtimeClient) StreamRPCCalls(ctx context.Context, req *connect.Request[v1.StreamRPCCallsRequest]) (*connect.ServerStreamForClient[v1.RPCCallEvent], error) {
+	return c.streamRPCCalls.CallServerStream(ctx, req)
+}
+
 // WatchAsyncJob calls openotters.daemon.v1.Runtime.WatchAsyncJob.
 func (c *runtimeClient) WatchAsyncJob(ctx context.Context, req *connect.Request[v1.WatchAsyncJobRequest]) (*connect.ServerStreamForClient[v1.WatchAsyncJobResponse], error) {
 	return c.watchAsyncJob.CallServerStream(ctx, req)
@@ -682,6 +704,14 @@ type RuntimeHandler interface {
 	SaveAgentNote(context.Context, *connect.Request[v1.SaveAgentNoteRequest]) (*connect.Response[v1.SaveAgentNoteResponse], error)
 	DeleteAgentNote(context.Context, *connect.Request[v1.DeleteAgentNoteRequest]) (*connect.Response[v1.DeleteAgentNoteResponse], error)
 	SetAgentNoteInContext(context.Context, *connect.Request[v1.SetAgentNoteInContextRequest]) (*connect.Response[v1.SetAgentNoteInContextResponse], error)
+	// ── observability ────────────────────────────────────────────────
+	// StreamRPCCalls tails the daemon's in-memory RPC ring buffer.
+	// Operator-only (rejected for agent tokens). Always-on:
+	// every Connect call hitting the daemon — including auth-failed
+	// and future RPCs — is captured by the HTTP middleware without
+	// any per-handler wiring; nothing is excluded except calls to
+	// StreamRPCCalls itself (no feedback loop).
+	StreamRPCCalls(context.Context, *connect.Request[v1.StreamRPCCallsRequest], *connect.ServerStream[v1.RPCCallEvent]) error
 	// Server-streaming watch: emits the current AsyncJob immediately,
 	// then again on every material change (status, handle, exit_code,
 	// stdout, stderr, error, started_at, finished_at), then closes the
@@ -915,6 +945,12 @@ func NewRuntimeHandler(svc RuntimeHandler, opts ...connect.HandlerOption) (strin
 		connect.WithSchema(runtimeMethods.ByName("SetAgentNoteInContext")),
 		connect.WithHandlerOptions(opts...),
 	)
+	runtimeStreamRPCCallsHandler := connect.NewServerStreamHandler(
+		RuntimeStreamRPCCallsProcedure,
+		svc.StreamRPCCalls,
+		connect.WithSchema(runtimeMethods.ByName("StreamRPCCalls")),
+		connect.WithHandlerOptions(opts...),
+	)
 	runtimeWatchAsyncJobHandler := connect.NewServerStreamHandler(
 		RuntimeWatchAsyncJobProcedure,
 		svc.WatchAsyncJob,
@@ -995,6 +1031,8 @@ func NewRuntimeHandler(svc RuntimeHandler, opts ...connect.HandlerOption) (strin
 			runtimeDeleteAgentNoteHandler.ServeHTTP(w, r)
 		case RuntimeSetAgentNoteInContextProcedure:
 			runtimeSetAgentNoteInContextHandler.ServeHTTP(w, r)
+		case RuntimeStreamRPCCallsProcedure:
+			runtimeStreamRPCCallsHandler.ServeHTTP(w, r)
 		case RuntimeWatchAsyncJobProcedure:
 			runtimeWatchAsyncJobHandler.ServeHTTP(w, r)
 		default:
@@ -1148,6 +1186,10 @@ func (UnimplementedRuntimeHandler) DeleteAgentNote(context.Context, *connect.Req
 
 func (UnimplementedRuntimeHandler) SetAgentNoteInContext(context.Context, *connect.Request[v1.SetAgentNoteInContextRequest]) (*connect.Response[v1.SetAgentNoteInContextResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("openotters.daemon.v1.Runtime.SetAgentNoteInContext is not implemented"))
+}
+
+func (UnimplementedRuntimeHandler) StreamRPCCalls(context.Context, *connect.Request[v1.StreamRPCCallsRequest], *connect.ServerStream[v1.RPCCallEvent]) error {
+	return connect.NewError(connect.CodeUnimplemented, errors.New("openotters.daemon.v1.Runtime.StreamRPCCalls is not implemented"))
 }
 
 func (UnimplementedRuntimeHandler) WatchAsyncJob(context.Context, *connect.Request[v1.WatchAsyncJobRequest], *connect.ServerStream[v1.WatchAsyncJobResponse]) error {

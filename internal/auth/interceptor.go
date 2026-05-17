@@ -5,6 +5,8 @@ import (
 	"errors"
 	"net/http"
 	"strings"
+
+	"github.com/openotters/openotters/internal/observability"
 )
 
 // ctxKey is unexported so test helpers / future packages can't
@@ -49,6 +51,19 @@ func (i *JWTInterceptor) Wrap(next http.Handler) http.Handler {
 		if err != nil {
 			writeUnauthenticated(w, err)
 			return
+		}
+
+		// Fill in the per-request CallInfo the observability
+		// middleware injected upstream so the recorder logs the
+		// authenticated caller. operator tokens have empty
+		// AgentRef; agent tokens carry the per-agent ref string.
+		if info := observability.CallInfoFromContext(r.Context()); info != nil {
+			if claims.AgentRef != "" {
+				info.Caller = "agent:" + claims.AgentRef
+				info.AgentRef = claims.AgentRef
+			} else {
+				info.Caller = "operator"
+			}
 		}
 
 		ctx := context.WithValue(r.Context(), claimsKey, claims)

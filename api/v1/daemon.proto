@@ -76,6 +76,15 @@ service Runtime {
   rpc SaveAgentNote(SaveAgentNoteRequest)   returns (SaveAgentNoteResponse);
   rpc DeleteAgentNote(DeleteAgentNoteRequest) returns (DeleteAgentNoteResponse);
   rpc SetAgentNoteInContext(SetAgentNoteInContextRequest) returns (SetAgentNoteInContextResponse);
+
+  // ── observability ────────────────────────────────────────────────
+  // StreamRPCCalls tails the daemon's in-memory RPC ring buffer.
+  // Operator-only (rejected for agent tokens). Always-on:
+  // every Connect call hitting the daemon — including auth-failed
+  // and future RPCs — is captured by the HTTP middleware without
+  // any per-handler wiring; nothing is excluded except calls to
+  // StreamRPCCalls itself (no feedback loop).
+  rpc StreamRPCCalls(StreamRPCCallsRequest) returns (stream RPCCallEvent);
   // Server-streaming watch: emits the current AsyncJob immediately,
   // then again on every material change (status, handle, exit_code,
   // stdout, stderr, error, started_at, finished_at), then closes the
@@ -684,4 +693,36 @@ message SetAgentNoteInContextRequest {
 }
 message SetAgentNoteInContextResponse {
   AgentNote note = 1;
+}
+
+// ── observability ──────────────────────────────────────────────────
+// One row in the daemon's RPC ring buffer. Filled by the
+// observability HTTP middleware on every request return. Fields
+// reflect what's observable at the HTTP layer — no payloads, no
+// auth headers, no JWT contents.
+
+message RPCCallEvent {
+  int64  timestamp_unix_ms = 1;
+  string service           = 2; // e.g. "Runtime" — last path segment of fully-qualified name
+  string procedure         = 3; // e.g. "SaveAgentNote"
+  string caller            = 4; // "operator" / "agent:<ref>" / "anonymous"
+  string status            = 5; // "ok" / "unauthenticated" / "internal" / "http_<n>"
+  int64  duration_us       = 6;
+  int64  bytes_in          = 7;
+  int64  bytes_out         = 8;
+  string err_message       = 9;  // populated when status != "ok"
+  string stream_type       = 10; // "unary" / "server-stream"
+}
+
+message StreamRPCCallsRequest {
+  // Filters AND together. Empty fields = no filter.
+  string service_prefix    = 1; // matches service exactly when non-empty
+  string procedure_prefix  = 2; // strings.HasPrefix(procedure, this)
+  string caller_kind       = 3; // "" / "operator" / "agent" / "anonymous"
+  string agent_id          = 4; // only when caller_kind == "agent"
+  string status            = 5; // "" / "ok" / "error" / specific lowercase code
+  int64  min_duration_us   = 6;
+  // Send the last N matching events from the ring before going
+  // live. Clamped to ring capacity.
+  int32  replay_recent     = 7;
 }

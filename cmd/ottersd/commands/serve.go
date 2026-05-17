@@ -19,6 +19,7 @@ import (
 	"github.com/openotters/openotters/api/v1/daemonv1connect"
 	"github.com/openotters/openotters/internal"
 	"github.com/openotters/openotters/internal/auth"
+	"github.com/openotters/openotters/internal/observability"
 	"github.com/openotters/openotters/internal/webui"
 )
 
@@ -211,7 +212,14 @@ func (d *Serve) Run(ctx context.Context, common *cmd.Commons, sqlite *cmd.SQLite
 	// inspects headers — without this the failure response is
 	// HTTP/1.1 and the client errors with "frame too large" before
 	// surfacing the Unauthenticated.
-	apiHandler := jwtIcp.Wrap(apiMux)
+	//
+	// The observability middleware wraps OUTSIDE the JWT
+	// interceptor so the RPC monitor sees auth-failed calls too
+	// (Caller "anonymous" + Status "unauthenticated"). JWT writes
+	// the resolved Caller into the per-request CallInfo struct on
+	// success.
+	recorderMw := observability.NewMiddleware(dm.Recorder())
+	apiHandler := recorderMw.Wrap(jwtIcp.Wrap(apiMux))
 
 	// h2c so gRPC clients (the CLI) can negotiate HTTP/2 cleartext
 	// over the Unix socket and (if enabled) the TCP listener without
@@ -247,7 +255,7 @@ func (d *Serve) Run(ctx context.Context, common *cmd.Commons, sqlite *cmd.SQLite
 	var tcpSrv *http.Server
 
 	if !d.NoHTTP && d.HTTPAddr != "" {
-		srv, startErr := d.startTCPListener(ctx, logger, connectPath, connectHandler, jwtIcp, signingKey)
+		srv, startErr := d.startTCPListener(ctx, logger, connectPath, connectHandler, jwtIcp, signingKey, dm.Recorder())
 		if startErr != nil {
 			return startErr
 		}
@@ -298,6 +306,7 @@ func (d *Serve) startTCPListener(
 	connectHandler http.Handler,
 	jwtIcp *auth.JWTInterceptor,
 	signingKey []byte,
+	recorder *observability.Recorder,
 ) (*http.Server, error) {
 	// JWT replaces the prior --auth-token static-bearer mechanism.
 	// Binding to non-loopback no longer requires a flag opt-in:
@@ -332,6 +341,16 @@ func (d *Serve) startTCPListener(
 	_, opTok, _ := auth.EnsureOperatorToken(endpoint, signingKey)
 	apiInner := autoBearer(opTok, jwtIcp.Wrap(connectHandler))
 	apiAlias := autoBearer(opTok, jwtIcp.Wrap(http.StripPrefix("/api", connectHandler)))
+
+	// Wrap the API mounts with the recorder middleware (outside
+	// auth) so the RPC monitor sees every call hitting this
+	// listener. The UI handler at "/" stays unrecorded — static
+	// asset fetches aren't RPCs and would flood the buffer.
+	if recorder != nil {
+		recorderMw := observability.NewMiddleware(recorder)
+		apiInner = recorderMw.Wrap(apiInner)
+		apiAlias = recorderMw.Wrap(apiAlias)
+	}
 
 	// Same h2c-vs-jwt ordering rule as the unix listener: jwt INSIDE
 	// h2c so the HTTP/2 upgrade is established before middleware

@@ -37,6 +37,7 @@ import (
 	daemonv1 "github.com/openotters/openotters/api/v1"
 	"github.com/openotters/openotters/internal/asyncjobs"
 	"github.com/openotters/openotters/internal/auth"
+	"github.com/openotters/openotters/internal/observability"
 )
 
 const (
@@ -363,6 +364,12 @@ type Daemon struct {
 	// completions land in the agent's session as synthetic turns.
 	// Constructed in NewDaemon, replayed on Boot, drained on shutdown.
 	asyncJobs *asyncjobs.Pool
+
+	// recorder is the always-on RPC observer fed by the
+	// observability HTTP middleware in serve.go. StreamRPCCalls
+	// reads its subscriber channel; the rest of the daemon never
+	// touches it.
+	recorder *observability.Recorder
 }
 
 // DaemonOption configures the Daemon at construction time.
@@ -661,6 +668,7 @@ func NewDaemon(
 		shutdownTimeout: cfg.shutdownTimeout,
 		catwalk:         newCatwalkCatalogue(),
 		agents:          make(map[string]*managedAgent),
+		recorder:        observability.NewRecorder(0),
 	}
 
 	// Async-jobs Pool: dispatcher + Store. The pool persists status
@@ -731,7 +739,8 @@ func (d *Daemon) Get(id uuid.UUID) (agentpkg.Agent, bool) {
 
 // AsyncJobs exposes the async-jobs Pool to the gRPC handlers and to
 // the serve loop's Boot / Shutdown calls.
-func (d *Daemon) AsyncJobs() *asyncjobs.Pool { return d.asyncJobs }
+func (d *Daemon) AsyncJobs() *asyncjobs.Pool        { return d.asyncJobs }
+func (d *Daemon) Recorder() *observability.Recorder { return d.recorder }
 
 // Info returns a snapshot of the daemon's runtime coordinates for
 // display by `otters info`. Cheap — everything is in-memory.

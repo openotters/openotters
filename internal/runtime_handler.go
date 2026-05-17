@@ -3,11 +3,15 @@ package internal
 import (
 	"context"
 	"errors"
+	"strings"
+	"time"
 
 	"connectrpc.com/connect"
 	agentpkg "github.com/openotters/agentfile/executor"
 	daemonv1 "github.com/openotters/openotters/api/v1"
 	"github.com/openotters/openotters/api/v1/daemonv1connect"
+	"github.com/openotters/openotters/internal/auth"
+	"github.com/openotters/openotters/internal/observability"
 )
 
 // safeInt32 clamps an int to the int32 range so the proto wire form
@@ -613,4 +617,127 @@ func mapNotesError(err error) error {
 		return connect.NewError(connect.CodeNotFound, err)
 	}
 	return err
+}
+
+// StreamRPCCalls tails the daemon's RPC ring buffer. Operator-only
+// (rejected for agent tokens) — the firehose carries every call
+// the daemon sees, including other agents' traffic, so it's not a
+// safe surface for an agent JWT.
+//
+// The handler first delivers up to req.replay_recent buffered
+// events (matching the filters), then streams live ones from the
+// subscriber channel until the client disconnects or the
+// per-subscriber channel closes. Server-side filtering keeps the
+// wire small even when the operator only cares about a slice of
+// the traffic.
+func (h *runtimeHandler) StreamRPCCalls(
+	ctx context.Context,
+	req *connect.Request[daemonv1.StreamRPCCallsRequest],
+	stream *connect.ServerStream[daemonv1.RPCCallEvent],
+) error {
+	if c := auth.ClaimsFromContext(ctx); c == nil || c.AgentRef != "" {
+		return connect.NewError(connect.CodeUnauthenticated,
+			errors.New("StreamRPCCalls requires an operator token"))
+	}
+
+	rec := h.daemon.Recorder()
+	if rec == nil {
+		return connect.NewError(connect.CodeUnavailable,
+			errors.New("rpc recorder not configured"))
+	}
+
+	filter := buildRPCFilter(req.Msg)
+	ch, cancel := rec.Subscribe(int(req.Msg.GetReplayRecent()))
+	defer cancel()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		case call, ok := <-ch:
+			if !ok {
+				return nil
+			}
+			if !filter(call) {
+				continue
+			}
+			if err := stream.Send(rpcCallToProto(call)); err != nil {
+				return err
+			}
+		}
+	}
+}
+
+// buildRPCFilter compiles the request's filter fields into a single
+// predicate the streaming loop applies before each Send. Doing the
+// filter server-side keeps the bytes-over-the-wire small when the
+// operator is staring at a narrow slice of traffic.
+func buildRPCFilter(req *daemonv1.StreamRPCCallsRequest) func(observability.RPCCall) bool {
+	servicePrefix := req.GetServicePrefix()
+	procedurePrefix := req.GetProcedurePrefix()
+	callerKind := req.GetCallerKind()
+	agentID := req.GetAgentId()
+	status := req.GetStatus()
+	minDuration := time.Duration(req.GetMinDurationUs()) * time.Microsecond
+
+	return func(c observability.RPCCall) bool {
+		if servicePrefix != "" && c.Service != servicePrefix {
+			return false
+		}
+		if procedurePrefix != "" && !strings.HasPrefix(c.Procedure, procedurePrefix) {
+			return false
+		}
+		switch callerKind {
+		case "operator":
+			if c.Caller != "operator" {
+				return false
+			}
+		case "agent":
+			if !strings.HasPrefix(c.Caller, "agent:") {
+				return false
+			}
+			if agentID != "" && c.Caller != "agent:"+agentID {
+				return false
+			}
+		case "anonymous":
+			if c.Caller != "anonymous" {
+				return false
+			}
+		}
+		switch status {
+		case "":
+			// no filter
+		case "ok":
+			if c.Status != "ok" {
+				return false
+			}
+		case "error":
+			if c.Status == "ok" {
+				return false
+			}
+		default:
+			if c.Status != status {
+				return false
+			}
+		}
+		if minDuration > 0 && c.Duration < minDuration {
+			return false
+		}
+		return true
+	}
+}
+
+func rpcCallToProto(c observability.RPCCall) *daemonv1.RPCCallEvent {
+	return &daemonv1.RPCCallEvent{
+		TimestampUnixMs: c.Timestamp.UnixMilli(),
+		Service:         c.Service,
+		Procedure:       c.Procedure,
+		Caller:          c.Caller,
+		Status:          c.Status,
+		DurationUs:      c.Duration.Microseconds(),
+		BytesIn:         c.BytesIn,
+		BytesOut:        c.BytesOut,
+		ErrMessage:      c.ErrMessage,
+		StreamType:      c.StreamType,
+	}
 }

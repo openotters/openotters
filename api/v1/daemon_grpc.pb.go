@@ -55,6 +55,7 @@ const (
 	Runtime_SaveAgentNote_FullMethodName         = "/openotters.daemon.v1.Runtime/SaveAgentNote"
 	Runtime_DeleteAgentNote_FullMethodName       = "/openotters.daemon.v1.Runtime/DeleteAgentNote"
 	Runtime_SetAgentNoteInContext_FullMethodName = "/openotters.daemon.v1.Runtime/SetAgentNoteInContext"
+	Runtime_StreamRPCCalls_FullMethodName        = "/openotters.daemon.v1.Runtime/StreamRPCCalls"
 	Runtime_WatchAsyncJob_FullMethodName         = "/openotters.daemon.v1.Runtime/WatchAsyncJob"
 )
 
@@ -109,6 +110,14 @@ type RuntimeClient interface {
 	SaveAgentNote(ctx context.Context, in *SaveAgentNoteRequest, opts ...grpc.CallOption) (*SaveAgentNoteResponse, error)
 	DeleteAgentNote(ctx context.Context, in *DeleteAgentNoteRequest, opts ...grpc.CallOption) (*DeleteAgentNoteResponse, error)
 	SetAgentNoteInContext(ctx context.Context, in *SetAgentNoteInContextRequest, opts ...grpc.CallOption) (*SetAgentNoteInContextResponse, error)
+	// ── observability ────────────────────────────────────────────────
+	// StreamRPCCalls tails the daemon's in-memory RPC ring buffer.
+	// Operator-only (rejected for agent tokens). Always-on:
+	// every Connect call hitting the daemon — including auth-failed
+	// and future RPCs — is captured by the HTTP middleware without
+	// any per-handler wiring; nothing is excluded except calls to
+	// StreamRPCCalls itself (no feedback loop).
+	StreamRPCCalls(ctx context.Context, in *StreamRPCCallsRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[RPCCallEvent], error)
 	// Server-streaming watch: emits the current AsyncJob immediately,
 	// then again on every material change (status, handle, exit_code,
 	// stdout, stderr, error, started_at, finished_at), then closes the
@@ -496,9 +505,28 @@ func (c *runtimeClient) SetAgentNoteInContext(ctx context.Context, in *SetAgentN
 	return out, nil
 }
 
+func (c *runtimeClient) StreamRPCCalls(ctx context.Context, in *StreamRPCCallsRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[RPCCallEvent], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &Runtime_ServiceDesc.Streams[1], Runtime_StreamRPCCalls_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[StreamRPCCallsRequest, RPCCallEvent]{ClientStream: stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type Runtime_StreamRPCCallsClient = grpc.ServerStreamingClient[RPCCallEvent]
+
 func (c *runtimeClient) WatchAsyncJob(ctx context.Context, in *WatchAsyncJobRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[WatchAsyncJobResponse], error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	stream, err := c.cc.NewStream(ctx, &Runtime_ServiceDesc.Streams[1], Runtime_WatchAsyncJob_FullMethodName, cOpts...)
+	stream, err := c.cc.NewStream(ctx, &Runtime_ServiceDesc.Streams[2], Runtime_WatchAsyncJob_FullMethodName, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -566,6 +594,14 @@ type RuntimeServer interface {
 	SaveAgentNote(context.Context, *SaveAgentNoteRequest) (*SaveAgentNoteResponse, error)
 	DeleteAgentNote(context.Context, *DeleteAgentNoteRequest) (*DeleteAgentNoteResponse, error)
 	SetAgentNoteInContext(context.Context, *SetAgentNoteInContextRequest) (*SetAgentNoteInContextResponse, error)
+	// ── observability ────────────────────────────────────────────────
+	// StreamRPCCalls tails the daemon's in-memory RPC ring buffer.
+	// Operator-only (rejected for agent tokens). Always-on:
+	// every Connect call hitting the daemon — including auth-failed
+	// and future RPCs — is captured by the HTTP middleware without
+	// any per-handler wiring; nothing is excluded except calls to
+	// StreamRPCCalls itself (no feedback loop).
+	StreamRPCCalls(*StreamRPCCallsRequest, grpc.ServerStreamingServer[RPCCallEvent]) error
 	// Server-streaming watch: emits the current AsyncJob immediately,
 	// then again on every material change (status, handle, exit_code,
 	// stdout, stderr, error, started_at, finished_at), then closes the
@@ -691,6 +727,9 @@ func (UnimplementedRuntimeServer) DeleteAgentNote(context.Context, *DeleteAgentN
 }
 func (UnimplementedRuntimeServer) SetAgentNoteInContext(context.Context, *SetAgentNoteInContextRequest) (*SetAgentNoteInContextResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method SetAgentNoteInContext not implemented")
+}
+func (UnimplementedRuntimeServer) StreamRPCCalls(*StreamRPCCallsRequest, grpc.ServerStreamingServer[RPCCallEvent]) error {
+	return status.Error(codes.Unimplemented, "method StreamRPCCalls not implemented")
 }
 func (UnimplementedRuntimeServer) WatchAsyncJob(*WatchAsyncJobRequest, grpc.ServerStreamingServer[WatchAsyncJobResponse]) error {
 	return status.Error(codes.Unimplemented, "method WatchAsyncJob not implemented")
@@ -1357,6 +1396,17 @@ func _Runtime_SetAgentNoteInContext_Handler(srv interface{}, ctx context.Context
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Runtime_StreamRPCCalls_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(StreamRPCCallsRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(RuntimeServer).StreamRPCCalls(m, &grpc.GenericServerStream[StreamRPCCallsRequest, RPCCallEvent]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type Runtime_StreamRPCCallsServer = grpc.ServerStreamingServer[RPCCallEvent]
+
 func _Runtime_WatchAsyncJob_Handler(srv interface{}, stream grpc.ServerStream) error {
 	m := new(WatchAsyncJobRequest)
 	if err := stream.RecvMsg(m); err != nil {
@@ -1520,6 +1570,11 @@ var Runtime_ServiceDesc = grpc.ServiceDesc{
 		{
 			StreamName:    "ChatStreamWithAgent",
 			Handler:       _Runtime_ChatStreamWithAgent_Handler,
+			ServerStreams: true,
+		},
+		{
+			StreamName:    "StreamRPCCalls",
+			Handler:       _Runtime_StreamRPCCalls_Handler,
 			ServerStreams: true,
 		},
 		{

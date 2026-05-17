@@ -1,6 +1,6 @@
 "use client"
 
-import { Bot, LayoutDashboard, Layers, ListChecks, Plug, Terminal } from "lucide-react"
+import { Activity, Bot, LayoutDashboard, Layers, ListChecks, Plug, Terminal } from "lucide-react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import type * as React from "react"
@@ -42,6 +42,10 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
 				{ title: "Bins", url: "/bins", icon: Terminal },
 				{ title: "Providers", url: "/providers", icon: Plug },
 			],
+		},
+		{
+			title: "Observability",
+			items: [{ title: "RPC monitor", url: "/rpc", icon: Activity }],
 		},
 	]
 
