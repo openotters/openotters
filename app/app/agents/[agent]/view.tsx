@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery } from "@connectrpc/connect-query"
 import { useQueryClient } from "@tanstack/react-query"
-import { Activity, ArrowLeft, Bot, ChevronRight, FileText, History, ListChecks, MessageSquare, Pause, Play, ScrollText, StickyNote, Terminal, Trash2, Variable } from "lucide-react"
+import { Activity, ArrowLeft, Bot, ChevronRight, FileText, Folder, History, ListChecks, MessageSquare, Pause, Play, ScrollText, StickyNote, Terminal, Trash2, Variable } from "lucide-react"
 import Link from "next/link"
 import { notFound, useRouter } from "next/navigation"
 import { useState } from "react"
@@ -181,67 +181,125 @@ export default function AgentDetailPage() {
 				</div>
 			</div>
 
-			<div className="grid gap-6 lg:grid-cols-[1fr_360px]">
-				<div className="space-y-6">
-					<Tabs className="w-full" onValueChange={setActiveTab} value={activeTab}>
-						<TabsList>
-							<TabsTrigger className="gap-2" value="dashboard">
-								<Activity className="h-4 w-4" />
-								Dashboard
-							</TabsTrigger>
-							<TabsTrigger className="gap-2" value="bins">
-								<Terminal className="h-4 w-4" />
-								Bins
-							</TabsTrigger>
-							<TabsTrigger className="gap-2" value="mounts">
-								<Terminal className="h-4 w-4" />
-								Mounts
-							</TabsTrigger>
-							<TabsTrigger className="gap-2" value="env">
-								<Variable className="h-4 w-4" />
-								Env
-							</TabsTrigger>
-							<TabsTrigger className="gap-2" value="contexts">
-								<FileText className="h-4 w-4" />
-								Contexts
-							</TabsTrigger>
-							<TabsTrigger className="gap-2" value="logs">
-								<ScrollText className="h-4 w-4" />
-								Logs
-							</TabsTrigger>
-							<TabsTrigger className="gap-2" value="sessions">
-								<History className="h-4 w-4" />
-								Sessions
-								{sessions.data?.sessions && sessions.data.sessions.length > 0 && (
-									<Badge className="ml-1" variant="secondary">
-										{sessions.data.sessions.length}
-									</Badge>
-								)}
-							</TabsTrigger>
-							<TabsTrigger className="gap-2" value="jobs">
-								<ListChecks className="h-4 w-4" />
-								Jobs
-								{jobs.data?.jobs && jobs.data.jobs.length > 0 && (
-									<Badge className="ml-1" variant="secondary">
-										{jobs.data.jobs.length}
-									</Badge>
-								)}
-							</TabsTrigger>
-							<TabsTrigger className="gap-2" value="notes">
-								<StickyNote className="h-4 w-4" />
-								Notes
-							</TabsTrigger>
-						</TabsList>
+			<Tabs
+				className="grid gap-6 lg:grid-cols-[220px_1fr]"
+				onValueChange={setActiveTab}
+				orientation="vertical"
+				value={activeTab}>
+				<TabsList className="flex h-auto flex-col items-stretch gap-1 bg-transparent p-1 lg:sticky lg:top-4 lg:self-start">
+					<TabsTrigger className="justify-start gap-2" value="dashboard">
+						<Activity className="h-4 w-4" />
+						Dashboard
+					</TabsTrigger>
+					<TabsTrigger className="justify-start gap-2" value="bins">
+						<Terminal className="h-4 w-4" />
+						<span className="flex-1 text-left">Bins</span>
+						{agent.tools.length > 0 && (
+							<Badge className="ml-1" variant="secondary">
+								{agent.tools.length}
+							</Badge>
+						)}
+					</TabsTrigger>
+					<TabsTrigger className="justify-start gap-2" value="mounts">
+						<Folder className="h-4 w-4" />
+						<span className="flex-1 text-left">Mounts</span>
+						{agent.mounts.length > 0 && (
+							<Badge className="ml-1" variant="secondary">
+								{agent.mounts.length}
+							</Badge>
+						)}
+					</TabsTrigger>
+					<TabsTrigger className="justify-start gap-2" value="env">
+						<Variable className="h-4 w-4" />
+						Env
+					</TabsTrigger>
+					<TabsTrigger className="justify-start gap-2" value="contexts">
+						<FileText className="h-4 w-4" />
+						Contexts
+					</TabsTrigger>
+					<TabsTrigger className="justify-start gap-2" value="logs">
+						<ScrollText className="h-4 w-4" />
+						Logs
+					</TabsTrigger>
+					<TabsTrigger className="justify-start gap-2" value="sessions">
+						<History className="h-4 w-4" />
+						<span className="flex-1 text-left">Sessions</span>
+						{sessions.data?.sessions && sessions.data.sessions.length > 0 && (
+							<Badge className="ml-1" variant="secondary">
+								{sessions.data.sessions.length}
+							</Badge>
+						)}
+					</TabsTrigger>
+					<TabsTrigger className="justify-start gap-2" value="jobs">
+						<ListChecks className="h-4 w-4" />
+						<span className="flex-1 text-left">Jobs</span>
+						{jobs.data?.jobs && jobs.data.jobs.length > 0 && (
+							<Badge className="ml-1" variant="secondary">
+								{jobs.data.jobs.length}
+							</Badge>
+						)}
+					</TabsTrigger>
+					<TabsTrigger className="justify-start gap-2" value="notes">
+						<StickyNote className="h-4 w-4" />
+						Notes
+					</TabsTrigger>
+				</TabsList>
 
-						<TabsContent className="space-y-4 pt-4" value="dashboard">
-							<AgentDashboard
-								agent={agent}
-								agentName={agentName}
-								sessions={sessions.data?.sessions ?? []}
-								jobs={jobs.data?.jobs ?? []}
-								onJump={setActiveTab}
-							/>
-						</TabsContent>
+				<div className="space-y-4">
+					<TabsContent className="mt-0 space-y-4" value="dashboard">
+						{/* Dashboard keeps the Agent Info side panel — every
+						    other section is single-column. */}
+						<div className="grid gap-4 lg:grid-cols-[1fr_320px]">
+							<div className="space-y-4">
+								<AgentDashboard
+									agent={agent}
+									agentName={agentName}
+									sessions={sessions.data?.sessions ?? []}
+									jobs={jobs.data?.jobs ?? []}
+									onJump={setActiveTab}
+								/>
+							</div>
+							<div className="space-y-4">
+								<Card>
+									<CardHeader>
+										<CardTitle className="text-base">Agent Info</CardTitle>
+									</CardHeader>
+									<CardContent className="space-y-3 text-sm">
+										<Row label="ID" value={agent.id || "—"} />
+										<Separator />
+										<Row label="Name" mono value={agent.name} />
+										<Separator />
+										<Row label="Model" mono value={agent.model} />
+										<Separator />
+										<Row label="Image" mono truncate value={agent.image || "—"} />
+										{agent.imageDigest && (
+											<>
+												<Separator />
+												<Row
+													label="Image digest"
+													mono
+													value={`${agent.imageDigest.substring(0, 19)}…`}
+												/>
+											</>
+										)}
+										<Separator />
+										<Row label="Runtime" mono truncate value={agent.runtimeRef || "—"} />
+										<Separator />
+										<Row label="Addr" mono value={agent.addr || "—"} />
+										<Separator />
+										<Row
+											label="Created"
+											value={
+												agent.createdAt > 0n
+													? createdAtDate(agent.createdAt).toLocaleString()
+													: "—"
+											}
+										/>
+									</CardContent>
+								</Card>
+							</div>
+						</div>
+					</TabsContent>
 
 						<TabsContent className="space-y-4 pt-4" value="bins">
 							<Card>
@@ -471,65 +529,8 @@ export default function AgentDetailPage() {
 						<TabsContent className="space-y-4 pt-4" value="notes">
 							<NotesPanel ref={agent.name} />
 						</TabsContent>
-					</Tabs>
 				</div>
-
-				<div className="space-y-4">
-					<Card>
-						<CardHeader>
-							<CardTitle className="text-base">Agent Info</CardTitle>
-						</CardHeader>
-						<CardContent className="space-y-3 text-sm">
-							<Row label="ID" value={agent.id || "—"} />
-							<Separator />
-							<Row label="Name" value={agent.name} mono />
-							<Separator />
-							<Row label="Model" value={agent.model} mono />
-							<Separator />
-							<Row label="Image" value={agent.image || "—"} mono truncate />
-							{agent.imageDigest && (
-								<>
-									<Separator />
-									<Row label="Image digest" value={agent.imageDigest.substring(0, 19) + "…"} mono />
-								</>
-							)}
-							<Separator />
-							<Row label="Runtime" value={agent.runtimeRef || "—"} mono truncate />
-							<Separator />
-							<Row label="Addr" value={agent.addr || "—"} mono />
-							<Separator />
-							<Row
-								label="Created"
-								value={
-									agent.createdAt > 0n
-										? createdAtDate(agent.createdAt).toLocaleString()
-										: "—"
-								}
-							/>
-						</CardContent>
-					</Card>
-
-					{agent.tools.length > 0 && (
-						<Card>
-							<CardHeader>
-								<CardTitle className="flex items-center gap-2 text-base">
-									<Terminal className="h-4 w-4" />
-									Bins ({agent.tools.length})
-								</CardTitle>
-							</CardHeader>
-							<CardContent>
-								<div className="flex flex-wrap gap-1">
-									{agent.tools.map((tool) => (
-										<Badge className="font-mono text-xs" key={tool.name} variant="secondary">
-											{tool.name}
-										</Badge>
-									))}
-								</div>
-							</CardContent>
-						</Card>
-					)}
-				</div>
-			</div>
+			</Tabs>
 		</div>
 	)
 }
