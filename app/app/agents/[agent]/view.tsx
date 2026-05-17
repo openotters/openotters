@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery } from "@connectrpc/connect-query"
 import { useQueryClient } from "@tanstack/react-query"
-import { Activity, ArrowLeft, Bot, ChevronRight, History, ListChecks, MessageSquare, Pause, Play, ScrollText, StickyNote, Terminal, Trash2, Variable } from "lucide-react"
+import { Activity, ArrowLeft, Bot, ChevronRight, FileText, History, ListChecks, MessageSquare, Pause, Play, ScrollText, StickyNote, Terminal, Trash2, Variable } from "lucide-react"
 import Link from "next/link"
 import { notFound, useRouter } from "next/navigation"
 import { useState } from "react"
@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Separator } from "@/components/ui/separator"
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
 	deleteSession,
@@ -200,6 +201,10 @@ export default function AgentDetailPage() {
 								<Variable className="h-4 w-4" />
 								Env
 							</TabsTrigger>
+							<TabsTrigger className="gap-2" value="contexts">
+								<FileText className="h-4 w-4" />
+								Contexts
+							</TabsTrigger>
 							<TabsTrigger className="gap-2" value="logs">
 								<ScrollText className="h-4 w-4" />
 								Logs
@@ -324,6 +329,10 @@ export default function AgentDetailPage() {
 
 						<TabsContent className="space-y-4 pt-4" value="env">
 							<AgentEnvCard agentImage={agent.image} />
+						</TabsContent>
+
+						<TabsContent className="space-y-4 pt-4" value="contexts">
+							<AgentContextsCard agentImage={agent.image} />
 						</TabsContent>
 
 						<TabsContent className="space-y-4 pt-4" value="logs">
@@ -603,6 +612,100 @@ function AgentEnvCard({ agentImage }: { agentImage: string }) {
 							</div>
 						))}
 					</div>
+				)}
+			</CardContent>
+		</Card>
+	)
+}
+
+// AgentContextsCard surfaces the markdown context files baked into
+// the agent's image (the CONTEXT directives from the Agentfile).
+// Each one is loaded into the model's system prompt at run time;
+// the operator usually has no way to see what's in there short of
+// exec-ing into the running container. Resolves via DescribeImage
+// against the agent's image ref — same pattern as AgentEnvCard.
+function AgentContextsCard({ agentImage }: { agentImage: string }) {
+	const enabled = agentImage !== ""
+	const desc = useQuery(describeImage, { ref: agentImage }, { enabled })
+
+	type ImageContext = { name: string; description?: string; content?: string }
+	let contexts: ImageContext[] = []
+	let parseError: string | null = null
+	if (desc.data?.config) {
+		try {
+			const spec = JSON.parse(desc.data.config) as {
+				agent?: { contexts?: ImageContext[] }
+			}
+			contexts = spec.agent?.contexts ?? []
+		} catch (e) {
+			parseError = e instanceof Error ? e.message : String(e)
+		}
+	}
+
+	return (
+		<Card>
+			<CardHeader>
+				<CardTitle>Contexts</CardTitle>
+				<CardDescription>
+					Markdown files baked into the agent's image at{" "}
+					<code className="font-mono text-xs">/etc/context/</code> and loaded into the
+					model's system prompt at run time. Click a name to see the body the model sees.
+				</CardDescription>
+			</CardHeader>
+			<CardContent>
+				{!enabled && (
+					<p className="text-muted-foreground text-sm">
+						Agent has no image ref — no contexts to display.
+					</p>
+				)}
+				{enabled && desc.isLoading && (
+					<p className="text-muted-foreground text-sm">Loading image config…</p>
+				)}
+				{desc.error && (
+					<p className="text-destructive text-sm">
+						Failed to describe image: {desc.error.message}
+					</p>
+				)}
+				{parseError && (
+					<p className="text-destructive text-sm">
+						Failed to parse image config: {parseError}
+					</p>
+				)}
+				{enabled && !desc.isLoading && !desc.error && contexts.length === 0 && (
+					<p className="text-muted-foreground text-sm">
+						No contexts declared on this agent.
+					</p>
+				)}
+				{contexts.length > 0 && (
+					<Accordion className="w-full" collapsible type="single">
+						{contexts.map((ctx) => (
+							<AccordionItem key={ctx.name} value={ctx.name}>
+								<AccordionTrigger>
+									<div className="flex min-w-0 flex-1 flex-col items-start gap-0.5 pr-3 text-left">
+										<span className="break-all font-medium font-mono text-sm">
+											{ctx.name}
+										</span>
+										{ctx.description && (
+											<span className="text-muted-foreground text-xs">
+												{ctx.description}
+											</span>
+										)}
+									</div>
+								</AccordionTrigger>
+								<AccordionContent>
+									{ctx.content ? (
+										<pre className="overflow-x-auto whitespace-pre-wrap break-words rounded-md bg-muted p-3 font-mono text-xs">
+											{ctx.content}
+										</pre>
+									) : (
+										<p className="text-muted-foreground text-sm italic">
+											No content recorded for this context.
+										</p>
+									)}
+								</AccordionContent>
+							</AccordionItem>
+						))}
+					</Accordion>
 				)}
 			</CardContent>
 		</Card>
