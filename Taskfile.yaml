@@ -137,6 +137,18 @@ tasks:
     cmds:
       - go run ./cmd/otters --socket {{.SOCKET}} {{.CLI_ARGS}}
 
+  proto:gen:
+    desc: |
+      Regenerate Go + Connect + TS proto bindings from api/v1/*.proto.
+      Runs buf at the repo root (for Go + Connect bindings under api/)
+      then under app/ pointing at the same proto source (..) for TS
+      bindings under app/lib/proto/. CI's "generated code is up to
+      date" gate runs the same target — if it diffs, re-run locally
+      and commit the result.
+    cmds:
+      - buf generate
+      - cd app && buf generate ..
+
   test:
     desc: Run unit tests with the race detector.
     cmds:

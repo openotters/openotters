@@ -762,7 +762,20 @@ type BuildToolImageRequest struct {
 	// the produced manifest + index. ghcr.io reads this and
 	// auto-links the package to the named GitHub repository,
 	// inheriting its visibility (public repo → public package).
-	Source        string `protobuf:"bytes,6,opt,name=source,proto3" json:"source,omitempty"`
+	Source string `protobuf:"bytes,6,opt,name=source,proto3" json:"source,omitempty"`
+	// Optional OCI image-spec annotations. Each one, when
+	// non-empty, gets stamped onto the produced manifest +
+	// index under its `org.opencontainers.image.<key>` name.
+	// Empty values are omitted entirely rather than stamped
+	// as "" so `otters bin inspect` only shows fields the
+	// builder actually supplied.
+	Version       string `protobuf:"bytes,7,opt,name=version,proto3" json:"version,omitempty"`              // org.opencontainers.image.version (e.g. v1.0.0-alpha.23)
+	Revision      string `protobuf:"bytes,8,opt,name=revision,proto3" json:"revision,omitempty"`            // org.opencontainers.image.revision (git SHA)
+	Licenses      string `protobuf:"bytes,9,opt,name=licenses,proto3" json:"licenses,omitempty"`            // org.opencontainers.image.licenses (SPDX expression)
+	Vendor        string `protobuf:"bytes,10,opt,name=vendor,proto3" json:"vendor,omitempty"`               // org.opencontainers.image.vendor
+	Authors       string `protobuf:"bytes,11,opt,name=authors,proto3" json:"authors,omitempty"`             // org.opencontainers.image.authors
+	Url           string `protobuf:"bytes,12,opt,name=url,proto3" json:"url,omitempty"`                     // org.opencontainers.image.url
+	Documentation string `protobuf:"bytes,13,opt,name=documentation,proto3" json:"documentation,omitempty"` // org.opencontainers.image.documentation
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -835,6 +848,55 @@ func (x *BuildToolImageRequest) GetPlatforms() []*ToolPlatform {
 func (x *BuildToolImageRequest) GetSource() string {
 	if x != nil {
 		return x.Source
+	}
+	return ""
+}
+
+func (x *BuildToolImageRequest) GetVersion() string {
+	if x != nil {
+		return x.Version
+	}
+	return ""
+}
+
+func (x *BuildToolImageRequest) GetRevision() string {
+	if x != nil {
+		return x.Revision
+	}
+	return ""
+}
+
+func (x *BuildToolImageRequest) GetLicenses() string {
+	if x != nil {
+		return x.Licenses
+	}
+	return ""
+}
+
+func (x *BuildToolImageRequest) GetVendor() string {
+	if x != nil {
+		return x.Vendor
+	}
+	return ""
+}
+
+func (x *BuildToolImageRequest) GetAuthors() string {
+	if x != nil {
+		return x.Authors
+	}
+	return ""
+}
+
+func (x *BuildToolImageRequest) GetUrl() string {
+	if x != nil {
+		return x.Url
+	}
+	return ""
+}
+
+func (x *BuildToolImageRequest) GetDocumentation() string {
+	if x != nil {
+		return x.Documentation
 	}
 	return ""
 }
@@ -5085,14 +5147,22 @@ const file_v1_daemon_proto_rawDesc = "" +
 	"\fToolPlatform\x12\x0e\n" +
 	"\x02os\x18\x01 \x01(\tR\x02os\x12\x12\n" +
 	"\x04arch\x18\x02 \x01(\tR\x04arch\x12\x19\n" +
-	"\bbin_path\x18\x03 \x01(\tR\abinPath\"\xd1\x01\n" +
+	"\bbin_path\x18\x03 \x01(\tR\abinPath\"\x8d\x03\n" +
 	"\x15BuildToolImageRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\x12\x14\n" +
 	"\x05usage\x18\x03 \x01(\tR\x05usage\x12\x12\n" +
 	"\x04tags\x18\x04 \x03(\tR\x04tags\x12@\n" +
 	"\tplatforms\x18\x05 \x03(\v2\".openotters.daemon.v1.ToolPlatformR\tplatforms\x12\x16\n" +
-	"\x06source\x18\x06 \x01(\tR\x06source\"V\n" +
+	"\x06source\x18\x06 \x01(\tR\x06source\x12\x18\n" +
+	"\aversion\x18\a \x01(\tR\aversion\x12\x1a\n" +
+	"\brevision\x18\b \x01(\tR\brevision\x12\x1a\n" +
+	"\blicenses\x18\t \x01(\tR\blicenses\x12\x16\n" +
+	"\x06vendor\x18\n" +
+	" \x01(\tR\x06vendor\x12\x18\n" +
+	"\aauthors\x18\v \x01(\tR\aauthors\x12\x10\n" +
+	"\x03url\x18\f \x01(\tR\x03url\x12$\n" +
+	"\rdocumentation\x18\r \x01(\tR\rdocumentation\"V\n" +
 	"\x16BuildToolImageResponse\x12\x16\n" +
 	"\x06digest\x18\x01 \x01(\tR\x06digest\x12\x12\n" +
 	"\x04tags\x18\x02 \x03(\tR\x04tags\x12\x10\n" +

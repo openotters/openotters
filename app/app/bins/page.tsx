@@ -168,7 +168,10 @@ export default function BinsPage() {
 									</DropdownMenu>
 								</div>
 							</CardHeader>
-							<CardContent>
+							<CardContent className="space-y-3">
+								{bin.description && (
+									<p className="text-muted-foreground text-sm">{bin.description}</p>
+								)}
 								<div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-muted-foreground text-sm">
 									<div className="flex items-center gap-1.5">
 										<HardDrive className="h-4 w-4" />
@@ -178,6 +181,16 @@ export default function BinsPage() {
 										<Clock className="h-4 w-4" />
 										<span>Built {formatDate(bin.createdAt)}</span>
 									</div>
+									{bin.source && (
+										<a
+											className="inline-flex items-center gap-1 underline-offset-2 hover:text-foreground hover:underline"
+											href={bin.source}
+											rel="noreferrer"
+											target="_blank">
+											<ExternalLink className="h-4 w-4" />
+											<span className="max-w-[40ch] truncate">{bin.source}</span>
+										</a>
+									)}
 								</div>
 							</CardContent>
 						</Card>

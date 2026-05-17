@@ -206,6 +206,19 @@ message BuildToolImageRequest {
   // auto-links the package to the named GitHub repository,
   // inheriting its visibility (public repo → public package).
   string source      = 6;
+  // Optional OCI image-spec annotations. Each one, when
+  // non-empty, gets stamped onto the produced manifest +
+  // index under its `org.opencontainers.image.<key>` name.
+  // Empty values are omitted entirely rather than stamped
+  // as "" so `otters bin inspect` only shows fields the
+  // builder actually supplied.
+  string version       = 7;  // org.opencontainers.image.version (e.g. v1.0.0-alpha.23)
+  string revision      = 8;  // org.opencontainers.image.revision (git SHA)
+  string licenses      = 9;  // org.opencontainers.image.licenses (SPDX expression)
+  string vendor        = 10; // org.opencontainers.image.vendor
+  string authors       = 11; // org.opencontainers.image.authors
+  string url           = 12; // org.opencontainers.image.url
+  string documentation = 13; // org.opencontainers.image.documentation
 }
 
 message BuildToolImageResponse {

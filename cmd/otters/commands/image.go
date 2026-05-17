@@ -8,7 +8,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"text/tabwriter"
 	"time"
 
 	"github.com/merlindorin/go-shared/pkg/cmd"
@@ -202,54 +201,8 @@ type ImageLs struct {
 }
 
 func (a *ImageLs) Run(ctx context.Context, common *cmd.Commons, d *Daemon) error {
-	c, conn, err := d.Connect()
-	if err != nil {
-		return err
-	}
-	defer conn.Close()
-
-	resp, err := c.ListImages(ctx, &daemonv1.ListImagesRequest{})
-	if err != nil {
-		return fmt.Errorf("listing agents: %w", unwrapRPC(err))
-	}
-
-	var agents []*daemonv1.ImageInfo
-
-	for _, img := range resp.GetImages() {
-		if img.GetArtifactType() == spec.AgentArtifactType {
-			agents = append(agents, img)
-		}
-	}
-
-	if a.Quiet {
-		for _, img := range agents {
-			fmt.Fprintln(os.Stdout, img.GetRef())
-		}
-
-		return nil
-	}
-
-	if len(agents) == 0 {
-		_, _ = common.Printer().Println("no agent images")
-
-		return nil
-	}
-
-	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-
-	fmt.Fprintln(w, "REF\tDIGEST\tSIZE\tCREATED")
-
-	for _, img := range agents {
-		digest := img.GetDigest()
-		if len(digest) > 19 {
-			digest = digest[:19]
-		}
-
-		fmt.Fprintf(w, "%s\t%s\t%s\t%s\n",
-			img.GetRef(), digest, humanSize(img.GetSize()), formatCreated(img.GetCreatedAt()))
-	}
-
-	return w.Flush()
+	return renderImageList(ctx, common, d,
+		spec.AgentArtifactType, "no agent images", "listing agents", a.Quiet)
 }
 
 // formatCreated renders a unix-seconds timestamp as a human-readable

@@ -1338,11 +1338,18 @@ func (d *Daemon) BuildTool(
 	store := d.openBuildStore()
 
 	dig, err := bin.BuildIndex(ctx, bin.BuildOptions{
-		Name:        name,
-		BinPath:     platforms[0].BinPath,
-		Description: req.GetDescription(),
-		Usage:       req.GetUsage(),
-		Source:      req.GetSource(),
+		Name:          name,
+		BinPath:       platforms[0].BinPath,
+		Description:   req.GetDescription(),
+		Usage:         req.GetUsage(),
+		Source:        req.GetSource(),
+		Version:       req.GetVersion(),
+		Revision:      req.GetRevision(),
+		Licenses:      req.GetLicenses(),
+		Vendor:        req.GetVendor(),
+		Authors:       req.GetAuthors(),
+		URL:           req.GetUrl(),
+		Documentation: req.GetDocumentation(),
 	}, platforms, store)
 	if err != nil {
 		return nil, fmt.Errorf("building: %w", err)

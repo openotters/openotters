@@ -7,7 +7,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"text/tabwriter"
 
 	"github.com/merlindorin/go-shared/pkg/cmd"
 
@@ -28,12 +27,24 @@ import (
 // images via `BIN` directives; the runtime image is pulled by the
 // daemon when provisioning an agent host.
 type BinBuild struct {
-	Name        string   `short:"n" help:"Tool name (required)" required:""`
-	Description string   `short:"d" help:"One-line description" default:""`
-	Usage       string   `short:"u" help:"Usage guidelines (markdown) baked into the image as USAGE.md" default:""`
-	Source      string   `short:"s" help:"Upstream repo URL — stamped as org.opencontainers.image.source so ghcr.io auto-links the package and inherits its visibility" default:""`
-	Tags        []string `short:"t" help:"Local tags (default: <name>:latest)" optional:""`
-	Platforms   []string `arg:"" name:"platform" help:"One or more <os>/<arch>:<bin-path> entries (e.g. linux/amd64:/tmp/jq-linux-amd64)"`
+	Name        string `short:"n" help:"Tool name (required) — stamped as io.openotters.bin.name (binary filename for the puller)" required:""`
+	Description string `short:"d" help:"One-line description — stamped as org.opencontainers.image.description" default:""`
+	Usage       string `short:"u" help:"Usage guidelines (markdown) baked into the image as USAGE.md" default:""`
+	Source      string `short:"s" help:"Upstream repo URL — stamped as org.opencontainers.image.source so ghcr.io auto-links the package and inherits its visibility" default:""`
+
+	// Optional OCI image-spec annotations. Each maps 1:1 to the
+	// matching org.opencontainers.image.<key> annotation; empty
+	// values omit the annotation rather than stamping "".
+	Version       string `help:"Packaged software version (org.opencontainers.image.version)" default:""`
+	Revision      string `help:"Source-control revision, typically a git SHA (org.opencontainers.image.revision)" default:""`
+	Licenses      string `help:"SPDX license expression (org.opencontainers.image.licenses), e.g. 'Apache-2.0'" default:""`
+	Vendor        string `help:"Distributing entity (org.opencontainers.image.vendor)" default:""`
+	Authors       string `help:"Comma-separated contact details for image authors (org.opencontainers.image.authors)" default:""`
+	URL           string `help:"Project URL (org.opencontainers.image.url)" default:""`
+	Documentation string `help:"Documentation URL (org.opencontainers.image.documentation)" default:""`
+
+	Tags      []string `short:"t" help:"Local tags (default: <name>:latest)" optional:""`
+	Platforms []string `arg:"" name:"platform" help:"One or more <os>/<arch>:<bin-path> entries (e.g. linux/amd64:/tmp/jq-linux-amd64)"`
 }
 
 func (b *BinBuild) Run(ctx context.Context, common *cmd.Commons, d *Daemon) error {
@@ -73,12 +84,19 @@ func (b *BinBuild) Run(ctx context.Context, common *cmd.Commons, d *Daemon) erro
 	defer conn.Close()
 
 	resp, err := c.BuildToolImage(ctx, &daemonv1.BuildToolImageRequest{
-		Name:        b.Name,
-		Description: b.Description,
-		Usage:       b.Usage,
-		Source:      b.Source,
-		Tags:        b.Tags,
-		Platforms:   platforms,
+		Name:          b.Name,
+		Description:   b.Description,
+		Usage:         b.Usage,
+		Source:        b.Source,
+		Tags:          b.Tags,
+		Platforms:     platforms,
+		Version:       b.Version,
+		Revision:      b.Revision,
+		Licenses:      b.Licenses,
+		Vendor:        b.Vendor,
+		Authors:       b.Authors,
+		Url:           b.URL,
+		Documentation: b.Documentation,
 	})
 	if err != nil {
 		return fmt.Errorf("building: %w", unwrapRPC(err))
@@ -156,53 +174,8 @@ type BinLs struct {
 }
 
 func (t *BinLs) Run(ctx context.Context, common *cmd.Commons, d *Daemon) error {
-	c, conn, err := d.Connect()
-	if err != nil {
-		return err
-	}
-	defer conn.Close()
-
-	resp, err := c.ListImages(ctx, &daemonv1.ListImagesRequest{})
-	if err != nil {
-		return fmt.Errorf("listing: %w", unwrapRPC(err))
-	}
-
-	var bins []*daemonv1.ImageInfo
-
-	for _, img := range resp.GetImages() {
-		if img.GetArtifactType() == spec.BinArtifactType {
-			bins = append(bins, img)
-		}
-	}
-
-	if t.Quiet {
-		for _, img := range bins {
-			fmt.Fprintln(os.Stdout, img.GetRef())
-		}
-
-		return nil
-	}
-
-	if len(bins) == 0 {
-		_, _ = common.Printer().Println("no binary images")
-
-		return nil
-	}
-
-	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-
-	fmt.Fprintln(w, "REF\tDIGEST\tSIZE")
-
-	for _, img := range bins {
-		digest := img.GetDigest()
-		if len(digest) > 19 {
-			digest = digest[:19]
-		}
-
-		fmt.Fprintf(w, "%s\t%s\t%s\n", img.GetRef(), digest, humanSize(img.GetSize()))
-	}
-
-	return w.Flush()
+	return renderImageList(ctx, common, d,
+		spec.BinArtifactType, "no binary images", "listing", t.Quiet)
 }
 
 // BinRm removes one or more binary images from the daemon's local registry.
