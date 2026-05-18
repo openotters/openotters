@@ -64,6 +64,9 @@ func main() {
 			Prompt:  &commands.Prompt{},
 			Logs:    &commands.Logs{},
 			Inspect: &commands.AgentInspect{},
+			Link:    &commands.Link{},
+			Unlink:  &commands.Unlink{},
+			Links:   &commands.Links{},
 		},
 	}
 
@@ -105,11 +108,12 @@ type CMD struct {
 	Logs   *commands.Logs   `cmd:"" group:"lifecycle" help:"Print the runtime log file for an agent"`
 	Info   *commands.Info   `cmd:"" help:"Show daemon info (sockets, paths, version, agent counts)"`
 
-	// Agent-to-agent linking. Top-level for discoverability;
-	// directional A → B (one row per direction).
-	Link   *commands.Link   `cmd:"" group:"lifecycle" help:"Grant a source agent permission to call one or more target agents"`
-	Unlink *commands.Unlink `cmd:"" group:"lifecycle" help:"Revoke a source's permission to call one or more target agents"`
-	Links  *commands.Links  `cmd:"" group:"lifecycle" help:"Show an agent's outbound + inbound links"`
+	// Top-level link/unlink/links — kept as ergonomic aliases for the
+	// canonical `otters agent link/unlink/links` forms. Same pattern
+	// as run/ps/etc above.
+	Link   *commands.Link   `cmd:"" group:"lifecycle" help:"Grant a source agent permission to call target agents (alias for 'otters agent link')"`
+	Unlink *commands.Unlink `cmd:"" group:"lifecycle" help:"Revoke a source's permission to call target agents (alias for 'otters agent unlink')"`
+	Links  *commands.Links  `cmd:"" group:"lifecycle" help:"Show an agent's outbound + inbound links (alias for 'otters agent links')"`
 
 	// Management groups.
 	Agent    AgentCmd    `cmd:"" group:"management" help:"Manage running agents — run, ps, start, stop, rm, chat, prompt, logs, inspect."`
@@ -146,6 +150,12 @@ type AgentCmd struct {
 	Prompt  *commands.Prompt       `cmd:"" help:"Send a single prompt to an agent and print the response (non-interactive)"`
 	Logs    *commands.Logs         `cmd:"" help:"Print the runtime log file for an agent"`
 	Inspect *commands.AgentInspect `cmd:"" aliases:"desc,describe" help:"Show detailed information for a running agent"`
+
+	// Linking commands. Canonical form lives here under `agent`; the
+	// top-level `otters link / unlink / links` shortcuts still work.
+	Link   *commands.Link   `cmd:"" help:"Grant a source agent permission to call one or more target agents"`
+	Unlink *commands.Unlink `cmd:"" help:"Revoke a source's permission to call one or more target agents"`
+	Links  *commands.Links  `cmd:"" help:"Show an agent's outbound + inbound links"`
 }
 
 type ImageCmd struct {
