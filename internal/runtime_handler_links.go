@@ -155,11 +155,18 @@ func (h *runtimeHandler) AgentExec(
 
 // ── agent self-management ───────────────────────────────────────
 
-// AgentCreate spawns a new agent from an existing image ref. Mounts
-// are intentionally absent from the input shape — an agent can't
-// open host-filesystem holes by mounting /etc into a child. The
-// build-from-source path lives on AgentCreateFromSource, a separate
-// capability operators opt into.
+// AgentCreate spawns a new agent from an existing image ref. The
+// `links` field is INBOUND to the new agent — each entry is a
+// source ref that gains the ability to call the new agent. To
+// be able to call the new agent yourself, include your own agent
+// ref (or id) in `links`, then call self_reload after this RPC
+// returns so your runtime picks up the refreshed JWT.
+//
+// Mounts are intentionally absent from the input shape — an
+// agent can't open host-filesystem holes by mounting /etc into a
+// child. The build-from-source path lives on
+// AgentCreateFromSource, a separate capability operators opt
+// into.
 func (h *runtimeHandler) AgentCreate(
 	ctx context.Context, req *connect.Request[daemonv1.AgentCreateRequest],
 ) (*connect.Response[daemonv1.AgentCreateResponse], error) {
@@ -175,7 +182,10 @@ func (h *runtimeHandler) AgentCreate(
 		Ref:   req.Msg.GetRef(),
 		Model: req.Msg.GetModel(),
 		Envs:  req.Msg.GetEnvs(),
-		Links: req.Msg.GetLinks(),
+		// `links` is interpreted as inbound (see below) — the new
+		// agent gets no outbound links of its own from this RPC.
+		// An operator (or the spawning agent via a future tool)
+		// can add outbound links later.
 	}
 	if desc := req.Msg.GetDescription(); desc != "" {
 		createReq.Labels = map[string]string{"description": desc}
@@ -183,6 +193,9 @@ func (h *runtimeHandler) AgentCreate(
 	resp, err := h.daemon.CreateAgent(ctx, createReq)
 	if err != nil {
 		return nil, err
+	}
+	if linkErr := h.persistInboundLinks(ctx, resp.GetId(), req.Msg.GetLinks()); linkErr != nil {
+		return nil, linkErr
 	}
 	return connect.NewResponse(&daemonv1.AgentCreateResponse{
 		Id:     resp.GetId(),
@@ -223,7 +236,7 @@ func (h *runtimeHandler) AgentCreateFromSource(
 		Ref:   built.GetRef(),
 		Model: req.Msg.GetModel(),
 		Envs:  req.Msg.GetEnvs(),
-		Links: req.Msg.GetLinks(),
+		// `links` is inbound — see AgentCreate above.
 	}
 	if desc := req.Msg.GetDescription(); desc != "" {
 		createReq.Labels = map[string]string{"description": desc}
@@ -232,10 +245,80 @@ func (h *runtimeHandler) AgentCreateFromSource(
 	if err != nil {
 		return nil, err
 	}
+	if linkErr := h.persistInboundLinks(ctx, resp.GetId(), req.Msg.GetLinks()); linkErr != nil {
+		return nil, linkErr
+	}
 	return connect.NewResponse(&daemonv1.AgentCreateResponse{
 		Id:     resp.GetId(),
 		Name:   resp.GetName(),
 		Status: resp.GetStatus(),
+	}), nil
+}
+
+// persistInboundLinks records "source → new agent" edges in the
+// agent_links table for every ref in the request's `links` field.
+// The new agent is the target; each ref is a source that gains
+// permission to call it.
+//
+// The source's JWT is NOT refreshed here — callers that want to
+// use the new edge must call self_reload (or be restarted by an
+// operator). Mid-tool-call restarts would kill the LLM turn that's
+// currently running, so we keep the JWT change explicit.
+//
+// Unknown source refs fail the whole RPC — better than silently
+// dropping links the model asked for. The new agent stays around
+// even on failure; the model can agent_delete it if the link set
+// is unrecoverable.
+func (h *runtimeHandler) persistInboundLinks(
+	ctx context.Context, newAgentID string, sources []string,
+) error {
+	for _, sourceRef := range sources {
+		source, err := h.daemon.resolve(sourceRef)
+		if err != nil {
+			return connect.NewError(connect.CodeInvalidArgument,
+				fmt.Errorf("link source %q: %w", sourceRef, err))
+		}
+		desc := "spawned via agent_create"
+		if linkErr := h.daemon.state.AgentLinksAdd(
+			ctx, source.id.String(), newAgentID, desc,
+		); linkErr != nil {
+			return connect.NewError(connect.CodeInternal,
+				fmt.Errorf("persist inbound link %s → %s: %w",
+					sourceRef, newAgentID, linkErr))
+		}
+	}
+	return nil
+}
+
+// SelfReload re-issues the caller's JWT against the current
+// agent_links table and bounces the caller's runtime so the
+// refreshed token (and the link set baked into it) takes effect.
+// Use after agent_create to actually be able to call the new
+// agent — without a self_reload, the JWT in memory still carries
+// the original Links claim from agent startup.
+//
+// Side effect: stop+starts the calling agent. The current LLM
+// turn dies with the runtime; the next user turn starts fresh
+// on the reloaded agent. Call it as the LAST tool in a turn —
+// the agent_create + self_reload sequence is intentionally a
+// turn boundary.
+func (h *runtimeHandler) SelfReload(
+	ctx context.Context, _ *connect.Request[daemonv1.SelfReloadRequest],
+) (*connect.Response[daemonv1.SelfReloadResponse], error) {
+	caller, err := requireAgentCaller(ctx)
+	if err != nil {
+		return nil, err
+	}
+	ma, err := h.daemon.resolve(caller.AgentRef)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeNotFound, err)
+	}
+	restarted, err := h.daemon.RefreshAgentTokenAndMaybeRestart(ctx, ma)
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(&daemonv1.SelfReloadResponse{
+		Restarted: restarted,
 	}), nil
 }
 
@@ -336,6 +419,13 @@ func requireAgentCaller(ctx context.Context) (*auth.Claims, error) {
 // caller. Both surface to the model as a clean PermissionDenied
 // so the runtime tool can render a useful "you can't call X"
 // message.
+//
+// The JWT is the source of truth for link permissions, NOT the
+// agent_links table. Links added at runtime (via agent_create's
+// inbound-link request or the operator's `otters link`) only take
+// effect after the affected source agent's JWT is re-issued — for
+// the caller itself, that means calling self_reload, which
+// stop+starts the agent so the new token reaches the runtime.
 func (h *runtimeHandler) requireLinkedTarget(
 	ctx context.Context, ref string,
 ) (*managedAgent, error) {

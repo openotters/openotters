@@ -270,6 +270,18 @@ export const imageList = Runtime.method.imageList;
 export const binList = Runtime.method.binList;
 
 /**
+ * SelfReload re-issues the caller's JWT against the current
+ * agent_links table and bounces the caller's runtime so the
+ * refreshed token takes effect. Required after agent_create
+ * when the caller included its own ref in `links` and wants
+ * to call the new agent — without it, the JWT in memory
+ * still carries the stale Links claim from agent startup.
+ *
+ * @generated from rpc openotters.daemon.v1.Runtime.SelfReload
+ */
+export const selfReload = Runtime.method.selfReload;
+
+/**
  * GetAgentIdentity exposes an agent's persisted JWT + decoded
  * claims for the operator UI's Identity tab. Operator-only
  * (rejected for agent tokens). The token field is the raw

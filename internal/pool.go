@@ -442,6 +442,15 @@ func runtimeCapsForExtras(extras AgentExtras) []agentpkg.Capability {
 			Description: "List available BIN images (ref / digest / description / size). " +
 				"Useful when composing an Agentfile for agent_create_from_source.",
 		},
+		{
+			Name: "self_reload",
+			Description: "Re-issue your JWT against the current link table and " +
+				"restart your runtime. Call after agent_create when you included " +
+				"your own ref in `links` and want to call the new agent — without " +
+				"a self_reload, your in-memory token still carries the stale link " +
+				"claim. WARNING: this kills the current turn; call it as your " +
+				"LAST tool of the turn.",
+		},
 	}
 	if extras.DaemonURL != "" && extras.AgentToken != "" {
 		caps = append(caps,

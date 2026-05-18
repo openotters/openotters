@@ -67,6 +67,7 @@ const (
 	Runtime_AgentDelete_FullMethodName           = "/openotters.daemon.v1.Runtime/AgentDelete"
 	Runtime_ImageList_FullMethodName             = "/openotters.daemon.v1.Runtime/ImageList"
 	Runtime_BinList_FullMethodName               = "/openotters.daemon.v1.Runtime/BinList"
+	Runtime_SelfReload_FullMethodName            = "/openotters.daemon.v1.Runtime/SelfReload"
 	Runtime_GetAgentIdentity_FullMethodName      = "/openotters.daemon.v1.Runtime/GetAgentIdentity"
 	Runtime_WatchAsyncJob_FullMethodName         = "/openotters.daemon.v1.Runtime/WatchAsyncJob"
 )
@@ -160,6 +161,13 @@ type RuntimeClient interface {
 	AgentDelete(ctx context.Context, in *AgentDeleteRequest, opts ...grpc.CallOption) (*AgentDeleteResponse, error)
 	ImageList(ctx context.Context, in *ImageListRequest, opts ...grpc.CallOption) (*ImageListResponse, error)
 	BinList(ctx context.Context, in *BinListRequest, opts ...grpc.CallOption) (*BinListResponse, error)
+	// SelfReload re-issues the caller's JWT against the current
+	// agent_links table and bounces the caller's runtime so the
+	// refreshed token takes effect. Required after agent_create
+	// when the caller included its own ref in `links` and wants
+	// to call the new agent — without it, the JWT in memory
+	// still carries the stale Links claim from agent startup.
+	SelfReload(ctx context.Context, in *SelfReloadRequest, opts ...grpc.CallOption) (*SelfReloadResponse, error)
 	// GetAgentIdentity exposes an agent's persisted JWT + decoded
 	// claims for the operator UI's Identity tab. Operator-only
 	// (rejected for agent tokens). The token field is the raw
@@ -681,6 +689,16 @@ func (c *runtimeClient) BinList(ctx context.Context, in *BinListRequest, opts ..
 	return out, nil
 }
 
+func (c *runtimeClient) SelfReload(ctx context.Context, in *SelfReloadRequest, opts ...grpc.CallOption) (*SelfReloadResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SelfReloadResponse)
+	err := c.cc.Invoke(ctx, Runtime_SelfReload_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *runtimeClient) GetAgentIdentity(ctx context.Context, in *GetAgentIdentityRequest, opts ...grpc.CallOption) (*GetAgentIdentityResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(GetAgentIdentityResponse)
@@ -799,6 +817,13 @@ type RuntimeServer interface {
 	AgentDelete(context.Context, *AgentDeleteRequest) (*AgentDeleteResponse, error)
 	ImageList(context.Context, *ImageListRequest) (*ImageListResponse, error)
 	BinList(context.Context, *BinListRequest) (*BinListResponse, error)
+	// SelfReload re-issues the caller's JWT against the current
+	// agent_links table and bounces the caller's runtime so the
+	// refreshed token takes effect. Required after agent_create
+	// when the caller included its own ref in `links` and wants
+	// to call the new agent — without it, the JWT in memory
+	// still carries the stale Links claim from agent startup.
+	SelfReload(context.Context, *SelfReloadRequest) (*SelfReloadResponse, error)
 	// GetAgentIdentity exposes an agent's persisted JWT + decoded
 	// claims for the operator UI's Identity tab. Operator-only
 	// (rejected for agent tokens). The token field is the raw
@@ -965,6 +990,9 @@ func (UnimplementedRuntimeServer) ImageList(context.Context, *ImageListRequest) 
 }
 func (UnimplementedRuntimeServer) BinList(context.Context, *BinListRequest) (*BinListResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method BinList not implemented")
+}
+func (UnimplementedRuntimeServer) SelfReload(context.Context, *SelfReloadRequest) (*SelfReloadResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method SelfReload not implemented")
 }
 func (UnimplementedRuntimeServer) GetAgentIdentity(context.Context, *GetAgentIdentityRequest) (*GetAgentIdentityResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetAgentIdentity not implemented")
@@ -1843,6 +1871,24 @@ func _Runtime_BinList_Handler(srv interface{}, ctx context.Context, dec func(int
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Runtime_SelfReload_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SelfReloadRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(RuntimeServer).SelfReload(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Runtime_SelfReload_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(RuntimeServer).SelfReload(ctx, req.(*SelfReloadRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _Runtime_GetAgentIdentity_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(GetAgentIdentityRequest)
 	if err := dec(in); err != nil {
@@ -2062,6 +2108,10 @@ var Runtime_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "BinList",
 			Handler:    _Runtime_BinList_Handler,
+		},
+		{
+			MethodName: "SelfReload",
+			Handler:    _Runtime_SelfReload_Handler,
 		},
 		{
 			MethodName: "GetAgentIdentity",

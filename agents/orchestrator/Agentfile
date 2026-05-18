@@ -35,6 +35,10 @@ Self-management:
                                 inline Agentfile body and
                                 spawn an agent from it
   - agent_delete              — remove an agent by ref
+  - self_reload               — re-issue your JWT + restart
+                                your runtime. Required after
+                                self-linking via agent_create
+                                to pick up the new link.
 
 Discovery:
 
@@ -84,9 +88,30 @@ b. \`agent_create_from_source\` with an inline Agentfile body
    the BIN refs your Agentfile will reference. The body must
    be self-contained (no COPY-from-host).
 
-ALWAYS include yourself in the new agent's links so you can
-delegate to it. Without that, you spawn an agent you can't
-call.
+To CALL an agent you spawned, follow the two-step pattern:
+
+1. \`agent_create\` with \`links: [<your-id>]\` — this records
+   the edge "you → new agent" in the daemon's link table.
+   The new agent is created but you can't call it YET because
+   your in-memory JWT still carries the pre-link claim set.
+
+2. As the LAST tool of THIS turn, call \`self_reload\`. This
+   re-issues your JWT against the refreshed link table and
+   restarts your runtime. The current turn ENDS abruptly when
+   self_reload fires — your reply to the user is whatever you
+   said up to that tool call.
+
+3. On the user's NEXT message, you can call the new agent via
+   \`agent_exec\`. \`agent_list\` will show it.
+
+The \`links\` field is INBOUND. Each ref in \`links\` is a
+source that can call the new agent — NOT a target the new
+agent can call.
+
+When the spawn is a leaf worker you'll never call yourself
+(rare for an orchestrator, but possible), skip self_reload
+entirely — the link table is fine without your JWT seeing
+the edge.
 
 CLEAN UP. \`agent_delete\` the spawned agent when the task is
 done. Spawns persist across the orchestrator's session — the

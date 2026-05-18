@@ -135,6 +135,8 @@ const (
 	RuntimeImageListProcedure = "/openotters.daemon.v1.Runtime/ImageList"
 	// RuntimeBinListProcedure is the fully-qualified name of the Runtime's BinList RPC.
 	RuntimeBinListProcedure = "/openotters.daemon.v1.Runtime/BinList"
+	// RuntimeSelfReloadProcedure is the fully-qualified name of the Runtime's SelfReload RPC.
+	RuntimeSelfReloadProcedure = "/openotters.daemon.v1.Runtime/SelfReload"
 	// RuntimeGetAgentIdentityProcedure is the fully-qualified name of the Runtime's GetAgentIdentity
 	// RPC.
 	RuntimeGetAgentIdentityProcedure = "/openotters.daemon.v1.Runtime/GetAgentIdentity"
@@ -264,6 +266,13 @@ type RuntimeClient interface {
 	AgentDelete(context.Context, *connect.Request[v1.AgentDeleteRequest]) (*connect.Response[v1.AgentDeleteResponse], error)
 	ImageList(context.Context, *connect.Request[v1.ImageListRequest]) (*connect.Response[v1.ImageListResponse], error)
 	BinList(context.Context, *connect.Request[v1.BinListRequest]) (*connect.Response[v1.BinListResponse], error)
+	// SelfReload re-issues the caller's JWT against the current
+	// agent_links table and bounces the caller's runtime so the
+	// refreshed token takes effect. Required after agent_create
+	// when the caller included its own ref in `links` and wants
+	// to call the new agent — without it, the JWT in memory
+	// still carries the stale Links claim from agent startup.
+	SelfReload(context.Context, *connect.Request[v1.SelfReloadRequest]) (*connect.Response[v1.SelfReloadResponse], error)
 	// GetAgentIdentity exposes an agent's persisted JWT + decoded
 	// claims for the operator UI's Identity tab. Operator-only
 	// (rejected for agent tokens). The token field is the raw
@@ -578,6 +587,12 @@ func NewRuntimeClient(httpClient connect.HTTPClient, baseURL string, opts ...con
 			connect.WithSchema(runtimeMethods.ByName("BinList")),
 			connect.WithClientOptions(opts...),
 		),
+		selfReload: connect.NewClient[v1.SelfReloadRequest, v1.SelfReloadResponse](
+			httpClient,
+			baseURL+RuntimeSelfReloadProcedure,
+			connect.WithSchema(runtimeMethods.ByName("SelfReload")),
+			connect.WithClientOptions(opts...),
+		),
 		getAgentIdentity: connect.NewClient[v1.GetAgentIdentityRequest, v1.GetAgentIdentityResponse](
 			httpClient,
 			baseURL+RuntimeGetAgentIdentityProcedure,
@@ -643,6 +658,7 @@ type runtimeClient struct {
 	agentDelete           *connect.Client[v1.AgentDeleteRequest, v1.AgentDeleteResponse]
 	imageList             *connect.Client[v1.ImageListRequest, v1.ImageListResponse]
 	binList               *connect.Client[v1.BinListRequest, v1.BinListResponse]
+	selfReload            *connect.Client[v1.SelfReloadRequest, v1.SelfReloadResponse]
 	getAgentIdentity      *connect.Client[v1.GetAgentIdentityRequest, v1.GetAgentIdentityResponse]
 	watchAsyncJob         *connect.Client[v1.WatchAsyncJobRequest, v1.WatchAsyncJobResponse]
 }
@@ -887,6 +903,11 @@ func (c *runtimeClient) BinList(ctx context.Context, req *connect.Request[v1.Bin
 	return c.binList.CallUnary(ctx, req)
 }
 
+// SelfReload calls openotters.daemon.v1.Runtime.SelfReload.
+func (c *runtimeClient) SelfReload(ctx context.Context, req *connect.Request[v1.SelfReloadRequest]) (*connect.Response[v1.SelfReloadResponse], error) {
+	return c.selfReload.CallUnary(ctx, req)
+}
+
 // GetAgentIdentity calls openotters.daemon.v1.Runtime.GetAgentIdentity.
 func (c *runtimeClient) GetAgentIdentity(ctx context.Context, req *connect.Request[v1.GetAgentIdentityRequest]) (*connect.Response[v1.GetAgentIdentityResponse], error) {
 	return c.getAgentIdentity.CallUnary(ctx, req)
@@ -984,6 +1005,13 @@ type RuntimeHandler interface {
 	AgentDelete(context.Context, *connect.Request[v1.AgentDeleteRequest]) (*connect.Response[v1.AgentDeleteResponse], error)
 	ImageList(context.Context, *connect.Request[v1.ImageListRequest]) (*connect.Response[v1.ImageListResponse], error)
 	BinList(context.Context, *connect.Request[v1.BinListRequest]) (*connect.Response[v1.BinListResponse], error)
+	// SelfReload re-issues the caller's JWT against the current
+	// agent_links table and bounces the caller's runtime so the
+	// refreshed token takes effect. Required after agent_create
+	// when the caller included its own ref in `links` and wants
+	// to call the new agent — without it, the JWT in memory
+	// still carries the stale Links claim from agent startup.
+	SelfReload(context.Context, *connect.Request[v1.SelfReloadRequest]) (*connect.Response[v1.SelfReloadResponse], error)
 	// GetAgentIdentity exposes an agent's persisted JWT + decoded
 	// claims for the operator UI's Identity tab. Operator-only
 	// (rejected for agent tokens). The token field is the raw
@@ -1294,6 +1322,12 @@ func NewRuntimeHandler(svc RuntimeHandler, opts ...connect.HandlerOption) (strin
 		connect.WithSchema(runtimeMethods.ByName("BinList")),
 		connect.WithHandlerOptions(opts...),
 	)
+	runtimeSelfReloadHandler := connect.NewUnaryHandler(
+		RuntimeSelfReloadProcedure,
+		svc.SelfReload,
+		connect.WithSchema(runtimeMethods.ByName("SelfReload")),
+		connect.WithHandlerOptions(opts...),
+	)
 	runtimeGetAgentIdentityHandler := connect.NewUnaryHandler(
 		RuntimeGetAgentIdentityProcedure,
 		svc.GetAgentIdentity,
@@ -1404,6 +1438,8 @@ func NewRuntimeHandler(svc RuntimeHandler, opts ...connect.HandlerOption) (strin
 			runtimeImageListHandler.ServeHTTP(w, r)
 		case RuntimeBinListProcedure:
 			runtimeBinListHandler.ServeHTTP(w, r)
+		case RuntimeSelfReloadProcedure:
+			runtimeSelfReloadHandler.ServeHTTP(w, r)
 		case RuntimeGetAgentIdentityProcedure:
 			runtimeGetAgentIdentityHandler.ServeHTTP(w, r)
 		case RuntimeWatchAsyncJobProcedure:
@@ -1607,6 +1643,10 @@ func (UnimplementedRuntimeHandler) ImageList(context.Context, *connect.Request[v
 
 func (UnimplementedRuntimeHandler) BinList(context.Context, *connect.Request[v1.BinListRequest]) (*connect.Response[v1.BinListResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("openotters.daemon.v1.Runtime.BinList is not implemented"))
+}
+
+func (UnimplementedRuntimeHandler) SelfReload(context.Context, *connect.Request[v1.SelfReloadRequest]) (*connect.Response[v1.SelfReloadResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("openotters.daemon.v1.Runtime.SelfReload is not implemented"))
 }
 
 func (UnimplementedRuntimeHandler) GetAgentIdentity(context.Context, *connect.Request[v1.GetAgentIdentityRequest]) (*connect.Response[v1.GetAgentIdentityResponse], error) {

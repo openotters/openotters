@@ -235,6 +235,17 @@ func (d *Daemon) resolveLinkEndpoints(sourceRef, targetRef string) (*managedAgen
 // runtime spawns with the fresh token. The pool's Restore /
 // Start path reads token + token_jti from the agents row, so the
 // stop/start dance is enough; no separate token-push channel.
+// RefreshAgentTokenAndMaybeRestart re-issues the source's JWT
+// against the current agent_links table and bounces the runtime
+// when the agent is running. Exported for the agent-facing
+// SelfReload handler; LinkAgents / UnlinkAgents continue to use
+// it through the unexported alias below.
+func (d *Daemon) RefreshAgentTokenAndMaybeRestart(
+	ctx context.Context, source *managedAgent,
+) (bool, error) {
+	return d.refreshAgentTokenAndMaybeRestart(ctx, source)
+}
+
 func (d *Daemon) refreshAgentTokenAndMaybeRestart(
 	ctx context.Context, source *managedAgent,
 ) (bool, error) {

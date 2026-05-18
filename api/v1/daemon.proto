@@ -117,6 +117,13 @@ service Runtime {
   rpc AgentDelete(AgentDeleteRequest)                     returns (AgentDeleteResponse);
   rpc ImageList(ImageListRequest)                         returns (ImageListResponse);
   rpc BinList(BinListRequest)                             returns (BinListResponse);
+  // SelfReload re-issues the caller's JWT against the current
+  // agent_links table and bounces the caller's runtime so the
+  // refreshed token takes effect. Required after agent_create
+  // when the caller included its own ref in `links` and wants
+  // to call the new agent — without it, the JWT in memory
+  // still carries the stale Links claim from agent startup.
+  rpc SelfReload(SelfReloadRequest) returns (SelfReloadResponse);
 
   // GetAgentIdentity exposes an agent's persisted JWT + decoded
   // claims for the operator UI's Identity tab. Operator-only
@@ -1047,7 +1054,13 @@ message AgentCreateRequest {
   string name        = 2;  // optional; daemon auto-generates if empty
   string model       = 3;  // optional; overrides image MODEL directive
   repeated EnvOverride envs = 4;
-  repeated string links     = 5;  // agent refs to stamp into the new agent's JWT.Links
+  // INBOUND links to the new agent: each ref becomes a source
+  // that can call the new agent. Include your own ref to gain
+  // call permission yourself — then call SelfReload after this
+  // RPC so your runtime picks up the refreshed JWT (without that,
+  // your in-memory token still carries the pre-link claim set).
+  // Unknown source refs fail the create.
+  repeated string links     = 5;
   string description = 6;  // → labels["description"]
 }
 message AgentCreateResponse {
@@ -1073,12 +1086,24 @@ message AgentCreateFromSourceRequest {
   string name        = 2;
   string model       = 3;
   repeated EnvOverride envs = 4;
+  // Same INBOUND semantics as AgentCreateRequest.links.
   repeated string links     = 5;
   string description = 6;
 }
 
 message AgentDeleteRequest  { string ref = 1; }
 message AgentDeleteResponse {}
+
+// SelfReload — caller identified by JWT, no fields needed.
+message SelfReloadRequest  {}
+message SelfReloadResponse {
+  // True when the caller's runtime was running and got
+  // restarted to pick up the refreshed token. False when the
+  // daemon had no signing key configured (test path) or the
+  // runtime wasn't running — in both cases the new token is
+  // persisted but no restart was needed.
+  bool restarted = 1;
+}
 
 // ── agent-facing image / bin enumeration ─────────────────────────
 // ImageList / BinList are the agent-facing twins of the operator
