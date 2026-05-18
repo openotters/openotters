@@ -1457,6 +1457,123 @@ function clipForInline(s: string, limit: number): { shown: string; clipped: bool
 	return { shown, clipped: true }
 }
 
+// isAgentCallTool reports whether a tool row should render as a
+// cross-agent conversation panel (prompt + response bubbles) rather
+// than the generic input/output JSON view. agent_chat and
+// agent_exec both wrap a {ref, prompt} → {response, …} round-trip
+// and benefit from a chat-shaped renderer.
+function isAgentCallTool(name: string): boolean {
+	return name === "agent_chat" || name === "agent_exec"
+}
+
+// AgentCallPanel renders an agent_chat / agent_exec round-trip as
+// a mini-conversation: a "you said" bubble for the prompt the
+// caller sent and a "they replied" bubble for the target's
+// response. The session id (when agent_chat returned one) sits
+// in the footer so the operator can match the row to the target's
+// session view at a glance — the CrossAgentLink button below
+// wraps the same id into a clickable jump.
+function AgentCallPanel({
+	input,
+	output,
+	running,
+	toolName,
+}: {
+	input: unknown
+	output: string | null
+	running: boolean
+	toolName: string
+}) {
+	const ref = parseAgentRef(input)
+	const prompt = parseAgentPrompt(input)
+	const inputSession = parseInputSessionID(input)
+	const { response, sessionID } = parseAgentOutput(output)
+	const effectiveSession = sessionID || inputSession
+
+	return (
+		<div className="space-y-2">
+			<div className="flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
+				<span className="rounded bg-muted px-1.5 py-0.5 font-mono">
+					→ {ref || "(no ref)"}
+				</span>
+				{effectiveSession && (
+					<span className="rounded bg-muted px-1.5 py-0.5 font-mono">
+						session: {effectiveSession.length > 28
+							? `${effectiveSession.slice(0, 14)}…${effectiveSession.slice(-10)}`
+							: effectiveSession}
+					</span>
+				)}
+				<span className="rounded bg-muted/60 px-1.5 py-0.5">
+					{toolName === "agent_chat" ? "threaded" : "one-shot"}
+				</span>
+			</div>
+			<AgentBubble role="prompt" text={prompt || "(empty prompt)"} />
+			{running ? (
+				<p className="rounded-md border bg-muted/30 px-2 py-1.5 text-[11px] text-muted-foreground italic">
+					Waiting for {ref || "target"} to reply…
+				</p>
+			) : (
+				<AgentBubble role="response" text={response || "(empty response)"} />
+			)}
+		</div>
+	)
+}
+
+// AgentBubble renders one side of the cross-agent exchange — a
+// labelled block with role-tinted styling so the operator can
+// scan the prompt-vs-response at a glance. Markdown / code is
+// left as monospace text so multi-line content (jq filters,
+// kubectl output) stays legible.
+function AgentBubble({ role, text }: { role: "prompt" | "response"; text: string }) {
+	const isPrompt = role === "prompt"
+	return (
+		<div
+			className={`rounded-md border px-2 py-1.5 ${
+				isPrompt ? "border-primary/30 bg-primary/5" : "border-emerald-500/30 bg-emerald-500/5"
+			}`}
+		>
+			<div
+				className={`mb-1 text-[10px] font-semibold uppercase tracking-wide ${
+					isPrompt ? "text-primary" : "text-emerald-700 dark:text-emerald-400"
+				}`}
+			>
+				{isPrompt ? "Prompt" : "Response"}
+			</div>
+			<pre className="whitespace-pre-wrap break-words font-mono text-xs leading-relaxed">
+				{text}
+			</pre>
+		</div>
+	)
+}
+
+function parseAgentPrompt(input: unknown): string {
+	if (!input || typeof input !== "object") return ""
+	const v = (input as Record<string, unknown>).prompt
+	return typeof v === "string" ? v : ""
+}
+
+function parseInputSessionID(input: unknown): string {
+	if (!input || typeof input !== "object") return ""
+	const v = (input as Record<string, unknown>).session_id
+	return typeof v === "string" ? v : ""
+}
+
+function parseAgentOutput(output: string | null): { response: string; sessionID: string } {
+	if (!output) return { response: "", sessionID: "" }
+	try {
+		const parsed = JSON.parse(output) as { response?: unknown; session_id?: unknown }
+		return {
+			response: typeof parsed.response === "string" ? parsed.response : "",
+			sessionID: typeof parsed.session_id === "string" ? parsed.session_id : "",
+		}
+	} catch {
+		// agent_exec returns a raw string. Treat it as the response
+		// body and leave session_id empty (the daemon wipes the exec
+		// session anyway).
+		return { response: output, sessionID: "" }
+	}
+}
+
 // CrossAgentLink surfaces a "view in <target>" jump for agent_chat
 // (and agent_exec) tool rows. The output of those tools is a JSON
 // envelope with the target ref + session id; the daemon's
@@ -1623,39 +1740,58 @@ function CompactToolRow({ part, densityCompact }: CompactToolRowProps) {
 					</button>
 				</summary>
 				<div className="space-y-2 border-t bg-background/50 p-2">
-					{part.input !== undefined && (
-						<div className="space-y-1">
-							{inputClip.clipped && (
-								<p className="text-muted-foreground text-[10px]">
-									input clipped — showing last {TOOL_OUTPUT_INLINE_LIMIT} chars of{" "}
-									{inputJSON.length}
-								</p>
+					{/*
+					 * agent_chat / agent_exec get a specialised render
+					 * instead of the raw JSON parameters / output: the
+					 * model's prompt and the target's reply are the
+					 * load-bearing content, surfacing them as
+					 * conversation bubbles is what the operator wants
+					 * to see (raw JSON still available in the
+					 * Maximize2 modal). For every other tool, fall
+					 * through to the generic ToolInput / ToolOutput.
+					 */}
+					{isAgentCallTool(part.name) ? (
+						<AgentCallPanel
+							input={part.input}
+							output={part.output}
+							running={status === "running"}
+							toolName={part.name}
+						/>
+					) : (
+						<>
+							{part.input !== undefined && (
+								<div className="space-y-1">
+									{inputClip.clipped && (
+										<p className="text-muted-foreground text-[10px]">
+											input clipped — showing last {TOOL_OUTPUT_INLINE_LIMIT} chars of{" "}
+											{inputJSON.length}
+										</p>
+									)}
+									<ToolInput input={inputClip.clipped ? inputClip.shown : part.input} />
+								</div>
 							)}
-							<ToolInput input={inputClip.clipped ? inputClip.shown : part.input} />
-						</div>
-					)}
-					{(part.output !== null || status === "running") && (
-						<div className="space-y-1">
-							{outputClip.clipped && (
-								<p className="text-muted-foreground text-[10px]">
-									output clipped — showing last {TOOL_OUTPUT_INLINE_LIMIT} chars of{" "}
-									{(part.output ?? "").length}
-								</p>
+							{(part.output !== null || status === "running") && (
+								<div className="space-y-1">
+									{outputClip.clipped && (
+										<p className="text-muted-foreground text-[10px]">
+											output clipped — showing last {TOOL_OUTPUT_INLINE_LIMIT} chars of{" "}
+											{(part.output ?? "").length}
+										</p>
+									)}
+									<ToolOutput
+										errorText={undefined}
+										output={outputClip.clipped ? outputClip.shown : part.output}
+									/>
+								</div>
 							)}
-							<ToolOutput
-								errorText={undefined}
-								output={outputClip.clipped ? outputClip.shown : part.output}
-							/>
-						</div>
+						</>
 					)}
 					{/*
-					 * Agent-to-agent shortcut: when this row is an
-					 * agent_chat (or agent_exec) call that succeeded,
-					 * surface a one-click link to the target's session
-					 * so the operator can read the cross-agent thread
-					 * in the target's own chat view. The target persists
-					 * the conversation under the session_id we returned;
-					 * no extra plumbing needed.
+					 * Agent-to-agent shortcut: a one-click link to the
+					 * target's session so the operator can read the
+					 * full cross-agent thread in the target's own
+					 * chat view (the target persists each session
+					 * regardless of which agent initiated it).
 					 */}
 					{part.output && <CrossAgentLink toolName={part.name} input={part.input} output={part.output} />}
 					{/*
