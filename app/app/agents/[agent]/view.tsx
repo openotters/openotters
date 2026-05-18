@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery } from "@connectrpc/connect-query"
 import { useQueryClient } from "@tanstack/react-query"
-import { Activity, ArrowLeft, Bot, ChevronRight, FileText, Folder, History, KeyRound, Link2, ListChecks, MessageSquare, Pause, Play, ScrollText, StickyNote, Terminal, Trash2, Variable } from "lucide-react"
+import { Activity, ArrowLeft, Bot, ChevronRight, FileText, Folder, History, KeyRound, Link2, ListChecks, MessageSquare, Pause, Play, ScrollText, Sparkles, StickyNote, Terminal, Trash2, Variable } from "lucide-react"
 import Link from "next/link"
 import { notFound, useRouter } from "next/navigation"
 import { useState } from "react"
@@ -28,6 +28,7 @@ import {
 	startAgent,
 	stopAgent,
 } from "@/lib/proto/v1/daemon-Runtime_connectquery"
+import { CapabilitiesPanel } from "@/components/capabilities/capabilities-panel"
 import { IdentityPanel } from "@/components/identity/identity-panel"
 import { JobsTable } from "@/components/jobs/jobs-table"
 import { RunJobDialog } from "@/components/jobs/run-job-dialog"
@@ -248,6 +249,15 @@ export default function AgentDetailPage() {
 					<TabsTrigger className="justify-start gap-2" value="links">
 						<Link2 className="h-4 w-4" />
 						Links
+					</TabsTrigger>
+					<TabsTrigger className="justify-start gap-2" value="capabilities">
+						<Sparkles className="h-4 w-4" />
+						<span className="flex-1 text-left">Capabilities</span>
+						{agent.capabilities && agent.capabilities.length > 0 && (
+							<Badge className="ml-1" variant="secondary">
+								{agent.capabilities.length}
+							</Badge>
+						)}
 					</TabsTrigger>
 					<TabsTrigger className="justify-start gap-2" value="identity">
 						<KeyRound className="h-4 w-4" />
@@ -542,6 +552,10 @@ export default function AgentDetailPage() {
 
 						<TabsContent className="space-y-4 pt-4" value="links">
 							<LinksPanel agentRef={agent.name} />
+						</TabsContent>
+
+						<TabsContent className="space-y-4 pt-4" value="capabilities">
+							<CapabilitiesPanel capabilities={agent.capabilities ?? []} />
 						</TabsContent>
 
 						<TabsContent className="space-y-4 pt-4" value="identity">

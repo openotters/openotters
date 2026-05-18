@@ -1778,6 +1778,15 @@ func (d *Daemon) List(labelSelector map[string]string) []*daemonv1.AgentInfo {
 			})
 		}
 
+		caps := runtimeCapsForExtras(AgentExtras{
+			DaemonURL:  d.agentReachableURL(),
+			AgentToken: ma.token,
+		})
+		capNames := make([]string, 0, len(caps))
+		for _, c := range caps {
+			capNames = append(capNames, c.Name)
+		}
+
 		infos = append(infos, &daemonv1.AgentInfo{
 			Id: ma.id.String(), Name: ma.name, Model: ma.model,
 			Status:        status,
@@ -1791,6 +1800,7 @@ func (d *Daemon) List(labelSelector map[string]string) []*daemonv1.AgentInfo {
 			RuntimeDigest: ma.runtimeDigest,
 			Tools:         tools,
 			Labels:        ma.labels,
+			Capabilities:  capNames,
 		})
 	}
 

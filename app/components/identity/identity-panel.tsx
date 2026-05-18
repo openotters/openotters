@@ -12,6 +12,7 @@ import {
 	CardHeader,
 	CardTitle,
 } from "@/components/ui/card"
+import { Input } from "@/components/ui/input"
 import { Separator } from "@/components/ui/separator"
 import { getAgentIdentity } from "@/lib/proto/v1/daemon-Runtime_connectquery"
 
@@ -154,36 +155,11 @@ export function IdentityPanel({ agentRef }: IdentityPanelProps) {
 
 			<Card>
 				<CardHeader>
-					<div className="flex items-start justify-between gap-2">
-						<div>
-							<CardTitle className="text-base">Raw token</CardTitle>
-							<CardDescription>
-								The signed JWT — anyone with this string can call the daemon as this
-								agent until exp.
-							</CardDescription>
-						</div>
-						<div className="flex gap-2">
-							<Button
-								disabled={token === ""}
-								onClick={() => setTokenVisible((v) => !v)}
-								size="sm"
-								variant="outline">
-								{tokenVisible ? (
-									<>
-										<EyeOff className="mr-1 h-4 w-4" /> Hide
-									</>
-								) : (
-									<>
-										<Eye className="mr-1 h-4 w-4" /> Reveal
-									</>
-								)}
-							</Button>
-							<Button disabled={token === ""} onClick={handleCopy} size="sm" variant="outline">
-								<Copy className="mr-1 h-4 w-4" />
-								Copy
-							</Button>
-						</div>
-					</div>
+					<CardTitle className="text-base">Raw token</CardTitle>
+					<CardDescription>
+						The signed JWT — anyone with this string can call the daemon as this
+						agent until exp.
+					</CardDescription>
 				</CardHeader>
 				<CardContent>
 					{token === "" ? (
@@ -192,12 +168,28 @@ export function IdentityPanel({ agentRef }: IdentityPanelProps) {
 							key (test runtime), or this agent predates token issuance.
 						</p>
 					) : (
-						<pre
-							className={`overflow-x-auto rounded-lg border bg-muted/40 p-3 font-mono text-xs ${
-								tokenVisible ? "" : "blur-sm select-none"
-							}`}>
-							{token}
-						</pre>
+						<div className="flex items-center gap-2">
+							<Input
+								className="font-mono text-xs"
+								readOnly
+								type={tokenVisible ? "text" : "password"}
+								value={token}
+							/>
+							<Button
+								onClick={() => setTokenVisible((v) => !v)}
+								size="icon"
+								title={tokenVisible ? "Hide token" : "Show token"}
+								variant="outline">
+								{tokenVisible ? (
+									<EyeOff className="h-4 w-4" />
+								) : (
+									<Eye className="h-4 w-4" />
+								)}
+							</Button>
+							<Button onClick={handleCopy} size="icon" title="Copy token" variant="outline">
+								<Copy className="h-4 w-4" />
+							</Button>
+						</div>
 					)}
 				</CardContent>
 			</Card>

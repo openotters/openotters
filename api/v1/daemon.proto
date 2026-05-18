@@ -471,6 +471,12 @@ message AgentInfo {
   //   "crashed"            subprocess exited unexpectedly after Ready
   //   ""                   no failure (status != "failed")
   string failure_reason = 15;
+  // Runtime tool capabilities — the auto-injected tool names the
+  // agent exposes (note_save, agent_create, job_submit, …). NOT
+  // the BIN tools (those live in `tools` above). Surfaces in the
+  // operator UI's Capabilities tab so the operator can see at a
+  // glance what the model can do without inspecting AGENT.md.
+  repeated string capabilities = 16;
 }
 
 message ListAgentsResponse {

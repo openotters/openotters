@@ -2217,6 +2217,12 @@ type AgentInfo struct {
 	//	"crashed"            subprocess exited unexpectedly after Ready
 	//	""                   no failure (status != "failed")
 	FailureReason string `protobuf:"bytes,15,opt,name=failure_reason,json=failureReason,proto3" json:"failure_reason,omitempty"`
+	// Runtime tool capabilities — the auto-injected tool names the
+	// agent exposes (note_save, agent_create, job_submit, …). NOT
+	// the BIN tools (those live in `tools` above). Surfaces in the
+	// operator UI's Capabilities tab so the operator can see at a
+	// glance what the model can do without inspecting AGENT.md.
+	Capabilities  []string `protobuf:"bytes,16,rep,name=capabilities,proto3" json:"capabilities,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2354,6 +2360,13 @@ func (x *AgentInfo) GetFailureReason() string {
 		return x.FailureReason
 	}
 	return ""
+}
+
+func (x *AgentInfo) GetCapabilities() []string {
+	if x != nil {
+		return x.Capabilities
+	}
+	return nil
 }
 
 type ListAgentsResponse struct {
@@ -8526,7 +8539,7 @@ const file_v1_daemon_proto_rawDesc = "" +
 	"\x0elabel_selector\x18\x01 \x03(\v2:.openotters.daemon.v1.ListAgentsRequest.LabelSelectorEntryR\rlabelSelector\x1a@\n" +
 	"\x12LabelSelectorEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xb8\x04\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xdc\x04\n" +
 	"\tAgentInfo\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x14\n" +
@@ -8545,7 +8558,8 @@ const file_v1_daemon_proto_rawDesc = "" +
 	"\x0eruntime_digest\x18\f \x01(\tR\rruntimeDigest\x125\n" +
 	"\x05tools\x18\r \x03(\v2\x1f.openotters.daemon.v1.AgentToolR\x05tools\x12C\n" +
 	"\x06labels\x18\x0e \x03(\v2+.openotters.daemon.v1.AgentInfo.LabelsEntryR\x06labels\x12%\n" +
-	"\x0efailure_reason\x18\x0f \x01(\tR\rfailureReason\x1a9\n" +
+	"\x0efailure_reason\x18\x0f \x01(\tR\rfailureReason\x12\"\n" +
+	"\fcapabilities\x18\x10 \x03(\tR\fcapabilities\x1a9\n" +
 	"\vLabelsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"M\n" +
