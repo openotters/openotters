@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery } from "@connectrpc/connect-query"
 import { useQueryClient } from "@tanstack/react-query"
-import { Activity, ArrowLeft, Bot, ChevronRight, FileText, Folder, History, ListChecks, MessageSquare, Pause, Play, ScrollText, StickyNote, Terminal, Trash2, Variable } from "lucide-react"
+import { Activity, ArrowLeft, Bot, ChevronRight, FileText, Folder, History, Link2, ListChecks, MessageSquare, Pause, Play, ScrollText, StickyNote, Terminal, Trash2, Variable } from "lucide-react"
 import Link from "next/link"
 import { notFound, useRouter } from "next/navigation"
 import { useState } from "react"
@@ -30,6 +30,7 @@ import {
 } from "@/lib/proto/v1/daemon-Runtime_connectquery"
 import { JobsTable } from "@/components/jobs/jobs-table"
 import { RunJobDialog } from "@/components/jobs/run-job-dialog"
+import { LinksPanel } from "@/components/links/links-panel"
 import { NotesPanel } from "@/components/notes/notes-panel"
 
 function createdAtDate(unixSec: bigint): Date {
@@ -242,6 +243,10 @@ export default function AgentDetailPage() {
 					<TabsTrigger className="justify-start gap-2" value="notes">
 						<StickyNote className="h-4 w-4" />
 						Notes
+					</TabsTrigger>
+					<TabsTrigger className="justify-start gap-2" value="links">
+						<Link2 className="h-4 w-4" />
+						Links
 					</TabsTrigger>
 				</TabsList>
 
@@ -528,6 +533,10 @@ export default function AgentDetailPage() {
 
 						<TabsContent className="space-y-4 pt-4" value="notes">
 							<NotesPanel ref={agent.name} />
+						</TabsContent>
+
+						<TabsContent className="space-y-4 pt-4" value="links">
+							<LinksPanel agentRef={agent.name} />
 						</TabsContent>
 				</div>
 			</Tabs>

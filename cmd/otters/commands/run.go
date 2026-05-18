@@ -29,6 +29,7 @@ type Run struct {
 	Mounts  []string `short:"v" name:"mount" help:"Bind host path into agent: HOST:TARGET[:DESC][:ro|:rw]. HOST is resolved client-side (~, relative paths); must exist on the daemon host. Trailing :ro makes the mount read-only (docker enforces; system surfaces it to the model)."`
 	Envs    []string `short:"e" name:"env" help:"Set or override an env var on the agent: KEY=VALUE. Repeatable. Wins over Agentfile-declared ENV with the same key. Reserved keys (PATH, *_API_KEY, OTTERS_AGENT_ROOT, …) are rejected."`
 	Labels  []string `name:"label" help:"Attach a key=value label. Repeatable. Reserved keys live under io.openotters.* — see the daemon proto for the standard set (origin, etc.). Filterable via 'otters ps --label'."`
+	Links   []string `name:"link" help:"Outbound link the new agent should have at create time: another agent's name or id. Repeatable. The link is stamped into the agent's JWT immediately so the agent_* tools work on first turn. Add or remove links later with 'otters link' / 'otters unlink'."`
 }
 
 func (r *Run) Run(ctx context.Context, common *cmd.Commons, d *Daemon) error {
@@ -102,6 +103,7 @@ func (r *Run) Run(ctx context.Context, common *cmd.Commons, d *Daemon) error {
 		Mounts:  mounts,
 		Envs:    envs,
 		Labels:  labels,
+		Links:   r.Links,
 	})
 	if err != nil {
 		return fmt.Errorf("creating agent: %w", unwrapRPC(err))

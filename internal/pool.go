@@ -402,6 +402,22 @@ func runtimeCapsForExtras(extras AgentExtras) []agentpkg.Capability {
 			Name:        "note_unpin",
 			Description: "Remove a note from the system prompt. The note stays saved; only auto-inclusion is cleared.",
 		},
+		{
+			Name:        "agent_list",
+			Description: "List the agents you are linked to and can call (agent_chat / agent_info / agent_exec).",
+		},
+		{
+			Name:        "agent_info",
+			Description: "Inspect a linked agent — name, model, status, description, capabilities. Use before delegating.",
+		},
+		{
+			Name:        "agent_chat",
+			Description: "Send a prompt to a linked agent and wait for the full reply. Pass a session_id to thread follow-ups.",
+		},
+		{
+			Name:        "agent_exec",
+			Description: "Stateless one-shot prompt to a linked agent. No session, no memory write on the target.",
+		},
 	}
 	if extras.DaemonURL != "" && extras.AgentToken != "" {
 		caps = append(caps,

@@ -28,6 +28,12 @@ type Claims struct {
 	// The next iteration's per-agent binding reads this to force
 	// the request's agent_ref server-side.
 	AgentRef string `json:"agent_ref,omitempty"`
+	// Links lists the agent UUIDs this token may target via the
+	// cross-agent RPCs (AgentChat / AgentExec / AgentInfo). Empty
+	// or absent ⇒ no outbound link permissions. The daemon
+	// re-issues the token (and auto-restarts the source agent) when
+	// linksmutate, so the claim is always the authoritative set.
+	Links []string `json:"links,omitempty"`
 }
 
 // Default token lifetimes. Operator tokens are short enough that a
@@ -43,21 +49,24 @@ const (
 // jti so callers can record the jti for future revocation. Returns
 // (token, jti, err).
 func IssueOperator(key []byte) (string, string, error) {
-	return issue(key, IssuerOperator, "")
+	return issue(key, IssuerOperator, "", nil)
 }
 
 // IssueAgent mints a token bound to an agent's UUID and returns it
 // alongside its jti. Caller persists both — token lands in
 // agents.token, jti in agents.token_jti so RemoveAgent can revoke.
+// links carries the agent UUIDs this token may target via cross-
+// agent RPCs (AgentChat / AgentExec / AgentInfo); pass an empty
+// slice for agents with no outbound link permissions.
 // Returns (token, jti, err).
-func IssueAgent(key []byte, agentID string) (string, string, error) {
+func IssueAgent(key []byte, agentID string, links []string) (string, string, error) {
 	if agentID == "" {
 		return "", "", errors.New("IssueAgent: agentID is required")
 	}
-	return issue(key, IssuerAgent, agentID)
+	return issue(key, IssuerAgent, agentID, links)
 }
 
-func issue(key []byte, issuer, agentRef string) (string, string, error) {
+func issue(key []byte, issuer, agentRef string, links []string) (string, string, error) {
 	if len(key) == 0 {
 		return "", "", errors.New("issue: signing key is empty")
 	}
@@ -75,6 +84,7 @@ func issue(key []byte, issuer, agentRef string) (string, string, error) {
 			ID:        jti,
 		},
 		AgentRef: agentRef,
+		Links:    links,
 	}
 	tok := jwt.NewWithClaims(jwt.SigningMethodHS256, c)
 	signed, err := tok.SignedString(key)

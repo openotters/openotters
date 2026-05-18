@@ -85,6 +85,24 @@ service Runtime {
   // any per-handler wiring; nothing is excluded except calls to
   // StreamRPCCalls itself (no feedback loop).
   rpc StreamRPCCalls(StreamRPCCallsRequest) returns (stream RPCCallEvent);
+
+  // ── agent linking ───────────────────────────────────────────────
+  // Operator-facing CRUD for the directed agent → agent call graph.
+  // `otters link / unlink / links` map 1:1 to these RPCs. Auto-
+  // restart of the source agent happens server-side on every
+  // mutating call so the JWT (which carries the authoritative link
+  // set) is always fresh.
+  rpc LinkAgents(LinkAgentsRequest) returns (LinkAgentsResponse);
+  rpc UnlinkAgents(UnlinkAgentsRequest) returns (UnlinkAgentsResponse);
+  rpc ListAgentLinks(ListAgentLinksRequest) returns (ListAgentLinksResponse);
+
+  // Agent-facing cross-agent RPCs. Caller must present an agent
+  // token; target must be in the JWT's Links claim. Enforced by
+  // the AgentLinkedInterceptor wrapping these four handlers.
+  rpc AgentList(AgentListRequest) returns (AgentListResponse);
+  rpc AgentInfo(AgentInfoRequest) returns (AgentInfoResponse);
+  rpc AgentChat(AgentChatRequest) returns (AgentChatResponse);
+  rpc AgentExec(AgentExecRequest) returns (AgentExecResponse);
   // Server-streaming watch: emits the current AsyncJob immediately,
   // then again on every material change (status, handle, exit_code,
   // stdout, stderr, error, started_at, finished_at), then closes the
@@ -365,6 +383,12 @@ message CreateAgentRequest {
   repeated EnvOverride envs = 6;
   // Labels — see service-level "labels (shared semantics)" comment.
   map<string, string> labels = 7;
+  // Outbound links to stamp into the new agent's JWT at create
+  // time. Each entry is an agent ref (id, name, or UUID prefix);
+  // the daemon resolves to ids and rejects unknown refs before
+  // issuing the token. Empty ⇒ no outbound link permissions
+  // (can be added later via LinkAgents).
+  repeated string links = 8;
 }
 
 message EnvOverride {
@@ -895,4 +919,90 @@ message StateSetNoteInContextResponse {
 message StateCountNotesRequest {}
 message StateCountNotesResponse {
   int32 count = 1;
+}
+
+// ── agent linking ────────────────────────────────────────────────
+//
+// Directed graph: source can call target. Operator commands take
+// agent refs (id/name/prefix — same resolver as ChatWithAgent);
+// agent-facing RPCs take refs too, but the AgentLinked interceptor
+// rejects them unless the resolved target id is in the caller's
+// JWT.Links claim.
+//
+// LinkedAgent is the wire form of one edge endpoint — id + name
+// + model + status, enough for the UI's Links table and for the
+// model's agent_list / agent_info responses without a second
+// round-trip.
+
+message LinkedAgent {
+  string id     = 1;
+  string name   = 2;
+  string model  = 3;
+  string status = 4;
+}
+
+message LinkAgentsRequest {
+  string source_ref = 1;
+  string target_ref = 2;
+}
+message LinkAgentsResponse {
+  // True when the source agent was running and got auto-restarted
+  // to pick up the refreshed JWT.
+  bool restarted = 1;
+}
+
+message UnlinkAgentsRequest {
+  string source_ref = 1;
+  string target_ref = 2;
+}
+message UnlinkAgentsResponse {
+  bool restarted = 1;
+}
+
+message ListAgentLinksRequest {
+  string ref = 1;
+}
+message ListAgentLinksResponse {
+  repeated LinkedAgent outbound = 1; // agents `ref` can call
+  repeated LinkedAgent inbound  = 2; // agents that can call `ref`
+}
+
+// Agent-facing — caller is identified by JWT, target by `ref`.
+// `ref` accepts id/name (the daemon resolves); the resolved id
+// must be in the JWT's Links for the interceptor to accept.
+
+message AgentListRequest {}
+message AgentListResponse {
+  repeated LinkedAgent agents = 1;
+}
+
+message AgentInfoRequest {
+  string ref = 1;
+}
+message AgentInfoResponse {
+  LinkedAgent agent           = 1;
+  string      description     = 2;  // from labels["description"]
+  repeated string capabilities = 3; // tool function names the target exposes
+}
+
+message AgentChatRequest {
+  string ref        = 1;
+  string prompt     = 2;
+  // Optional. Empty → server creates a fresh session. Re-use the
+  // returned session_id to thread follow-ups.
+  string session_id = 3;
+}
+message AgentChatResponse {
+  string response   = 1;
+  string session_id = 2;
+}
+
+message AgentExecRequest {
+  string ref    = 1;
+  string prompt = 2;
+}
+message AgentExecResponse {
+  // Stateless one-shot — the target's PromptObject path. No
+  // session, no memory write.
+  string response = 1;
 }

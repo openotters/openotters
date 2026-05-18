@@ -36,6 +36,7 @@ func safeInt32(n int) int32 {
 // are unchanged — only the request/response wrapping shifts from raw
 // proto to connect.Request/connect.Response. One source of truth.
 type runtimeHandler struct {
+	daemonv1connect.UnimplementedRuntimeHandler
 	daemon    *Daemon
 	providers *ProviderRegistry
 }

@@ -41,6 +41,10 @@ func main() {
 		Logs:   &commands.Logs{},
 		Info:   &commands.Info{},
 
+		Link:   &commands.Link{},
+		Unlink: &commands.Unlink{},
+		Links:  &commands.Links{},
+
 		Provider: ProviderCmd{
 			Add:    &commands.ProviderAdd{},
 			Edit:   &commands.ProviderEdit{},
@@ -100,6 +104,12 @@ type CMD struct {
 	Prompt *commands.Prompt `cmd:"" group:"lifecycle" help:"Send a single prompt to an agent and print the response (non-interactive)"`
 	Logs   *commands.Logs   `cmd:"" group:"lifecycle" help:"Print the runtime log file for an agent"`
 	Info   *commands.Info   `cmd:"" help:"Show daemon info (sockets, paths, version, agent counts)"`
+
+	// Agent-to-agent linking. Top-level for discoverability;
+	// directional A → B (one row per direction).
+	Link   *commands.Link   `cmd:"" group:"lifecycle" help:"Grant a source agent permission to call one or more target agents"`
+	Unlink *commands.Unlink `cmd:"" group:"lifecycle" help:"Revoke a source's permission to call one or more target agents"`
+	Links  *commands.Links  `cmd:"" group:"lifecycle" help:"Show an agent's outbound + inbound links"`
 
 	// Management groups.
 	Agent    AgentCmd    `cmd:"" group:"management" help:"Manage running agents — run, ps, start, stop, rm, chat, prompt, logs, inspect."`

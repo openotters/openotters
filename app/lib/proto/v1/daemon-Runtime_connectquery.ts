@@ -191,3 +191,49 @@ export const deleteAgentNote = Runtime.method.deleteAgentNote;
  * @generated from rpc openotters.daemon.v1.Runtime.SetAgentNoteInContext
  */
 export const setAgentNoteInContext = Runtime.method.setAgentNoteInContext;
+
+/**
+ * ── agent linking ───────────────────────────────────────────────
+ * Operator-facing CRUD for the directed agent → agent call graph.
+ * `otters link / unlink / links` map 1:1 to these RPCs. Auto-
+ * restart of the source agent happens server-side on every
+ * mutating call so the JWT (which carries the authoritative link
+ * set) is always fresh.
+ *
+ * @generated from rpc openotters.daemon.v1.Runtime.LinkAgents
+ */
+export const linkAgents = Runtime.method.linkAgents;
+
+/**
+ * @generated from rpc openotters.daemon.v1.Runtime.UnlinkAgents
+ */
+export const unlinkAgents = Runtime.method.unlinkAgents;
+
+/**
+ * @generated from rpc openotters.daemon.v1.Runtime.ListAgentLinks
+ */
+export const listAgentLinks = Runtime.method.listAgentLinks;
+
+/**
+ * Agent-facing cross-agent RPCs. Caller must present an agent
+ * token; target must be in the JWT's Links claim. Enforced by
+ * the AgentLinkedInterceptor wrapping these four handlers.
+ *
+ * @generated from rpc openotters.daemon.v1.Runtime.AgentList
+ */
+export const agentList = Runtime.method.agentList;
+
+/**
+ * @generated from rpc openotters.daemon.v1.Runtime.AgentInfo
+ */
+export const agentInfo = Runtime.method.agentInfo;
+
+/**
+ * @generated from rpc openotters.daemon.v1.Runtime.AgentChat
+ */
+export const agentChat = Runtime.method.agentChat;
+
+/**
+ * @generated from rpc openotters.daemon.v1.Runtime.AgentExec
+ */
+export const agentExec = Runtime.method.agentExec;

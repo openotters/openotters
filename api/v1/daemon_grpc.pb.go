@@ -56,6 +56,13 @@ const (
 	Runtime_DeleteAgentNote_FullMethodName       = "/openotters.daemon.v1.Runtime/DeleteAgentNote"
 	Runtime_SetAgentNoteInContext_FullMethodName = "/openotters.daemon.v1.Runtime/SetAgentNoteInContext"
 	Runtime_StreamRPCCalls_FullMethodName        = "/openotters.daemon.v1.Runtime/StreamRPCCalls"
+	Runtime_LinkAgents_FullMethodName            = "/openotters.daemon.v1.Runtime/LinkAgents"
+	Runtime_UnlinkAgents_FullMethodName          = "/openotters.daemon.v1.Runtime/UnlinkAgents"
+	Runtime_ListAgentLinks_FullMethodName        = "/openotters.daemon.v1.Runtime/ListAgentLinks"
+	Runtime_AgentList_FullMethodName             = "/openotters.daemon.v1.Runtime/AgentList"
+	Runtime_AgentInfo_FullMethodName             = "/openotters.daemon.v1.Runtime/AgentInfo"
+	Runtime_AgentChat_FullMethodName             = "/openotters.daemon.v1.Runtime/AgentChat"
+	Runtime_AgentExec_FullMethodName             = "/openotters.daemon.v1.Runtime/AgentExec"
 	Runtime_WatchAsyncJob_FullMethodName         = "/openotters.daemon.v1.Runtime/WatchAsyncJob"
 )
 
@@ -118,6 +125,22 @@ type RuntimeClient interface {
 	// any per-handler wiring; nothing is excluded except calls to
 	// StreamRPCCalls itself (no feedback loop).
 	StreamRPCCalls(ctx context.Context, in *StreamRPCCallsRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[RPCCallEvent], error)
+	// ── agent linking ───────────────────────────────────────────────
+	// Operator-facing CRUD for the directed agent → agent call graph.
+	// `otters link / unlink / links` map 1:1 to these RPCs. Auto-
+	// restart of the source agent happens server-side on every
+	// mutating call so the JWT (which carries the authoritative link
+	// set) is always fresh.
+	LinkAgents(ctx context.Context, in *LinkAgentsRequest, opts ...grpc.CallOption) (*LinkAgentsResponse, error)
+	UnlinkAgents(ctx context.Context, in *UnlinkAgentsRequest, opts ...grpc.CallOption) (*UnlinkAgentsResponse, error)
+	ListAgentLinks(ctx context.Context, in *ListAgentLinksRequest, opts ...grpc.CallOption) (*ListAgentLinksResponse, error)
+	// Agent-facing cross-agent RPCs. Caller must present an agent
+	// token; target must be in the JWT's Links claim. Enforced by
+	// the AgentLinkedInterceptor wrapping these four handlers.
+	AgentList(ctx context.Context, in *AgentListRequest, opts ...grpc.CallOption) (*AgentListResponse, error)
+	AgentInfo(ctx context.Context, in *AgentInfoRequest, opts ...grpc.CallOption) (*AgentInfoResponse, error)
+	AgentChat(ctx context.Context, in *AgentChatRequest, opts ...grpc.CallOption) (*AgentChatResponse, error)
+	AgentExec(ctx context.Context, in *AgentExecRequest, opts ...grpc.CallOption) (*AgentExecResponse, error)
 	// Server-streaming watch: emits the current AsyncJob immediately,
 	// then again on every material change (status, handle, exit_code,
 	// stdout, stderr, error, started_at, finished_at), then closes the
@@ -524,6 +547,76 @@ func (c *runtimeClient) StreamRPCCalls(ctx context.Context, in *StreamRPCCallsRe
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type Runtime_StreamRPCCallsClient = grpc.ServerStreamingClient[RPCCallEvent]
 
+func (c *runtimeClient) LinkAgents(ctx context.Context, in *LinkAgentsRequest, opts ...grpc.CallOption) (*LinkAgentsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(LinkAgentsResponse)
+	err := c.cc.Invoke(ctx, Runtime_LinkAgents_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *runtimeClient) UnlinkAgents(ctx context.Context, in *UnlinkAgentsRequest, opts ...grpc.CallOption) (*UnlinkAgentsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(UnlinkAgentsResponse)
+	err := c.cc.Invoke(ctx, Runtime_UnlinkAgents_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *runtimeClient) ListAgentLinks(ctx context.Context, in *ListAgentLinksRequest, opts ...grpc.CallOption) (*ListAgentLinksResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListAgentLinksResponse)
+	err := c.cc.Invoke(ctx, Runtime_ListAgentLinks_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *runtimeClient) AgentList(ctx context.Context, in *AgentListRequest, opts ...grpc.CallOption) (*AgentListResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(AgentListResponse)
+	err := c.cc.Invoke(ctx, Runtime_AgentList_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *runtimeClient) AgentInfo(ctx context.Context, in *AgentInfoRequest, opts ...grpc.CallOption) (*AgentInfoResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(AgentInfoResponse)
+	err := c.cc.Invoke(ctx, Runtime_AgentInfo_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *runtimeClient) AgentChat(ctx context.Context, in *AgentChatRequest, opts ...grpc.CallOption) (*AgentChatResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(AgentChatResponse)
+	err := c.cc.Invoke(ctx, Runtime_AgentChat_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *runtimeClient) AgentExec(ctx context.Context, in *AgentExecRequest, opts ...grpc.CallOption) (*AgentExecResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(AgentExecResponse)
+	err := c.cc.Invoke(ctx, Runtime_AgentExec_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *runtimeClient) WatchAsyncJob(ctx context.Context, in *WatchAsyncJobRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[WatchAsyncJobResponse], error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	stream, err := c.cc.NewStream(ctx, &Runtime_ServiceDesc.Streams[2], Runtime_WatchAsyncJob_FullMethodName, cOpts...)
@@ -602,6 +695,22 @@ type RuntimeServer interface {
 	// any per-handler wiring; nothing is excluded except calls to
 	// StreamRPCCalls itself (no feedback loop).
 	StreamRPCCalls(*StreamRPCCallsRequest, grpc.ServerStreamingServer[RPCCallEvent]) error
+	// ── agent linking ───────────────────────────────────────────────
+	// Operator-facing CRUD for the directed agent → agent call graph.
+	// `otters link / unlink / links` map 1:1 to these RPCs. Auto-
+	// restart of the source agent happens server-side on every
+	// mutating call so the JWT (which carries the authoritative link
+	// set) is always fresh.
+	LinkAgents(context.Context, *LinkAgentsRequest) (*LinkAgentsResponse, error)
+	UnlinkAgents(context.Context, *UnlinkAgentsRequest) (*UnlinkAgentsResponse, error)
+	ListAgentLinks(context.Context, *ListAgentLinksRequest) (*ListAgentLinksResponse, error)
+	// Agent-facing cross-agent RPCs. Caller must present an agent
+	// token; target must be in the JWT's Links claim. Enforced by
+	// the AgentLinkedInterceptor wrapping these four handlers.
+	AgentList(context.Context, *AgentListRequest) (*AgentListResponse, error)
+	AgentInfo(context.Context, *AgentInfoRequest) (*AgentInfoResponse, error)
+	AgentChat(context.Context, *AgentChatRequest) (*AgentChatResponse, error)
+	AgentExec(context.Context, *AgentExecRequest) (*AgentExecResponse, error)
 	// Server-streaming watch: emits the current AsyncJob immediately,
 	// then again on every material change (status, handle, exit_code,
 	// stdout, stderr, error, started_at, finished_at), then closes the
@@ -730,6 +839,27 @@ func (UnimplementedRuntimeServer) SetAgentNoteInContext(context.Context, *SetAge
 }
 func (UnimplementedRuntimeServer) StreamRPCCalls(*StreamRPCCallsRequest, grpc.ServerStreamingServer[RPCCallEvent]) error {
 	return status.Error(codes.Unimplemented, "method StreamRPCCalls not implemented")
+}
+func (UnimplementedRuntimeServer) LinkAgents(context.Context, *LinkAgentsRequest) (*LinkAgentsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method LinkAgents not implemented")
+}
+func (UnimplementedRuntimeServer) UnlinkAgents(context.Context, *UnlinkAgentsRequest) (*UnlinkAgentsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method UnlinkAgents not implemented")
+}
+func (UnimplementedRuntimeServer) ListAgentLinks(context.Context, *ListAgentLinksRequest) (*ListAgentLinksResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListAgentLinks not implemented")
+}
+func (UnimplementedRuntimeServer) AgentList(context.Context, *AgentListRequest) (*AgentListResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method AgentList not implemented")
+}
+func (UnimplementedRuntimeServer) AgentInfo(context.Context, *AgentInfoRequest) (*AgentInfoResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method AgentInfo not implemented")
+}
+func (UnimplementedRuntimeServer) AgentChat(context.Context, *AgentChatRequest) (*AgentChatResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method AgentChat not implemented")
+}
+func (UnimplementedRuntimeServer) AgentExec(context.Context, *AgentExecRequest) (*AgentExecResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method AgentExec not implemented")
 }
 func (UnimplementedRuntimeServer) WatchAsyncJob(*WatchAsyncJobRequest, grpc.ServerStreamingServer[WatchAsyncJobResponse]) error {
 	return status.Error(codes.Unimplemented, "method WatchAsyncJob not implemented")
@@ -1407,6 +1537,132 @@ func _Runtime_StreamRPCCalls_Handler(srv interface{}, stream grpc.ServerStream) 
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type Runtime_StreamRPCCallsServer = grpc.ServerStreamingServer[RPCCallEvent]
 
+func _Runtime_LinkAgents_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(LinkAgentsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(RuntimeServer).LinkAgents(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Runtime_LinkAgents_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(RuntimeServer).LinkAgents(ctx, req.(*LinkAgentsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Runtime_UnlinkAgents_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UnlinkAgentsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(RuntimeServer).UnlinkAgents(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Runtime_UnlinkAgents_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(RuntimeServer).UnlinkAgents(ctx, req.(*UnlinkAgentsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Runtime_ListAgentLinks_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListAgentLinksRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(RuntimeServer).ListAgentLinks(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Runtime_ListAgentLinks_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(RuntimeServer).ListAgentLinks(ctx, req.(*ListAgentLinksRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Runtime_AgentList_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AgentListRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(RuntimeServer).AgentList(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Runtime_AgentList_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(RuntimeServer).AgentList(ctx, req.(*AgentListRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Runtime_AgentInfo_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AgentInfoRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(RuntimeServer).AgentInfo(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Runtime_AgentInfo_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(RuntimeServer).AgentInfo(ctx, req.(*AgentInfoRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Runtime_AgentChat_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AgentChatRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(RuntimeServer).AgentChat(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Runtime_AgentChat_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(RuntimeServer).AgentChat(ctx, req.(*AgentChatRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Runtime_AgentExec_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AgentExecRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(RuntimeServer).AgentExec(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Runtime_AgentExec_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(RuntimeServer).AgentExec(ctx, req.(*AgentExecRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _Runtime_WatchAsyncJob_Handler(srv interface{}, stream grpc.ServerStream) error {
 	m := new(WatchAsyncJobRequest)
 	if err := stream.RecvMsg(m); err != nil {
@@ -1564,6 +1820,34 @@ var Runtime_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "SetAgentNoteInContext",
 			Handler:    _Runtime_SetAgentNoteInContext_Handler,
+		},
+		{
+			MethodName: "LinkAgents",
+			Handler:    _Runtime_LinkAgents_Handler,
+		},
+		{
+			MethodName: "UnlinkAgents",
+			Handler:    _Runtime_UnlinkAgents_Handler,
+		},
+		{
+			MethodName: "ListAgentLinks",
+			Handler:    _Runtime_ListAgentLinks_Handler,
+		},
+		{
+			MethodName: "AgentList",
+			Handler:    _Runtime_AgentList_Handler,
+		},
+		{
+			MethodName: "AgentInfo",
+			Handler:    _Runtime_AgentInfo_Handler,
+		},
+		{
+			MethodName: "AgentChat",
+			Handler:    _Runtime_AgentChat_Handler,
+		},
+		{
+			MethodName: "AgentExec",
+			Handler:    _Runtime_AgentExec_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

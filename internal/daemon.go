@@ -1584,10 +1584,25 @@ func (d *Daemon) CreateAgent(
 	// was built without a signing key (defensive — every code path
 	// that constructs a Daemon goes through serve.go's
 	// LoadOrCreateSigningKey now, but tests may not).
+	// Resolve any --link refs supplied at create time into
+	// agent UUIDs. Unknown refs fail the create — better than
+	// silently dropping links the operator asked for. Both
+	// the JWT (Links claim) and the agent_links table get the
+	// resolved ids; the table drives the operator UI + the
+	// agent-facing tools, the JWT drives authorization.
+	linkIDs := make([]string, 0, len(req.GetLinks()))
+	for _, ref := range req.GetLinks() {
+		target, resolveErr := d.resolve(ref)
+		if resolveErr != nil {
+			return nil, fmt.Errorf("--link %q: %w", ref, resolveErr)
+		}
+		linkIDs = append(linkIDs, target.id.String())
+	}
+
 	var agentToken, agentJTI string
 	if len(d.signingKey) > 0 {
 		var tokErr error
-		agentToken, agentJTI, tokErr = auth.IssueAgent(d.signingKey, id.String())
+		agentToken, agentJTI, tokErr = auth.IssueAgent(d.signingKey, id.String(), linkIDs)
 		if tokErr != nil {
 			return nil, fmt.Errorf("issuing agent token: %w", tokErr)
 		}
@@ -1655,6 +1670,20 @@ func (d *Daemon) CreateAgent(
 		TokenJTI:  ma.tokenJTI,
 	}); saveErr != nil {
 		d.logger.Warn("failed to persist agent", zap.Error(saveErr))
+	}
+
+	// Persist the resolved outbound links. SaveAgent isn't
+	// transactional with this loop today (each row is its own
+	// INSERT) — acceptable since AgentLinksAdd is idempotent
+	// (INSERT OR IGNORE) and operators can re-run `otters link`
+	// if anything went sideways.
+	for _, linkID := range linkIDs {
+		if linkErr := d.state.AgentLinksAdd(ctx, id.String(), linkID); linkErr != nil {
+			d.logger.Warn("failed to persist link at create",
+				zap.String("source", id.String()),
+				zap.String("target", linkID),
+				zap.Error(linkErr))
+		}
 	}
 
 	d.logger.Info("agent created",

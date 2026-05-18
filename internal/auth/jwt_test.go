@@ -48,7 +48,7 @@ func TestIssueAgent_BindsAgentRef(t *testing.T) {
 	t.Parallel()
 	key := []byte("test-key-32-bytes-aaaaaaaaaaaaaa")
 
-	tok, _, err := IssueAgent(key, "agent-uuid-123")
+	tok, _, err := IssueAgent(key, "agent-uuid-123", nil)
 	if err != nil {
 		t.Fatalf("IssueAgent: %v", err)
 	}
@@ -66,9 +66,31 @@ func TestIssueAgent_BindsAgentRef(t *testing.T) {
 
 func TestIssueAgent_RequiresID(t *testing.T) {
 	t.Parallel()
-	_, _, err := IssueAgent([]byte("k"), "")
+	_, _, err := IssueAgent([]byte("k"), "", nil)
 	if err == nil {
 		t.Fatal("IssueAgent with empty id should error")
+	}
+}
+
+func TestIssueAgent_CarriesLinks(t *testing.T) {
+	t.Parallel()
+	key := []byte("test-key-32-bytes-aaaaaaaaaaaaaa")
+
+	// Two outbound links land in the claim verbatim and decode
+	// after round-tripping through the signing key. This pins
+	// the JWT-as-source-of-truth invariant the AgentLinked auth
+	// gate leans on: the daemon trusts the claim list, not the DB.
+	links := []string{"target-uuid-1", "target-uuid-2"}
+	tok, _, err := IssueAgent(key, "agent-uuid", links)
+	if err != nil {
+		t.Fatalf("IssueAgent: %v", err)
+	}
+	claims, err := Validate(key, tok, neverRevoked)
+	if err != nil {
+		t.Fatalf("Validate: %v", err)
+	}
+	if len(claims.Links) != 2 || claims.Links[0] != "target-uuid-1" || claims.Links[1] != "target-uuid-2" {
+		t.Errorf("Links = %v, want %v", claims.Links, links)
 	}
 }
 

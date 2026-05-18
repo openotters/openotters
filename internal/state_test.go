@@ -118,6 +118,100 @@ func TestMigrateAgentStateTables_Idempotent(t *testing.T) {
 	if err := migrateAgentStateTables(context.Background(), store.db); err != nil {
 		t.Fatalf("second migrateAgentStateTables: %v", err)
 	}
+	if err := migrateAgentLinksTable(context.Background(), store.db); err != nil {
+		t.Fatalf("second migrateAgentLinksTable: %v", err)
+	}
+}
+
+func TestAgentLinks_AddListRemove(t *testing.T) {
+	t.Parallel()
+	store := openTestState(t)
+	ctx := context.Background()
+
+	const a, b, c = "agent-a", "agent-b", "agent-c"
+
+	if err := store.AgentLinksAdd(ctx, a, b); err != nil {
+		t.Fatalf("Add a→b: %v", err)
+	}
+	if err := store.AgentLinksAdd(ctx, a, c); err != nil {
+		t.Fatalf("Add a→c: %v", err)
+	}
+	// Re-add must be silent — INSERT OR IGNORE keeps the call
+	// idempotent so the daemon doesn't have to probe first.
+	if err := store.AgentLinksAdd(ctx, a, b); err != nil {
+		t.Fatalf("re-Add a→b should be no-op: %v", err)
+	}
+
+	outbound, err := store.AgentLinksListOutbound(ctx, a)
+	if err != nil {
+		t.Fatalf("ListOutbound: %v", err)
+	}
+	if len(outbound) != 2 {
+		t.Fatalf("ListOutbound len = %d, want 2 (%v)", len(outbound), outbound)
+	}
+
+	// Directional: a→b doesn't put a in b's outbound.
+	outboundB, _ := store.AgentLinksListOutbound(ctx, b)
+	if len(outboundB) != 0 {
+		t.Errorf("b should have no outbound, got %v", outboundB)
+	}
+
+	// Inbound on b lists a.
+	inboundB, _ := store.AgentLinksListInbound(ctx, b)
+	if len(inboundB) != 1 || inboundB[0] != a {
+		t.Errorf("inbound for b = %v, want [a]", inboundB)
+	}
+
+	if rmErr := store.AgentLinksRemove(ctx, a, b); rmErr != nil {
+		t.Fatalf("Remove a→b: %v", rmErr)
+	}
+	// Re-remove is silent.
+	if rmErr2 := store.AgentLinksRemove(ctx, a, b); rmErr2 != nil {
+		t.Fatalf("re-Remove a→b should be no-op: %v", rmErr2)
+	}
+
+	outbound, _ = store.AgentLinksListOutbound(ctx, a)
+	if len(outbound) != 1 || outbound[0] != c {
+		t.Errorf("after remove, a outbound = %v, want [c]", outbound)
+	}
+}
+
+func TestRemoveAgent_CascadesLinks(t *testing.T) {
+	t.Parallel()
+	store := openTestState(t)
+	ctx := context.Background()
+
+	const a, b, c = "agent-a", "agent-b", "agent-c"
+
+	for _, id := range []string{a, b, c} {
+		if _, err := store.db.ExecContext(ctx,
+			`INSERT INTO agents (id, name, agent_name, model, runtime, tag) VALUES (?, ?, ?, ?, ?, ?)`,
+			id, "name-"+id, "x", "m", "r", "t",
+		); err != nil {
+			t.Fatalf("seed agent %s: %v", id, err)
+		}
+	}
+
+	// a → b, a → c, b → a (a appears as both source AND target).
+	_ = store.AgentLinksAdd(ctx, a, b)
+	_ = store.AgentLinksAdd(ctx, a, c)
+	_ = store.AgentLinksAdd(ctx, b, a)
+
+	if err := store.RemoveAgent(ctx, a); err != nil {
+		t.Fatalf("RemoveAgent a: %v", err)
+	}
+
+	// Both directions involving a must be gone.
+	if out, _ := store.AgentLinksListOutbound(ctx, a); len(out) != 0 {
+		t.Errorf("a outbound after remove: %v, want 0", out)
+	}
+	if in, _ := store.AgentLinksListInbound(ctx, a); len(in) != 0 {
+		t.Errorf("a inbound after remove: %v, want 0", in)
+	}
+	// b's outbound to a must also be gone (a was the target there).
+	if out, _ := store.AgentLinksListOutbound(ctx, b); len(out) != 0 {
+		t.Errorf("b outbound after a removed: %v, want 0", out)
+	}
 }
 
 func countRows(t *testing.T, store *StateStore, table, agentID string) int {

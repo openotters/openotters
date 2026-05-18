@@ -154,6 +154,37 @@ func migrateState(ctx context.Context, db *sql.DB) error {
 		return err
 	}
 
+	if err := migrateAgentLinksTable(ctx, db); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// migrateAgentLinksTable owns the directed-edge table the
+// agent-to-agent linking feature reads. Every row is "source can
+// call target"; the reverse direction is a separate row, by
+// design — asymmetric topologies (orchestrator → workers without
+// the inverse) are first-class.
+//
+// RemoveAgent cascades both source and target columns so a
+// removed agent can't haunt the graph as either side of an edge.
+func migrateAgentLinksTable(ctx context.Context, db *sql.DB) error {
+	stmts := []string{
+		`CREATE TABLE IF NOT EXISTS agent_links (
+			source_agent_id TEXT NOT NULL,
+			target_agent_id TEXT NOT NULL,
+			created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+			PRIMARY KEY (source_agent_id, target_agent_id)
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_agent_links_target
+			ON agent_links(target_agent_id)`,
+	}
+	for _, s := range stmts {
+		if _, err := db.ExecContext(ctx, s); err != nil {
+			return fmt.Errorf("agent_links schema: %w", err)
+		}
+	}
 	return nil
 }
 
@@ -620,11 +651,30 @@ func (s *StateStore) RemoveAgent(ctx context.Context, id string) error {
 	); err != nil {
 		return fmt.Errorf("cascade agent_notes: %w", err)
 	}
+	// Cascade both ends of the link graph: a removed agent
+	// disappears as both source and target.
+	if _, err := s.db.ExecContext(ctx,
+		"DELETE FROM agent_links WHERE source_agent_id = ? OR target_agent_id = ?", id, id,
+	); err != nil {
+		return fmt.Errorf("cascade agent_links: %w", err)
+	}
 
 	_, err := s.db.ExecContext(ctx,
 		"DELETE FROM agents WHERE id = ?", id,
 	)
 
+	return err
+}
+
+// UpdateAgentToken rotates the token + jti columns for one agent.
+// Used by the link-mutation path: when an agent's outbound link
+// set changes, the daemon re-issues the JWT and persists the new
+// token here so the next Start picks it up.
+func (s *StateStore) UpdateAgentToken(ctx context.Context, id, token, jti string) error {
+	_, err := s.db.ExecContext(ctx,
+		`UPDATE agents SET token = ?, token_jti = ? WHERE id = ?`,
+		token, jti, id,
+	)
 	return err
 }
 
