@@ -19,6 +19,7 @@ import (
 	"github.com/google/uuid"
 	daemonv1 "github.com/openotters/openotters/api/v1"
 	"github.com/openotters/openotters/internal/auth"
+	"go.uber.org/zap"
 )
 
 // LinkAgents records source → target and re-issues the source's
@@ -281,7 +282,22 @@ func (d *Daemon) refreshAgentTokenAndMaybeRestart(
 	// runtime picks up the new token on its next spawn. Pool's
 	// Get returns the live agent; nil means "not running" —
 	// nothing to bounce.
+	//
+	// The pool reuses the same Agent object across Start cycles,
+	// and the executor caches the JWT in its deps at construction.
+	// Without poking the new token into that cache, the restart
+	// spawns the runtime with the stale env value — the runtime
+	// then dials the daemon with a revoked JTI and gets 401 on
+	// every RPC. SetAgentToken patches the cache in place; we
+	// type-assert via tokenSetter because the Agent interface
+	// in agentpkg doesn't carry the setter.
 	if a, ok := d.pool.Get(source.id); ok && a != nil {
+		if setter, hasSetter := a.(interface{ SetAgentToken(string) }); hasSetter {
+			setter.SetAgentToken(newToken)
+		} else {
+			d.logger.Warn("agent does not implement SetAgentToken; runtime will keep stale token until external restart",
+				zap.String("id", source.id.String()))
+		}
 		if stopErr := d.Stop(ctx, source.id.String()); stopErr != nil {
 			return false, fmt.Errorf("stop source: %w", stopErr)
 		}
