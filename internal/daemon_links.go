@@ -15,6 +15,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 	daemonv1 "github.com/openotters/openotters/api/v1"
@@ -298,10 +299,21 @@ func (d *Daemon) refreshAgentTokenAndMaybeRestart(
 			d.logger.Warn("agent does not implement SetAgentToken; runtime will keep stale token until external restart",
 				zap.String("id", source.id.String()))
 		}
-		if stopErr := d.Stop(ctx, source.id.String()); stopErr != nil {
+		// Detach the ctx for Stop+Start. SelfReload is called BY the
+		// runtime — when Stop kills that runtime, the in-flight RPC's
+		// connection dies and the Connect server-side ctx gets
+		// cancelled. The follow-up Start would then see a cancelled
+		// ctx and fail, leaving the agent stopped. WithoutCancel
+		// keeps values + deadline but ignores cancellation so the
+		// restart always completes; we then bound it with our own
+		// timeout so a hung executor can't pin the goroutine.
+		restartCtx, cancel := context.WithTimeout(
+			context.WithoutCancel(ctx), 30*time.Second)
+		defer cancel()
+		if stopErr := d.Stop(restartCtx, source.id.String()); stopErr != nil {
 			return false, fmt.Errorf("stop source: %w", stopErr)
 		}
-		if startErr := d.Start(ctx, source.id.String()); startErr != nil {
+		if startErr := d.Start(restartCtx, source.id.String()); startErr != nil {
 			return false, fmt.Errorf("restart source: %w", startErr)
 		}
 		return true, nil
