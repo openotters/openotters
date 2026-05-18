@@ -227,13 +227,18 @@ func (h *runtimeHandler) AgentCreateFromSource(
 			errors.New("agentfile body is required"))
 	}
 	tag := "from-agent-" + caller.AgentRef + ":" + uuid.NewString()
-	built, err := h.daemon.BuildFromBytes(ctx, body, []string{tag})
-	if err != nil {
-		return nil, fmt.Errorf("building agent from source: %w", err)
+	if _, buildErr := h.daemon.BuildFromBytes(ctx, body, []string{tag}); buildErr != nil {
+		return nil, fmt.Errorf("building agent from source: %w", buildErr)
 	}
+	// Use the tag WE generated, not built.GetRef(). When the
+	// Agentfile body omits the NAME directive, the parser leaves
+	// Reference.Name empty and BuildFromBytes serialises that to
+	// the malformed ":latest" — passing it into CreateAgent then
+	// blows up with "resolving manifest: not found". Our tag is
+	// always well-formed because we control its construction.
 	createReq := &daemonv1.CreateAgentRequest{
 		Name:  req.Msg.GetName(),
-		Ref:   built.GetRef(),
+		Ref:   tag,
 		Model: req.Msg.GetModel(),
 		Envs:  req.Msg.GetEnvs(),
 		// `links` is inbound — see AgentCreate above.
