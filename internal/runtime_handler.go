@@ -750,10 +750,11 @@ func (h *runtimeHandler) GetAgentIdentity(
 	out := &daemonv1.GetAgentIdentityResponse{Token: token}
 	if claims != nil {
 		out.Claims = &daemonv1.AgentIdentityClaims{
-			Issuer:   claims.Issuer,
-			AgentRef: claims.AgentRef,
-			Jti:      claims.ID,
-			Links:    append([]string(nil), claims.Links...),
+			Issuer:       claims.Issuer,
+			AgentRef:     claims.AgentRef,
+			Jti:          claims.ID,
+			Links:        append([]string(nil), claims.Links...),
+			Capabilities: append([]string(nil), claims.Capabilities...),
 		}
 		if claims.IssuedAt != nil {
 			out.Claims.IssuedAt = claims.IssuedAt.Unix()

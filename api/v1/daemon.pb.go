@@ -8236,13 +8236,19 @@ func (x *GetAgentIdentityRequest) GetRef() string {
 }
 
 type AgentIdentityClaims struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Issuer        string                 `protobuf:"bytes,1,opt,name=issuer,proto3" json:"issuer,omitempty"`
-	AgentRef      string                 `protobuf:"bytes,2,opt,name=agent_ref,json=agentRef,proto3" json:"agent_ref,omitempty"`
-	Jti           string                 `protobuf:"bytes,3,opt,name=jti,proto3" json:"jti,omitempty"`
-	IssuedAt      int64                  `protobuf:"varint,4,opt,name=issued_at,json=issuedAt,proto3" json:"issued_at,omitempty"`
-	ExpiresAt     int64                  `protobuf:"varint,5,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"`
-	Links         []string               `protobuf:"bytes,6,rep,name=links,proto3" json:"links,omitempty"`
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	Issuer    string                 `protobuf:"bytes,1,opt,name=issuer,proto3" json:"issuer,omitempty"`
+	AgentRef  string                 `protobuf:"bytes,2,opt,name=agent_ref,json=agentRef,proto3" json:"agent_ref,omitempty"`
+	Jti       string                 `protobuf:"bytes,3,opt,name=jti,proto3" json:"jti,omitempty"`
+	IssuedAt  int64                  `protobuf:"varint,4,opt,name=issued_at,json=issuedAt,proto3" json:"issued_at,omitempty"`
+	ExpiresAt int64                  `protobuf:"varint,5,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"`
+	Links     []string               `protobuf:"bytes,6,rep,name=links,proto3" json:"links,omitempty"`
+	// Capabilities is the runtime-injected tool surface stamped on
+	// the JWT at issue time. Informational only — auth doesn't read
+	// it. Surfaces in the operator UI's Identity tab so the operator
+	// can see what tools the agent's token claims without inspecting
+	// AGENT.md or agent.yaml.
+	Capabilities  []string `protobuf:"bytes,7,rep,name=capabilities,proto3" json:"capabilities,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -8315,6 +8321,13 @@ func (x *AgentIdentityClaims) GetExpiresAt() int64 {
 func (x *AgentIdentityClaims) GetLinks() []string {
 	if x != nil {
 		return x.Links
+	}
+	return nil
+}
+
+func (x *AgentIdentityClaims) GetCapabilities() []string {
+	if x != nil {
+		return x.Capabilities
 	}
 	return nil
 }
@@ -8948,7 +8961,7 @@ const file_v1_daemon_proto_rawDesc = "" +
 	"\x0fBinListResponse\x122\n" +
 	"\x04bins\x18\x01 \x03(\v2\x1e.openotters.daemon.v1.ImageRowR\x04bins\"+\n" +
 	"\x17GetAgentIdentityRequest\x12\x10\n" +
-	"\x03ref\x18\x01 \x01(\tR\x03ref\"\xae\x01\n" +
+	"\x03ref\x18\x01 \x01(\tR\x03ref\"\xd2\x01\n" +
 	"\x13AgentIdentityClaims\x12\x16\n" +
 	"\x06issuer\x18\x01 \x01(\tR\x06issuer\x12\x1b\n" +
 	"\tagent_ref\x18\x02 \x01(\tR\bagentRef\x12\x10\n" +
@@ -8956,7 +8969,8 @@ const file_v1_daemon_proto_rawDesc = "" +
 	"\tissued_at\x18\x04 \x01(\x03R\bissuedAt\x12\x1d\n" +
 	"\n" +
 	"expires_at\x18\x05 \x01(\x03R\texpiresAt\x12\x14\n" +
-	"\x05links\x18\x06 \x03(\tR\x05links\"s\n" +
+	"\x05links\x18\x06 \x03(\tR\x05links\x12\"\n" +
+	"\fcapabilities\x18\a \x03(\tR\fcapabilities\"s\n" +
 	"\x18GetAgentIdentityResponse\x12\x14\n" +
 	"\x05token\x18\x01 \x01(\tR\x05token\x12A\n" +
 	"\x06claims\x18\x02 \x01(\v2).openotters.daemon.v1.AgentIdentityClaimsR\x06claims2\xf4(\n" +

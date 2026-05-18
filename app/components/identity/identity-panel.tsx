@@ -144,6 +144,26 @@ export function IdentityPanel({ agentRef }: IdentityPanelProps) {
 									))}
 								</div>
 							)}
+							<Separator />
+							<Row
+								label="Capabilities"
+								value={
+									claims.capabilities.length === 0
+										? "(none)"
+										: `${claims.capabilities.length} tool${claims.capabilities.length === 1 ? "" : "s"}`
+								}
+							/>
+							{claims.capabilities.length > 0 && (
+								<div className="flex flex-wrap gap-1 pl-2">
+									{claims.capabilities.map((cap) => (
+										<span
+											className="rounded border bg-muted/40 px-1.5 py-0.5 font-mono text-xs"
+											key={cap}>
+											{cap}
+										</span>
+									))}
+								</div>
+							)}
 						</>
 					) : (
 						<p className="text-muted-foreground">

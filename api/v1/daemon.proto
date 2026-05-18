@@ -1152,6 +1152,12 @@ message AgentIdentityClaims {
   int64  issued_at  = 4;
   int64  expires_at = 5;
   repeated string links = 6;
+  // Capabilities is the runtime-injected tool surface stamped on
+  // the JWT at issue time. Informational only — auth doesn't read
+  // it. Surfaces in the operator UI's Identity tab so the operator
+  // can see what tools the agent's token claims without inspecting
+  // AGENT.md or agent.yaml.
+  repeated string capabilities = 7;
 }
 
 message GetAgentIdentityResponse {

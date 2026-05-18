@@ -263,7 +263,11 @@ func (d *Daemon) refreshAgentTokenAndMaybeRestart(
 		return false, nil
 	}
 
-	newToken, newJTI, err := auth.IssueAgent(d.signingKey, source.id.String(), linkIDs)
+	capNames := capabilityNames(runtimeCapsForExtras(AgentExtras{
+		DaemonURL:  d.agentReachableURL(),
+		AgentToken: "placeholder", // non-empty so daemon-URL-gated caps land
+	}))
+	newToken, newJTI, err := auth.IssueAgent(d.signingKey, source.id.String(), linkIDs, capNames)
 	if err != nil {
 		return false, fmt.Errorf("re-issue agent token: %w", err)
 	}

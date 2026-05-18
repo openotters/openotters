@@ -1602,7 +1602,13 @@ func (d *Daemon) CreateAgent(
 	var agentToken, agentJTI string
 	if len(d.signingKey) > 0 {
 		var tokErr error
-		agentToken, agentJTI, tokErr = auth.IssueAgent(d.signingKey, id.String(), linkIDs)
+		capNames := capabilityNames(runtimeCapsForExtras(AgentExtras{
+			DaemonURL:  d.agentReachableURL(),
+			AgentToken: "placeholder", // non-empty so daemon-URL-gated caps land
+		}))
+		agentToken, agentJTI, tokErr = auth.IssueAgent(
+			d.signingKey, id.String(), linkIDs, capNames,
+		)
 		if tokErr != nil {
 			return nil, fmt.Errorf("issuing agent token: %w", tokErr)
 		}

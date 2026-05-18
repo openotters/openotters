@@ -95,6 +95,17 @@ func WithMaxConcurrent(n int) PoolOption {
 	}
 }
 
+// capabilityNames flattens runtimeCapsForExtras' output to just the
+// tool names — what the JWT stamps as the capabilities claim and
+// what UI listings render.
+func capabilityNames(caps []agentpkg.Capability) []string {
+	out := make([]string, 0, len(caps))
+	for _, c := range caps {
+		out = append(out, c.Name)
+	}
+	return out
+}
+
 // WithLogger attaches a logger so Create/Run errors are visible instead of
 // silently swallowed. Defaults to zap.NewNop when unset.
 func WithLogger(l *zap.Logger) PoolOption {

@@ -34,6 +34,13 @@ type Claims struct {
 	// re-issues the token (and auto-restarts the source agent) when
 	// linksmutate, so the claim is always the authoritative set.
 	Links []string `json:"links,omitempty"`
+	// Capabilities is the canonical list of runtime-injected tool
+	// names the agent exposes (note_save, agent_create, …). Stamped
+	// at issue time from runtimeCapsForExtras, not used for any auth
+	// check today — purely informational so operators reading the
+	// JWT (UI Identity tab, `otters` introspection) can see the
+	// agent's tool surface without a second RPC.
+	Capabilities []string `json:"capabilities,omitempty"`
 }
 
 // Default token lifetimes. Operator tokens are short enough that a
@@ -49,7 +56,7 @@ const (
 // jti so callers can record the jti for future revocation. Returns
 // (token, jti, err).
 func IssueOperator(key []byte) (string, string, error) {
-	return issue(key, IssuerOperator, "", nil)
+	return issue(key, IssuerOperator, "", nil, nil)
 }
 
 // IssueAgent mints a token bound to an agent's UUID and returns it
@@ -58,15 +65,17 @@ func IssueOperator(key []byte) (string, string, error) {
 // links carries the agent UUIDs this token may target via cross-
 // agent RPCs (AgentChat / AgentExec / AgentInfo); pass an empty
 // slice for agents with no outbound link permissions.
+// caps is the runtime-injected capability list — stamped onto the
+// token for inspection / display only (no auth use).
 // Returns (token, jti, err).
-func IssueAgent(key []byte, agentID string, links []string) (string, string, error) {
+func IssueAgent(key []byte, agentID string, links, caps []string) (string, string, error) {
 	if agentID == "" {
 		return "", "", errors.New("IssueAgent: agentID is required")
 	}
-	return issue(key, IssuerAgent, agentID, links)
+	return issue(key, IssuerAgent, agentID, links, caps)
 }
 
-func issue(key []byte, issuer, agentRef string, links []string) (string, string, error) {
+func issue(key []byte, issuer, agentRef string, links, caps []string) (string, string, error) {
 	if len(key) == 0 {
 		return "", "", errors.New("issue: signing key is empty")
 	}
@@ -83,8 +92,9 @@ func issue(key []byte, issuer, agentRef string, links []string) (string, string,
 			ExpiresAt: jwt.NewNumericDate(now.Add(ttl)),
 			ID:        jti,
 		},
-		AgentRef: agentRef,
-		Links:    links,
+		AgentRef:     agentRef,
+		Links:        links,
+		Capabilities: caps,
 	}
 	tok := jwt.NewWithClaims(jwt.SigningMethodHS256, c)
 	signed, err := tok.SignedString(key)
