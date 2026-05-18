@@ -415,6 +415,33 @@ func runtimeCapsForExtras(extras AgentExtras) []agentpkg.Capability {
 			Description: "Send a prompt to a linked agent and wait for the full reply. " +
 				"Pass session_id to preserve history with that target across calls; omit it for a fresh thread.",
 		},
+		{
+			Name: "agent_create",
+			Description: "Spawn a new agent from an existing image ref. Inputs: ref, name (optional), " +
+				"model (optional), envs, links, description. Mounts are not supported — those stay operator-only. " +
+				"Add yourself to `links` if you intend to call the new agent.",
+		},
+		{
+			Name: "agent_create_from_source",
+			Description: "Build a fresh image from an inline Agentfile body, then spawn an agent from it. " +
+				"Same fields as agent_create except `agentfile` (raw text) replaces `ref`. " +
+				"The body must be self-contained — no COPY-from-host. Powerful: only attached to trusted orchestrators.",
+		},
+		{
+			Name: "agent_delete",
+			Description: "Delete an agent by name or id. No restriction — any agent can " +
+				"be deleted, including operator-created ones.",
+		},
+		{
+			Name: "image_list",
+			Description: "List available agent images (ref / digest / description / size). " +
+				"Use before agent_create to pick a base.",
+		},
+		{
+			Name: "bin_list",
+			Description: "List available BIN images (ref / digest / description / size). " +
+				"Useful when composing an Agentfile for agent_create_from_source.",
+		},
 	}
 	if extras.DaemonURL != "" && extras.AgentToken != "" {
 		caps = append(caps,

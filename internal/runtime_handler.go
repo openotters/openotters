@@ -728,6 +728,43 @@ func buildRPCFilter(req *daemonv1.StreamRPCCallsRequest) func(observability.RPCC
 	}
 }
 
+// GetAgentIdentity returns an agent's persisted JWT alongside the
+// decoded claims. Operator-only — the firehose carries enough to
+// impersonate the agent if leaked, so this surface stays off the
+// agent JWT scope.
+func (h *runtimeHandler) GetAgentIdentity(
+	ctx context.Context, req *connect.Request[daemonv1.GetAgentIdentityRequest],
+) (*connect.Response[daemonv1.GetAgentIdentityResponse], error) {
+	if c := auth.ClaimsFromContext(ctx); c == nil || c.AgentRef != "" {
+		return nil, connect.NewError(connect.CodeUnauthenticated,
+			errors.New("GetAgentIdentity requires an operator token"))
+	}
+	if req.Msg.GetRef() == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument,
+			errors.New("ref is required"))
+	}
+	token, claims, err := h.daemon.AgentIdentity(ctx, req.Msg.GetRef())
+	if err != nil {
+		return nil, err
+	}
+	out := &daemonv1.GetAgentIdentityResponse{Token: token}
+	if claims != nil {
+		out.Claims = &daemonv1.AgentIdentityClaims{
+			Issuer:   claims.Issuer,
+			AgentRef: claims.AgentRef,
+			Jti:      claims.ID,
+			Links:    append([]string(nil), claims.Links...),
+		}
+		if claims.IssuedAt != nil {
+			out.Claims.IssuedAt = claims.IssuedAt.Unix()
+		}
+		if claims.ExpiresAt != nil {
+			out.Claims.ExpiresAt = claims.ExpiresAt.Unix()
+		}
+	}
+	return connect.NewResponse(out), nil
+}
+
 func rpcCallToProto(c observability.RPCCall) *daemonv1.RPCCallEvent {
 	return &daemonv1.RPCCallEvent{
 		TimestampUnixMs: c.Timestamp.UnixMilli(),

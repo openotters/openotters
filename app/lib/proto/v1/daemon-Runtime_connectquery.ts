@@ -235,3 +235,46 @@ export const agentInfo = Runtime.method.agentInfo;
  * @generated from rpc openotters.daemon.v1.Runtime.AgentExec
  */
 export const agentExec = Runtime.method.agentExec;
+
+/**
+ * Spawn / delete an agent and enumerate images / BIN images.
+ * All four require an agent token (rejected for operator and
+ * anonymous callers). agent_create rejects mounts and a
+ * build-from-source path — those land on AgentCreateFromSource
+ * and remain a separate capability operators opt into.
+ * agent_delete is unrestricted: any authenticated agent caller
+ * can delete any agent.
+ *
+ * @generated from rpc openotters.daemon.v1.Runtime.AgentCreate
+ */
+export const agentCreate = Runtime.method.agentCreate;
+
+/**
+ * @generated from rpc openotters.daemon.v1.Runtime.AgentCreateFromSource
+ */
+export const agentCreateFromSource = Runtime.method.agentCreateFromSource;
+
+/**
+ * @generated from rpc openotters.daemon.v1.Runtime.AgentDelete
+ */
+export const agentDelete = Runtime.method.agentDelete;
+
+/**
+ * @generated from rpc openotters.daemon.v1.Runtime.ImageList
+ */
+export const imageList = Runtime.method.imageList;
+
+/**
+ * @generated from rpc openotters.daemon.v1.Runtime.BinList
+ */
+export const binList = Runtime.method.binList;
+
+/**
+ * GetAgentIdentity exposes an agent's persisted JWT + decoded
+ * claims for the operator UI's Identity tab. Operator-only
+ * (rejected for agent tokens). The token field is the raw
+ * signed JWT — the UI shows it behind a click-to-reveal toggle.
+ *
+ * @generated from rpc openotters.daemon.v1.Runtime.GetAgentIdentity
+ */
+export const getAgentIdentity = Runtime.method.getAgentIdentity;

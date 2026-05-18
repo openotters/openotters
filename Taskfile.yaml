@@ -149,6 +149,29 @@ tasks:
       - buf generate
       - cd app && buf generate ..
 
+  build:
+    desc: Compile every package. P0 pre-commit gate.
+    cmds:
+      - go build ./...
+
+  verify:
+    desc: Verify go.sum integrity (`go mod verify`). P0 pre-commit gate.
+    cmds:
+      - go mod verify
+
+  lint:
+    desc: Run golangci-lint. Alias for `golangci:lint` so contributors don't need to learn the namespace.
+    cmds:
+      - task: golangci:lint
+
+  check:
+    desc: Run the full pre-commit gate sequence — build, test, lint, verify — in dependency order. Stops at the first failure.
+    cmds:
+      - task: build
+      - task: test
+      - task: lint
+      - task: verify
+
   test:
     desc: Run unit tests with the race detector.
     cmds:

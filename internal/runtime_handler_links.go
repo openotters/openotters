@@ -25,6 +25,7 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
+	"github.com/openotters/agentfile/spec"
 	daemonv1 "github.com/openotters/openotters/api/v1"
 	"github.com/openotters/openotters/internal/auth"
 )
@@ -150,6 +151,169 @@ func (h *runtimeHandler) AgentExec(
 		Response:  resp,
 		SessionId: sessionID,
 	}), nil
+}
+
+// ── agent self-management ───────────────────────────────────────
+
+// AgentCreate spawns a new agent from an existing image ref. Mounts
+// are intentionally absent from the input shape — an agent can't
+// open host-filesystem holes by mounting /etc into a child. The
+// build-from-source path lives on AgentCreateFromSource, a separate
+// capability operators opt into.
+func (h *runtimeHandler) AgentCreate(
+	ctx context.Context, req *connect.Request[daemonv1.AgentCreateRequest],
+) (*connect.Response[daemonv1.AgentCreateResponse], error) {
+	if _, err := requireAgentCaller(ctx); err != nil {
+		return nil, err
+	}
+	if req.Msg.GetRef() == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument,
+			errors.New("ref is required"))
+	}
+	createReq := &daemonv1.CreateAgentRequest{
+		Name:  req.Msg.GetName(),
+		Ref:   req.Msg.GetRef(),
+		Model: req.Msg.GetModel(),
+		Envs:  req.Msg.GetEnvs(),
+		Links: req.Msg.GetLinks(),
+	}
+	if desc := req.Msg.GetDescription(); desc != "" {
+		createReq.Labels = map[string]string{"description": desc}
+	}
+	resp, err := h.daemon.CreateAgent(ctx, createReq)
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(&daemonv1.AgentCreateResponse{
+		Id:     resp.GetId(),
+		Name:   resp.GetName(),
+		Status: resp.GetStatus(),
+	}), nil
+}
+
+// AgentCreateFromSource builds a fresh image from an inline
+// Agentfile body, then spawns an agent from it. A more powerful
+// capability than AgentCreate — operators attach it deliberately,
+// since a compromised orchestrator with this capability can assemble
+// any BIN combination available locally.
+//
+// The Agentfile body must be self-contained (no COPY-from-host); the
+// daemon's BuildFromBytes path uses an empty memfs build context. The
+// generated image is tagged under `from-agent:<creator>:<uuid>` so
+// image_list and the UI can show provenance.
+func (h *runtimeHandler) AgentCreateFromSource(
+	ctx context.Context, req *connect.Request[daemonv1.AgentCreateFromSourceRequest],
+) (*connect.Response[daemonv1.AgentCreateResponse], error) {
+	caller, err := requireAgentCaller(ctx)
+	if err != nil {
+		return nil, err
+	}
+	body := req.Msg.GetAgentfile()
+	if len(body) == 0 {
+		return nil, connect.NewError(connect.CodeInvalidArgument,
+			errors.New("agentfile body is required"))
+	}
+	tag := "from-agent-" + caller.AgentRef + ":" + uuid.NewString()
+	built, err := h.daemon.BuildFromBytes(ctx, body, []string{tag})
+	if err != nil {
+		return nil, fmt.Errorf("building agent from source: %w", err)
+	}
+	createReq := &daemonv1.CreateAgentRequest{
+		Name:  req.Msg.GetName(),
+		Ref:   built.GetRef(),
+		Model: req.Msg.GetModel(),
+		Envs:  req.Msg.GetEnvs(),
+		Links: req.Msg.GetLinks(),
+	}
+	if desc := req.Msg.GetDescription(); desc != "" {
+		createReq.Labels = map[string]string{"description": desc}
+	}
+	resp, err := h.daemon.CreateAgent(ctx, createReq)
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(&daemonv1.AgentCreateResponse{
+		Id:     resp.GetId(),
+		Name:   resp.GetName(),
+		Status: resp.GetStatus(),
+	}), nil
+}
+
+// AgentDelete removes an agent by ref. Any authenticated agent
+// caller can delete any agent, including operator-created ones —
+// the operator chose to grant this capability when they attached
+// agent_delete. Self-delete is allowed at the RPC layer; the
+// runtime observes the token revocation on its next call and
+// exits.
+func (h *runtimeHandler) AgentDelete(
+	ctx context.Context, req *connect.Request[daemonv1.AgentDeleteRequest],
+) (*connect.Response[daemonv1.AgentDeleteResponse], error) {
+	if _, err := requireAgentCaller(ctx); err != nil {
+		return nil, err
+	}
+	if req.Msg.GetRef() == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument,
+			errors.New("ref is required"))
+	}
+	if err := h.daemon.Remove(ctx, req.Msg.GetRef()); err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(&daemonv1.AgentDeleteResponse{}), nil
+}
+
+// ImageList returns the trimmed image catalogue (artifact_type =
+// AgentArtifactType). Read-only — surfaces nothing the operator
+// couldn't already see via `otters image ls`, just in the model-
+// friendly ImageRow shape.
+func (h *runtimeHandler) ImageList(
+	ctx context.Context, _ *connect.Request[daemonv1.ImageListRequest],
+) (*connect.Response[daemonv1.ImageListResponse], error) {
+	if _, err := requireAgentCaller(ctx); err != nil {
+		return nil, err
+	}
+	rows, err := h.daemon.state.ListImages(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]*daemonv1.ImageRow, 0, len(rows))
+	for _, r := range rows {
+		if r.ArtifactType != spec.AgentArtifactType {
+			continue
+		}
+		out = append(out, &daemonv1.ImageRow{
+			Ref:         r.Ref,
+			Digest:      r.Digest,
+			Description: r.Description,
+			Size:        r.Size,
+		})
+	}
+	return connect.NewResponse(&daemonv1.ImageListResponse{Images: out}), nil
+}
+
+// BinList is the BIN twin of ImageList.
+func (h *runtimeHandler) BinList(
+	ctx context.Context, _ *connect.Request[daemonv1.BinListRequest],
+) (*connect.Response[daemonv1.BinListResponse], error) {
+	if _, err := requireAgentCaller(ctx); err != nil {
+		return nil, err
+	}
+	rows, err := h.daemon.state.ListImages(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]*daemonv1.ImageRow, 0, len(rows))
+	for _, r := range rows {
+		if r.ArtifactType != spec.BinArtifactType {
+			continue
+		}
+		out = append(out, &daemonv1.ImageRow{
+			Ref:         r.Ref,
+			Digest:      r.Digest,
+			Description: r.Description,
+			Size:        r.Size,
+		})
+	}
+	return connect.NewResponse(&daemonv1.BinListResponse{Bins: out}), nil
 }
 
 // ── helpers ─────────────────────────────────────────────────────

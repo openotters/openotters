@@ -2141,6 +2141,38 @@ func (d *Daemon) resolveLocalDigest(ctx context.Context, ref string) string {
 	return ""
 }
 
+// AgentIdentity returns the persisted JWT + decoded claims for the
+// resolved agent. Used by the operator UI's Identity tab. Decoding
+// is best-effort — when the daemon was built without a signing key
+// (test paths) the token may be empty, in which case claims comes
+// back nil and the UI renders only the raw-token block.
+func (d *Daemon) AgentIdentity(ctx context.Context, ref string) (string, *auth.Claims, error) {
+	ma, err := d.resolve(ref)
+	if err != nil {
+		return "", nil, err
+	}
+	if ma.token == "" || len(d.signingKey) == 0 {
+		return ma.token, nil, nil
+	}
+	claims, valErr := auth.Validate(d.signingKey, ma.token, func(jti string) (bool, error) {
+		return d.state.IsRevoked(ctx, jti)
+	})
+	if valErr != nil {
+		// Token persisted but no longer verifiable (revoked,
+		// signing-key rotated). Surface the raw token so the
+		// operator can still inspect it; the UI will note the
+		// claims are unavailable. Swallowing the error here is
+		// deliberate — this is an introspection RPC, not an
+		// auth gate; an unparseable claim set is a signal to
+		// render, not a failure to propagate.
+		d.logger.Debug("agent identity: claims unavailable",
+			zap.String("agent", ma.id.String()),
+			zap.Error(valErr))
+		return ma.token, nil, nil
+	}
+	return ma.token, claims, nil
+}
+
 func (d *Daemon) resolve(ref string) (*managedAgent, error) {
 	if ma, ok := d.agents[ref]; ok {
 		return ma, nil

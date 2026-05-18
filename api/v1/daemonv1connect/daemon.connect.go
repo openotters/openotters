@@ -124,6 +124,20 @@ const (
 	RuntimeAgentInfoProcedure = "/openotters.daemon.v1.Runtime/AgentInfo"
 	// RuntimeAgentExecProcedure is the fully-qualified name of the Runtime's AgentExec RPC.
 	RuntimeAgentExecProcedure = "/openotters.daemon.v1.Runtime/AgentExec"
+	// RuntimeAgentCreateProcedure is the fully-qualified name of the Runtime's AgentCreate RPC.
+	RuntimeAgentCreateProcedure = "/openotters.daemon.v1.Runtime/AgentCreate"
+	// RuntimeAgentCreateFromSourceProcedure is the fully-qualified name of the Runtime's
+	// AgentCreateFromSource RPC.
+	RuntimeAgentCreateFromSourceProcedure = "/openotters.daemon.v1.Runtime/AgentCreateFromSource"
+	// RuntimeAgentDeleteProcedure is the fully-qualified name of the Runtime's AgentDelete RPC.
+	RuntimeAgentDeleteProcedure = "/openotters.daemon.v1.Runtime/AgentDelete"
+	// RuntimeImageListProcedure is the fully-qualified name of the Runtime's ImageList RPC.
+	RuntimeImageListProcedure = "/openotters.daemon.v1.Runtime/ImageList"
+	// RuntimeBinListProcedure is the fully-qualified name of the Runtime's BinList RPC.
+	RuntimeBinListProcedure = "/openotters.daemon.v1.Runtime/BinList"
+	// RuntimeGetAgentIdentityProcedure is the fully-qualified name of the Runtime's GetAgentIdentity
+	// RPC.
+	RuntimeGetAgentIdentityProcedure = "/openotters.daemon.v1.Runtime/GetAgentIdentity"
 	// RuntimeWatchAsyncJobProcedure is the fully-qualified name of the Runtime's WatchAsyncJob RPC.
 	RuntimeWatchAsyncJobProcedure = "/openotters.daemon.v1.Runtime/WatchAsyncJob"
 	// AgentStateListMessagesProcedure is the fully-qualified name of the AgentState's ListMessages RPC.
@@ -238,6 +252,23 @@ type RuntimeClient interface {
 	AgentList(context.Context, *connect.Request[v1.AgentListRequest]) (*connect.Response[v1.AgentListResponse], error)
 	AgentInfo(context.Context, *connect.Request[v1.AgentInfoRequest]) (*connect.Response[v1.AgentInfoResponse], error)
 	AgentExec(context.Context, *connect.Request[v1.AgentExecRequest]) (*connect.Response[v1.AgentExecResponse], error)
+	// Spawn / delete an agent and enumerate images / BIN images.
+	// All four require an agent token (rejected for operator and
+	// anonymous callers). agent_create rejects mounts and a
+	// build-from-source path — those land on AgentCreateFromSource
+	// and remain a separate capability operators opt into.
+	// agent_delete is unrestricted: any authenticated agent caller
+	// can delete any agent.
+	AgentCreate(context.Context, *connect.Request[v1.AgentCreateRequest]) (*connect.Response[v1.AgentCreateResponse], error)
+	AgentCreateFromSource(context.Context, *connect.Request[v1.AgentCreateFromSourceRequest]) (*connect.Response[v1.AgentCreateResponse], error)
+	AgentDelete(context.Context, *connect.Request[v1.AgentDeleteRequest]) (*connect.Response[v1.AgentDeleteResponse], error)
+	ImageList(context.Context, *connect.Request[v1.ImageListRequest]) (*connect.Response[v1.ImageListResponse], error)
+	BinList(context.Context, *connect.Request[v1.BinListRequest]) (*connect.Response[v1.BinListResponse], error)
+	// GetAgentIdentity exposes an agent's persisted JWT + decoded
+	// claims for the operator UI's Identity tab. Operator-only
+	// (rejected for agent tokens). The token field is the raw
+	// signed JWT — the UI shows it behind a click-to-reveal toggle.
+	GetAgentIdentity(context.Context, *connect.Request[v1.GetAgentIdentityRequest]) (*connect.Response[v1.GetAgentIdentityResponse], error)
 	// Server-streaming watch: emits the current AsyncJob immediately,
 	// then again on every material change (status, handle, exit_code,
 	// stdout, stderr, error, started_at, finished_at), then closes the
@@ -517,6 +548,42 @@ func NewRuntimeClient(httpClient connect.HTTPClient, baseURL string, opts ...con
 			connect.WithSchema(runtimeMethods.ByName("AgentExec")),
 			connect.WithClientOptions(opts...),
 		),
+		agentCreate: connect.NewClient[v1.AgentCreateRequest, v1.AgentCreateResponse](
+			httpClient,
+			baseURL+RuntimeAgentCreateProcedure,
+			connect.WithSchema(runtimeMethods.ByName("AgentCreate")),
+			connect.WithClientOptions(opts...),
+		),
+		agentCreateFromSource: connect.NewClient[v1.AgentCreateFromSourceRequest, v1.AgentCreateResponse](
+			httpClient,
+			baseURL+RuntimeAgentCreateFromSourceProcedure,
+			connect.WithSchema(runtimeMethods.ByName("AgentCreateFromSource")),
+			connect.WithClientOptions(opts...),
+		),
+		agentDelete: connect.NewClient[v1.AgentDeleteRequest, v1.AgentDeleteResponse](
+			httpClient,
+			baseURL+RuntimeAgentDeleteProcedure,
+			connect.WithSchema(runtimeMethods.ByName("AgentDelete")),
+			connect.WithClientOptions(opts...),
+		),
+		imageList: connect.NewClient[v1.ImageListRequest, v1.ImageListResponse](
+			httpClient,
+			baseURL+RuntimeImageListProcedure,
+			connect.WithSchema(runtimeMethods.ByName("ImageList")),
+			connect.WithClientOptions(opts...),
+		),
+		binList: connect.NewClient[v1.BinListRequest, v1.BinListResponse](
+			httpClient,
+			baseURL+RuntimeBinListProcedure,
+			connect.WithSchema(runtimeMethods.ByName("BinList")),
+			connect.WithClientOptions(opts...),
+		),
+		getAgentIdentity: connect.NewClient[v1.GetAgentIdentityRequest, v1.GetAgentIdentityResponse](
+			httpClient,
+			baseURL+RuntimeGetAgentIdentityProcedure,
+			connect.WithSchema(runtimeMethods.ByName("GetAgentIdentity")),
+			connect.WithClientOptions(opts...),
+		),
 		watchAsyncJob: connect.NewClient[v1.WatchAsyncJobRequest, v1.WatchAsyncJobResponse](
 			httpClient,
 			baseURL+RuntimeWatchAsyncJobProcedure,
@@ -571,6 +638,12 @@ type runtimeClient struct {
 	agentList             *connect.Client[v1.AgentListRequest, v1.AgentListResponse]
 	agentInfo             *connect.Client[v1.AgentInfoRequest, v1.AgentInfoResponse]
 	agentExec             *connect.Client[v1.AgentExecRequest, v1.AgentExecResponse]
+	agentCreate           *connect.Client[v1.AgentCreateRequest, v1.AgentCreateResponse]
+	agentCreateFromSource *connect.Client[v1.AgentCreateFromSourceRequest, v1.AgentCreateResponse]
+	agentDelete           *connect.Client[v1.AgentDeleteRequest, v1.AgentDeleteResponse]
+	imageList             *connect.Client[v1.ImageListRequest, v1.ImageListResponse]
+	binList               *connect.Client[v1.BinListRequest, v1.BinListResponse]
+	getAgentIdentity      *connect.Client[v1.GetAgentIdentityRequest, v1.GetAgentIdentityResponse]
 	watchAsyncJob         *connect.Client[v1.WatchAsyncJobRequest, v1.WatchAsyncJobResponse]
 }
 
@@ -789,6 +862,36 @@ func (c *runtimeClient) AgentExec(ctx context.Context, req *connect.Request[v1.A
 	return c.agentExec.CallUnary(ctx, req)
 }
 
+// AgentCreate calls openotters.daemon.v1.Runtime.AgentCreate.
+func (c *runtimeClient) AgentCreate(ctx context.Context, req *connect.Request[v1.AgentCreateRequest]) (*connect.Response[v1.AgentCreateResponse], error) {
+	return c.agentCreate.CallUnary(ctx, req)
+}
+
+// AgentCreateFromSource calls openotters.daemon.v1.Runtime.AgentCreateFromSource.
+func (c *runtimeClient) AgentCreateFromSource(ctx context.Context, req *connect.Request[v1.AgentCreateFromSourceRequest]) (*connect.Response[v1.AgentCreateResponse], error) {
+	return c.agentCreateFromSource.CallUnary(ctx, req)
+}
+
+// AgentDelete calls openotters.daemon.v1.Runtime.AgentDelete.
+func (c *runtimeClient) AgentDelete(ctx context.Context, req *connect.Request[v1.AgentDeleteRequest]) (*connect.Response[v1.AgentDeleteResponse], error) {
+	return c.agentDelete.CallUnary(ctx, req)
+}
+
+// ImageList calls openotters.daemon.v1.Runtime.ImageList.
+func (c *runtimeClient) ImageList(ctx context.Context, req *connect.Request[v1.ImageListRequest]) (*connect.Response[v1.ImageListResponse], error) {
+	return c.imageList.CallUnary(ctx, req)
+}
+
+// BinList calls openotters.daemon.v1.Runtime.BinList.
+func (c *runtimeClient) BinList(ctx context.Context, req *connect.Request[v1.BinListRequest]) (*connect.Response[v1.BinListResponse], error) {
+	return c.binList.CallUnary(ctx, req)
+}
+
+// GetAgentIdentity calls openotters.daemon.v1.Runtime.GetAgentIdentity.
+func (c *runtimeClient) GetAgentIdentity(ctx context.Context, req *connect.Request[v1.GetAgentIdentityRequest]) (*connect.Response[v1.GetAgentIdentityResponse], error) {
+	return c.getAgentIdentity.CallUnary(ctx, req)
+}
+
 // WatchAsyncJob calls openotters.daemon.v1.Runtime.WatchAsyncJob.
 func (c *runtimeClient) WatchAsyncJob(ctx context.Context, req *connect.Request[v1.WatchAsyncJobRequest]) (*connect.ServerStreamForClient[v1.WatchAsyncJobResponse], error) {
 	return c.watchAsyncJob.CallServerStream(ctx, req)
@@ -869,6 +972,23 @@ type RuntimeHandler interface {
 	AgentList(context.Context, *connect.Request[v1.AgentListRequest]) (*connect.Response[v1.AgentListResponse], error)
 	AgentInfo(context.Context, *connect.Request[v1.AgentInfoRequest]) (*connect.Response[v1.AgentInfoResponse], error)
 	AgentExec(context.Context, *connect.Request[v1.AgentExecRequest]) (*connect.Response[v1.AgentExecResponse], error)
+	// Spawn / delete an agent and enumerate images / BIN images.
+	// All four require an agent token (rejected for operator and
+	// anonymous callers). agent_create rejects mounts and a
+	// build-from-source path — those land on AgentCreateFromSource
+	// and remain a separate capability operators opt into.
+	// agent_delete is unrestricted: any authenticated agent caller
+	// can delete any agent.
+	AgentCreate(context.Context, *connect.Request[v1.AgentCreateRequest]) (*connect.Response[v1.AgentCreateResponse], error)
+	AgentCreateFromSource(context.Context, *connect.Request[v1.AgentCreateFromSourceRequest]) (*connect.Response[v1.AgentCreateResponse], error)
+	AgentDelete(context.Context, *connect.Request[v1.AgentDeleteRequest]) (*connect.Response[v1.AgentDeleteResponse], error)
+	ImageList(context.Context, *connect.Request[v1.ImageListRequest]) (*connect.Response[v1.ImageListResponse], error)
+	BinList(context.Context, *connect.Request[v1.BinListRequest]) (*connect.Response[v1.BinListResponse], error)
+	// GetAgentIdentity exposes an agent's persisted JWT + decoded
+	// claims for the operator UI's Identity tab. Operator-only
+	// (rejected for agent tokens). The token field is the raw
+	// signed JWT — the UI shows it behind a click-to-reveal toggle.
+	GetAgentIdentity(context.Context, *connect.Request[v1.GetAgentIdentityRequest]) (*connect.Response[v1.GetAgentIdentityResponse], error)
 	// Server-streaming watch: emits the current AsyncJob immediately,
 	// then again on every material change (status, handle, exit_code,
 	// stdout, stderr, error, started_at, finished_at), then closes the
@@ -1144,6 +1264,42 @@ func NewRuntimeHandler(svc RuntimeHandler, opts ...connect.HandlerOption) (strin
 		connect.WithSchema(runtimeMethods.ByName("AgentExec")),
 		connect.WithHandlerOptions(opts...),
 	)
+	runtimeAgentCreateHandler := connect.NewUnaryHandler(
+		RuntimeAgentCreateProcedure,
+		svc.AgentCreate,
+		connect.WithSchema(runtimeMethods.ByName("AgentCreate")),
+		connect.WithHandlerOptions(opts...),
+	)
+	runtimeAgentCreateFromSourceHandler := connect.NewUnaryHandler(
+		RuntimeAgentCreateFromSourceProcedure,
+		svc.AgentCreateFromSource,
+		connect.WithSchema(runtimeMethods.ByName("AgentCreateFromSource")),
+		connect.WithHandlerOptions(opts...),
+	)
+	runtimeAgentDeleteHandler := connect.NewUnaryHandler(
+		RuntimeAgentDeleteProcedure,
+		svc.AgentDelete,
+		connect.WithSchema(runtimeMethods.ByName("AgentDelete")),
+		connect.WithHandlerOptions(opts...),
+	)
+	runtimeImageListHandler := connect.NewUnaryHandler(
+		RuntimeImageListProcedure,
+		svc.ImageList,
+		connect.WithSchema(runtimeMethods.ByName("ImageList")),
+		connect.WithHandlerOptions(opts...),
+	)
+	runtimeBinListHandler := connect.NewUnaryHandler(
+		RuntimeBinListProcedure,
+		svc.BinList,
+		connect.WithSchema(runtimeMethods.ByName("BinList")),
+		connect.WithHandlerOptions(opts...),
+	)
+	runtimeGetAgentIdentityHandler := connect.NewUnaryHandler(
+		RuntimeGetAgentIdentityProcedure,
+		svc.GetAgentIdentity,
+		connect.WithSchema(runtimeMethods.ByName("GetAgentIdentity")),
+		connect.WithHandlerOptions(opts...),
+	)
 	runtimeWatchAsyncJobHandler := connect.NewServerStreamHandler(
 		RuntimeWatchAsyncJobProcedure,
 		svc.WatchAsyncJob,
@@ -1238,6 +1394,18 @@ func NewRuntimeHandler(svc RuntimeHandler, opts ...connect.HandlerOption) (strin
 			runtimeAgentInfoHandler.ServeHTTP(w, r)
 		case RuntimeAgentExecProcedure:
 			runtimeAgentExecHandler.ServeHTTP(w, r)
+		case RuntimeAgentCreateProcedure:
+			runtimeAgentCreateHandler.ServeHTTP(w, r)
+		case RuntimeAgentCreateFromSourceProcedure:
+			runtimeAgentCreateFromSourceHandler.ServeHTTP(w, r)
+		case RuntimeAgentDeleteProcedure:
+			runtimeAgentDeleteHandler.ServeHTTP(w, r)
+		case RuntimeImageListProcedure:
+			runtimeImageListHandler.ServeHTTP(w, r)
+		case RuntimeBinListProcedure:
+			runtimeBinListHandler.ServeHTTP(w, r)
+		case RuntimeGetAgentIdentityProcedure:
+			runtimeGetAgentIdentityHandler.ServeHTTP(w, r)
 		case RuntimeWatchAsyncJobProcedure:
 			runtimeWatchAsyncJobHandler.ServeHTTP(w, r)
 		default:
@@ -1419,6 +1587,30 @@ func (UnimplementedRuntimeHandler) AgentInfo(context.Context, *connect.Request[v
 
 func (UnimplementedRuntimeHandler) AgentExec(context.Context, *connect.Request[v1.AgentExecRequest]) (*connect.Response[v1.AgentExecResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("openotters.daemon.v1.Runtime.AgentExec is not implemented"))
+}
+
+func (UnimplementedRuntimeHandler) AgentCreate(context.Context, *connect.Request[v1.AgentCreateRequest]) (*connect.Response[v1.AgentCreateResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("openotters.daemon.v1.Runtime.AgentCreate is not implemented"))
+}
+
+func (UnimplementedRuntimeHandler) AgentCreateFromSource(context.Context, *connect.Request[v1.AgentCreateFromSourceRequest]) (*connect.Response[v1.AgentCreateResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("openotters.daemon.v1.Runtime.AgentCreateFromSource is not implemented"))
+}
+
+func (UnimplementedRuntimeHandler) AgentDelete(context.Context, *connect.Request[v1.AgentDeleteRequest]) (*connect.Response[v1.AgentDeleteResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("openotters.daemon.v1.Runtime.AgentDelete is not implemented"))
+}
+
+func (UnimplementedRuntimeHandler) ImageList(context.Context, *connect.Request[v1.ImageListRequest]) (*connect.Response[v1.ImageListResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("openotters.daemon.v1.Runtime.ImageList is not implemented"))
+}
+
+func (UnimplementedRuntimeHandler) BinList(context.Context, *connect.Request[v1.BinListRequest]) (*connect.Response[v1.BinListResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("openotters.daemon.v1.Runtime.BinList is not implemented"))
+}
+
+func (UnimplementedRuntimeHandler) GetAgentIdentity(context.Context, *connect.Request[v1.GetAgentIdentityRequest]) (*connect.Response[v1.GetAgentIdentityResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("openotters.daemon.v1.Runtime.GetAgentIdentity is not implemented"))
 }
 
 func (UnimplementedRuntimeHandler) WatchAsyncJob(context.Context, *connect.Request[v1.WatchAsyncJobRequest], *connect.ServerStream[v1.WatchAsyncJobResponse]) error {

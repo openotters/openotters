@@ -62,6 +62,12 @@ const (
 	Runtime_AgentList_FullMethodName             = "/openotters.daemon.v1.Runtime/AgentList"
 	Runtime_AgentInfo_FullMethodName             = "/openotters.daemon.v1.Runtime/AgentInfo"
 	Runtime_AgentExec_FullMethodName             = "/openotters.daemon.v1.Runtime/AgentExec"
+	Runtime_AgentCreate_FullMethodName           = "/openotters.daemon.v1.Runtime/AgentCreate"
+	Runtime_AgentCreateFromSource_FullMethodName = "/openotters.daemon.v1.Runtime/AgentCreateFromSource"
+	Runtime_AgentDelete_FullMethodName           = "/openotters.daemon.v1.Runtime/AgentDelete"
+	Runtime_ImageList_FullMethodName             = "/openotters.daemon.v1.Runtime/ImageList"
+	Runtime_BinList_FullMethodName               = "/openotters.daemon.v1.Runtime/BinList"
+	Runtime_GetAgentIdentity_FullMethodName      = "/openotters.daemon.v1.Runtime/GetAgentIdentity"
 	Runtime_WatchAsyncJob_FullMethodName         = "/openotters.daemon.v1.Runtime/WatchAsyncJob"
 )
 
@@ -142,6 +148,23 @@ type RuntimeClient interface {
 	AgentList(ctx context.Context, in *AgentListRequest, opts ...grpc.CallOption) (*AgentListResponse, error)
 	AgentInfo(ctx context.Context, in *AgentInfoRequest, opts ...grpc.CallOption) (*AgentInfoResponse, error)
 	AgentExec(ctx context.Context, in *AgentExecRequest, opts ...grpc.CallOption) (*AgentExecResponse, error)
+	// Spawn / delete an agent and enumerate images / BIN images.
+	// All four require an agent token (rejected for operator and
+	// anonymous callers). agent_create rejects mounts and a
+	// build-from-source path — those land on AgentCreateFromSource
+	// and remain a separate capability operators opt into.
+	// agent_delete is unrestricted: any authenticated agent caller
+	// can delete any agent.
+	AgentCreate(ctx context.Context, in *AgentCreateRequest, opts ...grpc.CallOption) (*AgentCreateResponse, error)
+	AgentCreateFromSource(ctx context.Context, in *AgentCreateFromSourceRequest, opts ...grpc.CallOption) (*AgentCreateResponse, error)
+	AgentDelete(ctx context.Context, in *AgentDeleteRequest, opts ...grpc.CallOption) (*AgentDeleteResponse, error)
+	ImageList(ctx context.Context, in *ImageListRequest, opts ...grpc.CallOption) (*ImageListResponse, error)
+	BinList(ctx context.Context, in *BinListRequest, opts ...grpc.CallOption) (*BinListResponse, error)
+	// GetAgentIdentity exposes an agent's persisted JWT + decoded
+	// claims for the operator UI's Identity tab. Operator-only
+	// (rejected for agent tokens). The token field is the raw
+	// signed JWT — the UI shows it behind a click-to-reveal toggle.
+	GetAgentIdentity(ctx context.Context, in *GetAgentIdentityRequest, opts ...grpc.CallOption) (*GetAgentIdentityResponse, error)
 	// Server-streaming watch: emits the current AsyncJob immediately,
 	// then again on every material change (status, handle, exit_code,
 	// stdout, stderr, error, started_at, finished_at), then closes the
@@ -608,6 +631,66 @@ func (c *runtimeClient) AgentExec(ctx context.Context, in *AgentExecRequest, opt
 	return out, nil
 }
 
+func (c *runtimeClient) AgentCreate(ctx context.Context, in *AgentCreateRequest, opts ...grpc.CallOption) (*AgentCreateResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(AgentCreateResponse)
+	err := c.cc.Invoke(ctx, Runtime_AgentCreate_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *runtimeClient) AgentCreateFromSource(ctx context.Context, in *AgentCreateFromSourceRequest, opts ...grpc.CallOption) (*AgentCreateResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(AgentCreateResponse)
+	err := c.cc.Invoke(ctx, Runtime_AgentCreateFromSource_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *runtimeClient) AgentDelete(ctx context.Context, in *AgentDeleteRequest, opts ...grpc.CallOption) (*AgentDeleteResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(AgentDeleteResponse)
+	err := c.cc.Invoke(ctx, Runtime_AgentDelete_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *runtimeClient) ImageList(ctx context.Context, in *ImageListRequest, opts ...grpc.CallOption) (*ImageListResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ImageListResponse)
+	err := c.cc.Invoke(ctx, Runtime_ImageList_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *runtimeClient) BinList(ctx context.Context, in *BinListRequest, opts ...grpc.CallOption) (*BinListResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(BinListResponse)
+	err := c.cc.Invoke(ctx, Runtime_BinList_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *runtimeClient) GetAgentIdentity(ctx context.Context, in *GetAgentIdentityRequest, opts ...grpc.CallOption) (*GetAgentIdentityResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetAgentIdentityResponse)
+	err := c.cc.Invoke(ctx, Runtime_GetAgentIdentity_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *runtimeClient) WatchAsyncJob(ctx context.Context, in *WatchAsyncJobRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[WatchAsyncJobResponse], error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	stream, err := c.cc.NewStream(ctx, &Runtime_ServiceDesc.Streams[2], Runtime_WatchAsyncJob_FullMethodName, cOpts...)
@@ -704,6 +787,23 @@ type RuntimeServer interface {
 	AgentList(context.Context, *AgentListRequest) (*AgentListResponse, error)
 	AgentInfo(context.Context, *AgentInfoRequest) (*AgentInfoResponse, error)
 	AgentExec(context.Context, *AgentExecRequest) (*AgentExecResponse, error)
+	// Spawn / delete an agent and enumerate images / BIN images.
+	// All four require an agent token (rejected for operator and
+	// anonymous callers). agent_create rejects mounts and a
+	// build-from-source path — those land on AgentCreateFromSource
+	// and remain a separate capability operators opt into.
+	// agent_delete is unrestricted: any authenticated agent caller
+	// can delete any agent.
+	AgentCreate(context.Context, *AgentCreateRequest) (*AgentCreateResponse, error)
+	AgentCreateFromSource(context.Context, *AgentCreateFromSourceRequest) (*AgentCreateResponse, error)
+	AgentDelete(context.Context, *AgentDeleteRequest) (*AgentDeleteResponse, error)
+	ImageList(context.Context, *ImageListRequest) (*ImageListResponse, error)
+	BinList(context.Context, *BinListRequest) (*BinListResponse, error)
+	// GetAgentIdentity exposes an agent's persisted JWT + decoded
+	// claims for the operator UI's Identity tab. Operator-only
+	// (rejected for agent tokens). The token field is the raw
+	// signed JWT — the UI shows it behind a click-to-reveal toggle.
+	GetAgentIdentity(context.Context, *GetAgentIdentityRequest) (*GetAgentIdentityResponse, error)
 	// Server-streaming watch: emits the current AsyncJob immediately,
 	// then again on every material change (status, handle, exit_code,
 	// stdout, stderr, error, started_at, finished_at), then closes the
@@ -850,6 +950,24 @@ func (UnimplementedRuntimeServer) AgentInfo(context.Context, *AgentInfoRequest) 
 }
 func (UnimplementedRuntimeServer) AgentExec(context.Context, *AgentExecRequest) (*AgentExecResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method AgentExec not implemented")
+}
+func (UnimplementedRuntimeServer) AgentCreate(context.Context, *AgentCreateRequest) (*AgentCreateResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method AgentCreate not implemented")
+}
+func (UnimplementedRuntimeServer) AgentCreateFromSource(context.Context, *AgentCreateFromSourceRequest) (*AgentCreateResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method AgentCreateFromSource not implemented")
+}
+func (UnimplementedRuntimeServer) AgentDelete(context.Context, *AgentDeleteRequest) (*AgentDeleteResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method AgentDelete not implemented")
+}
+func (UnimplementedRuntimeServer) ImageList(context.Context, *ImageListRequest) (*ImageListResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ImageList not implemented")
+}
+func (UnimplementedRuntimeServer) BinList(context.Context, *BinListRequest) (*BinListResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method BinList not implemented")
+}
+func (UnimplementedRuntimeServer) GetAgentIdentity(context.Context, *GetAgentIdentityRequest) (*GetAgentIdentityResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetAgentIdentity not implemented")
 }
 func (UnimplementedRuntimeServer) WatchAsyncJob(*WatchAsyncJobRequest, grpc.ServerStreamingServer[WatchAsyncJobResponse]) error {
 	return status.Error(codes.Unimplemented, "method WatchAsyncJob not implemented")
@@ -1635,6 +1753,114 @@ func _Runtime_AgentExec_Handler(srv interface{}, ctx context.Context, dec func(i
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Runtime_AgentCreate_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AgentCreateRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(RuntimeServer).AgentCreate(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Runtime_AgentCreate_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(RuntimeServer).AgentCreate(ctx, req.(*AgentCreateRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Runtime_AgentCreateFromSource_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AgentCreateFromSourceRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(RuntimeServer).AgentCreateFromSource(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Runtime_AgentCreateFromSource_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(RuntimeServer).AgentCreateFromSource(ctx, req.(*AgentCreateFromSourceRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Runtime_AgentDelete_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AgentDeleteRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(RuntimeServer).AgentDelete(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Runtime_AgentDelete_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(RuntimeServer).AgentDelete(ctx, req.(*AgentDeleteRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Runtime_ImageList_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ImageListRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(RuntimeServer).ImageList(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Runtime_ImageList_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(RuntimeServer).ImageList(ctx, req.(*ImageListRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Runtime_BinList_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(BinListRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(RuntimeServer).BinList(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Runtime_BinList_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(RuntimeServer).BinList(ctx, req.(*BinListRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Runtime_GetAgentIdentity_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetAgentIdentityRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(RuntimeServer).GetAgentIdentity(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Runtime_GetAgentIdentity_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(RuntimeServer).GetAgentIdentity(ctx, req.(*GetAgentIdentityRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _Runtime_WatchAsyncJob_Handler(srv interface{}, stream grpc.ServerStream) error {
 	m := new(WatchAsyncJobRequest)
 	if err := stream.RecvMsg(m); err != nil {
@@ -1816,6 +2042,30 @@ var Runtime_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "AgentExec",
 			Handler:    _Runtime_AgentExec_Handler,
+		},
+		{
+			MethodName: "AgentCreate",
+			Handler:    _Runtime_AgentCreate_Handler,
+		},
+		{
+			MethodName: "AgentCreateFromSource",
+			Handler:    _Runtime_AgentCreateFromSource_Handler,
+		},
+		{
+			MethodName: "AgentDelete",
+			Handler:    _Runtime_AgentDelete_Handler,
+		},
+		{
+			MethodName: "ImageList",
+			Handler:    _Runtime_ImageList_Handler,
+		},
+		{
+			MethodName: "BinList",
+			Handler:    _Runtime_BinList_Handler,
+		},
+		{
+			MethodName: "GetAgentIdentity",
+			Handler:    _Runtime_GetAgentIdentity_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

@@ -105,6 +105,24 @@ service Runtime {
   rpc AgentList(AgentListRequest) returns (AgentListResponse);
   rpc AgentInfo(AgentInfoRequest) returns (AgentInfoResponse);
   rpc AgentExec(AgentExecRequest) returns (AgentExecResponse);
+  // Spawn / delete an agent and enumerate images / BIN images.
+  // All four require an agent token (rejected for operator and
+  // anonymous callers). agent_create rejects mounts and a
+  // build-from-source path — those land on AgentCreateFromSource
+  // and remain a separate capability operators opt into.
+  // agent_delete is unrestricted: any authenticated agent caller
+  // can delete any agent.
+  rpc AgentCreate(AgentCreateRequest)                     returns (AgentCreateResponse);
+  rpc AgentCreateFromSource(AgentCreateFromSourceRequest) returns (AgentCreateResponse);
+  rpc AgentDelete(AgentDeleteRequest)                     returns (AgentDeleteResponse);
+  rpc ImageList(ImageListRequest)                         returns (ImageListResponse);
+  rpc BinList(BinListRequest)                             returns (BinListResponse);
+
+  // GetAgentIdentity exposes an agent's persisted JWT + decoded
+  // claims for the operator UI's Identity tab. Operator-only
+  // (rejected for agent tokens). The token field is the raw
+  // signed JWT — the UI shows it behind a click-to-reveal toggle.
+  rpc GetAgentIdentity(GetAgentIdentityRequest) returns (GetAgentIdentityResponse);
   // Server-streaming watch: emits the current AsyncJob immediately,
   // then again on every material change (status, handle, exit_code,
   // stdout, stderr, error, started_at, finished_at), then closes the
@@ -1014,4 +1032,98 @@ message AgentExecResponse {
   // non-empty; the caller threads it through subsequent calls
   // to preserve history with that target.
   string session_id = 2;
+}
+
+// ── agent self-management (agent_create, agent_delete) ──────────
+// Agents with the corresponding capability can spawn and delete
+// agents through these RPCs. Mounts are intentionally absent on
+// AgentCreate{,FromSource} — the agent can't open host-filesystem
+// holes by mounting /etc or ~/.ssh into a child. agent_delete is
+// unrestricted: any authenticated agent caller can delete any
+// agent, including operator-created ones.
+
+message AgentCreateRequest {
+  string ref         = 1;  // image ref (e.g. "kubectl:latest")
+  string name        = 2;  // optional; daemon auto-generates if empty
+  string model       = 3;  // optional; overrides image MODEL directive
+  repeated EnvOverride envs = 4;
+  repeated string links     = 5;  // agent refs to stamp into the new agent's JWT.Links
+  string description = 6;  // → labels["description"]
+}
+message AgentCreateResponse {
+  string id     = 1;
+  string name   = 2;
+  string status = 3;
+}
+
+// Build a fresh image from an inline Agentfile body, then spawn
+// an agent from it. Powerful — a compromised orchestrator with
+// this capability can assemble any BIN combination available
+// locally. Operators attach the `agent_create_from_source`
+// capability deliberately; `agent_create` alone is the safer
+// default.
+//
+// The Agentfile body must be self-contained: no COPY-from-host,
+// no file uploads. BIN / FROM refs are resolved against the
+// local registry as usual. The resulting image is stamped with
+// a recognizable ref prefix so image_list / the UI can show
+// provenance.
+message AgentCreateFromSourceRequest {
+  bytes  agentfile   = 1;  // raw Agentfile body
+  string name        = 2;
+  string model       = 3;
+  repeated EnvOverride envs = 4;
+  repeated string links     = 5;
+  string description = 6;
+}
+
+message AgentDeleteRequest  { string ref = 1; }
+message AgentDeleteResponse {}
+
+// ── agent-facing image / bin enumeration ─────────────────────────
+// ImageList / BinList are the agent-facing twins of the operator
+// `otters image ls` / `otters bin ls` CLIs, scoped to the trimmed
+// ImageRow shape (ref / digest / description / size) so the model
+// doesn't have to wade through layer JSON or label maps.
+
+message ImageRow {
+  string ref         = 1;
+  string digest      = 2;
+  string description = 3;
+  int64  size        = 4;
+}
+
+message ImageListRequest  {}
+message ImageListResponse {
+  repeated ImageRow images = 1;
+}
+
+message BinListRequest  {}
+message BinListResponse {
+  repeated ImageRow bins = 1;
+}
+
+// ── operator-facing agent identity (UI Identity tab) ─────────────
+// Surfaces the agent's persisted JWT + decoded claims for the
+// operator UI. Rejected for agent tokens — agents already see
+// their own claims via the runtime; this RPC's purpose is to let
+// the operator inspect any agent's identity without opening
+// daemon.db.
+
+message GetAgentIdentityRequest {
+  string ref = 1;
+}
+
+message AgentIdentityClaims {
+  string issuer     = 1;
+  string agent_ref  = 2;
+  string jti        = 3;
+  int64  issued_at  = 4;
+  int64  expires_at = 5;
+  repeated string links = 6;
+}
+
+message GetAgentIdentityResponse {
+  string token = 1;
+  AgentIdentityClaims claims = 2;
 }

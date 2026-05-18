@@ -7537,6 +7537,734 @@ func (x *AgentExecResponse) GetSessionId() string {
 	return ""
 }
 
+type AgentCreateRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Ref           string                 `protobuf:"bytes,1,opt,name=ref,proto3" json:"ref,omitempty"`     // image ref (e.g. "kubectl:latest")
+	Name          string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`   // optional; daemon auto-generates if empty
+	Model         string                 `protobuf:"bytes,3,opt,name=model,proto3" json:"model,omitempty"` // optional; overrides image MODEL directive
+	Envs          []*EnvOverride         `protobuf:"bytes,4,rep,name=envs,proto3" json:"envs,omitempty"`
+	Links         []string               `protobuf:"bytes,5,rep,name=links,proto3" json:"links,omitempty"`             // agent refs to stamp into the new agent's JWT.Links
+	Description   string                 `protobuf:"bytes,6,opt,name=description,proto3" json:"description,omitempty"` // → labels["description"]
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AgentCreateRequest) Reset() {
+	*x = AgentCreateRequest{}
+	mi := &file_v1_daemon_proto_msgTypes[132]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AgentCreateRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AgentCreateRequest) ProtoMessage() {}
+
+func (x *AgentCreateRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_daemon_proto_msgTypes[132]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AgentCreateRequest.ProtoReflect.Descriptor instead.
+func (*AgentCreateRequest) Descriptor() ([]byte, []int) {
+	return file_v1_daemon_proto_rawDescGZIP(), []int{132}
+}
+
+func (x *AgentCreateRequest) GetRef() string {
+	if x != nil {
+		return x.Ref
+	}
+	return ""
+}
+
+func (x *AgentCreateRequest) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *AgentCreateRequest) GetModel() string {
+	if x != nil {
+		return x.Model
+	}
+	return ""
+}
+
+func (x *AgentCreateRequest) GetEnvs() []*EnvOverride {
+	if x != nil {
+		return x.Envs
+	}
+	return nil
+}
+
+func (x *AgentCreateRequest) GetLinks() []string {
+	if x != nil {
+		return x.Links
+	}
+	return nil
+}
+
+func (x *AgentCreateRequest) GetDescription() string {
+	if x != nil {
+		return x.Description
+	}
+	return ""
+}
+
+type AgentCreateResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Name          string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	Status        string                 `protobuf:"bytes,3,opt,name=status,proto3" json:"status,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AgentCreateResponse) Reset() {
+	*x = AgentCreateResponse{}
+	mi := &file_v1_daemon_proto_msgTypes[133]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AgentCreateResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AgentCreateResponse) ProtoMessage() {}
+
+func (x *AgentCreateResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_daemon_proto_msgTypes[133]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AgentCreateResponse.ProtoReflect.Descriptor instead.
+func (*AgentCreateResponse) Descriptor() ([]byte, []int) {
+	return file_v1_daemon_proto_rawDescGZIP(), []int{133}
+}
+
+func (x *AgentCreateResponse) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *AgentCreateResponse) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *AgentCreateResponse) GetStatus() string {
+	if x != nil {
+		return x.Status
+	}
+	return ""
+}
+
+// Build a fresh image from an inline Agentfile body, then spawn
+// an agent from it. Powerful — a compromised orchestrator with
+// this capability can assemble any BIN combination available
+// locally. Operators attach the `agent_create_from_source`
+// capability deliberately; `agent_create` alone is the safer
+// default.
+//
+// The Agentfile body must be self-contained: no COPY-from-host,
+// no file uploads. BIN / FROM refs are resolved against the
+// local registry as usual. The resulting image is stamped with
+// a recognizable ref prefix so image_list / the UI can show
+// provenance.
+type AgentCreateFromSourceRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Agentfile     []byte                 `protobuf:"bytes,1,opt,name=agentfile,proto3" json:"agentfile,omitempty"` // raw Agentfile body
+	Name          string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	Model         string                 `protobuf:"bytes,3,opt,name=model,proto3" json:"model,omitempty"`
+	Envs          []*EnvOverride         `protobuf:"bytes,4,rep,name=envs,proto3" json:"envs,omitempty"`
+	Links         []string               `protobuf:"bytes,5,rep,name=links,proto3" json:"links,omitempty"`
+	Description   string                 `protobuf:"bytes,6,opt,name=description,proto3" json:"description,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AgentCreateFromSourceRequest) Reset() {
+	*x = AgentCreateFromSourceRequest{}
+	mi := &file_v1_daemon_proto_msgTypes[134]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AgentCreateFromSourceRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AgentCreateFromSourceRequest) ProtoMessage() {}
+
+func (x *AgentCreateFromSourceRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_daemon_proto_msgTypes[134]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AgentCreateFromSourceRequest.ProtoReflect.Descriptor instead.
+func (*AgentCreateFromSourceRequest) Descriptor() ([]byte, []int) {
+	return file_v1_daemon_proto_rawDescGZIP(), []int{134}
+}
+
+func (x *AgentCreateFromSourceRequest) GetAgentfile() []byte {
+	if x != nil {
+		return x.Agentfile
+	}
+	return nil
+}
+
+func (x *AgentCreateFromSourceRequest) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *AgentCreateFromSourceRequest) GetModel() string {
+	if x != nil {
+		return x.Model
+	}
+	return ""
+}
+
+func (x *AgentCreateFromSourceRequest) GetEnvs() []*EnvOverride {
+	if x != nil {
+		return x.Envs
+	}
+	return nil
+}
+
+func (x *AgentCreateFromSourceRequest) GetLinks() []string {
+	if x != nil {
+		return x.Links
+	}
+	return nil
+}
+
+func (x *AgentCreateFromSourceRequest) GetDescription() string {
+	if x != nil {
+		return x.Description
+	}
+	return ""
+}
+
+type AgentDeleteRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Ref           string                 `protobuf:"bytes,1,opt,name=ref,proto3" json:"ref,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AgentDeleteRequest) Reset() {
+	*x = AgentDeleteRequest{}
+	mi := &file_v1_daemon_proto_msgTypes[135]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AgentDeleteRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AgentDeleteRequest) ProtoMessage() {}
+
+func (x *AgentDeleteRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_daemon_proto_msgTypes[135]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AgentDeleteRequest.ProtoReflect.Descriptor instead.
+func (*AgentDeleteRequest) Descriptor() ([]byte, []int) {
+	return file_v1_daemon_proto_rawDescGZIP(), []int{135}
+}
+
+func (x *AgentDeleteRequest) GetRef() string {
+	if x != nil {
+		return x.Ref
+	}
+	return ""
+}
+
+type AgentDeleteResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AgentDeleteResponse) Reset() {
+	*x = AgentDeleteResponse{}
+	mi := &file_v1_daemon_proto_msgTypes[136]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AgentDeleteResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AgentDeleteResponse) ProtoMessage() {}
+
+func (x *AgentDeleteResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_daemon_proto_msgTypes[136]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AgentDeleteResponse.ProtoReflect.Descriptor instead.
+func (*AgentDeleteResponse) Descriptor() ([]byte, []int) {
+	return file_v1_daemon_proto_rawDescGZIP(), []int{136}
+}
+
+type ImageRow struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Ref           string                 `protobuf:"bytes,1,opt,name=ref,proto3" json:"ref,omitempty"`
+	Digest        string                 `protobuf:"bytes,2,opt,name=digest,proto3" json:"digest,omitempty"`
+	Description   string                 `protobuf:"bytes,3,opt,name=description,proto3" json:"description,omitempty"`
+	Size          int64                  `protobuf:"varint,4,opt,name=size,proto3" json:"size,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ImageRow) Reset() {
+	*x = ImageRow{}
+	mi := &file_v1_daemon_proto_msgTypes[137]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ImageRow) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ImageRow) ProtoMessage() {}
+
+func (x *ImageRow) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_daemon_proto_msgTypes[137]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ImageRow.ProtoReflect.Descriptor instead.
+func (*ImageRow) Descriptor() ([]byte, []int) {
+	return file_v1_daemon_proto_rawDescGZIP(), []int{137}
+}
+
+func (x *ImageRow) GetRef() string {
+	if x != nil {
+		return x.Ref
+	}
+	return ""
+}
+
+func (x *ImageRow) GetDigest() string {
+	if x != nil {
+		return x.Digest
+	}
+	return ""
+}
+
+func (x *ImageRow) GetDescription() string {
+	if x != nil {
+		return x.Description
+	}
+	return ""
+}
+
+func (x *ImageRow) GetSize() int64 {
+	if x != nil {
+		return x.Size
+	}
+	return 0
+}
+
+type ImageListRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ImageListRequest) Reset() {
+	*x = ImageListRequest{}
+	mi := &file_v1_daemon_proto_msgTypes[138]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ImageListRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ImageListRequest) ProtoMessage() {}
+
+func (x *ImageListRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_daemon_proto_msgTypes[138]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ImageListRequest.ProtoReflect.Descriptor instead.
+func (*ImageListRequest) Descriptor() ([]byte, []int) {
+	return file_v1_daemon_proto_rawDescGZIP(), []int{138}
+}
+
+type ImageListResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Images        []*ImageRow            `protobuf:"bytes,1,rep,name=images,proto3" json:"images,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ImageListResponse) Reset() {
+	*x = ImageListResponse{}
+	mi := &file_v1_daemon_proto_msgTypes[139]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ImageListResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ImageListResponse) ProtoMessage() {}
+
+func (x *ImageListResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_daemon_proto_msgTypes[139]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ImageListResponse.ProtoReflect.Descriptor instead.
+func (*ImageListResponse) Descriptor() ([]byte, []int) {
+	return file_v1_daemon_proto_rawDescGZIP(), []int{139}
+}
+
+func (x *ImageListResponse) GetImages() []*ImageRow {
+	if x != nil {
+		return x.Images
+	}
+	return nil
+}
+
+type BinListRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *BinListRequest) Reset() {
+	*x = BinListRequest{}
+	mi := &file_v1_daemon_proto_msgTypes[140]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BinListRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BinListRequest) ProtoMessage() {}
+
+func (x *BinListRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_daemon_proto_msgTypes[140]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BinListRequest.ProtoReflect.Descriptor instead.
+func (*BinListRequest) Descriptor() ([]byte, []int) {
+	return file_v1_daemon_proto_rawDescGZIP(), []int{140}
+}
+
+type BinListResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Bins          []*ImageRow            `protobuf:"bytes,1,rep,name=bins,proto3" json:"bins,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *BinListResponse) Reset() {
+	*x = BinListResponse{}
+	mi := &file_v1_daemon_proto_msgTypes[141]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BinListResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BinListResponse) ProtoMessage() {}
+
+func (x *BinListResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_daemon_proto_msgTypes[141]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BinListResponse.ProtoReflect.Descriptor instead.
+func (*BinListResponse) Descriptor() ([]byte, []int) {
+	return file_v1_daemon_proto_rawDescGZIP(), []int{141}
+}
+
+func (x *BinListResponse) GetBins() []*ImageRow {
+	if x != nil {
+		return x.Bins
+	}
+	return nil
+}
+
+type GetAgentIdentityRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Ref           string                 `protobuf:"bytes,1,opt,name=ref,proto3" json:"ref,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetAgentIdentityRequest) Reset() {
+	*x = GetAgentIdentityRequest{}
+	mi := &file_v1_daemon_proto_msgTypes[142]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetAgentIdentityRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetAgentIdentityRequest) ProtoMessage() {}
+
+func (x *GetAgentIdentityRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_daemon_proto_msgTypes[142]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetAgentIdentityRequest.ProtoReflect.Descriptor instead.
+func (*GetAgentIdentityRequest) Descriptor() ([]byte, []int) {
+	return file_v1_daemon_proto_rawDescGZIP(), []int{142}
+}
+
+func (x *GetAgentIdentityRequest) GetRef() string {
+	if x != nil {
+		return x.Ref
+	}
+	return ""
+}
+
+type AgentIdentityClaims struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Issuer        string                 `protobuf:"bytes,1,opt,name=issuer,proto3" json:"issuer,omitempty"`
+	AgentRef      string                 `protobuf:"bytes,2,opt,name=agent_ref,json=agentRef,proto3" json:"agent_ref,omitempty"`
+	Jti           string                 `protobuf:"bytes,3,opt,name=jti,proto3" json:"jti,omitempty"`
+	IssuedAt      int64                  `protobuf:"varint,4,opt,name=issued_at,json=issuedAt,proto3" json:"issued_at,omitempty"`
+	ExpiresAt     int64                  `protobuf:"varint,5,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"`
+	Links         []string               `protobuf:"bytes,6,rep,name=links,proto3" json:"links,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AgentIdentityClaims) Reset() {
+	*x = AgentIdentityClaims{}
+	mi := &file_v1_daemon_proto_msgTypes[143]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AgentIdentityClaims) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AgentIdentityClaims) ProtoMessage() {}
+
+func (x *AgentIdentityClaims) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_daemon_proto_msgTypes[143]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AgentIdentityClaims.ProtoReflect.Descriptor instead.
+func (*AgentIdentityClaims) Descriptor() ([]byte, []int) {
+	return file_v1_daemon_proto_rawDescGZIP(), []int{143}
+}
+
+func (x *AgentIdentityClaims) GetIssuer() string {
+	if x != nil {
+		return x.Issuer
+	}
+	return ""
+}
+
+func (x *AgentIdentityClaims) GetAgentRef() string {
+	if x != nil {
+		return x.AgentRef
+	}
+	return ""
+}
+
+func (x *AgentIdentityClaims) GetJti() string {
+	if x != nil {
+		return x.Jti
+	}
+	return ""
+}
+
+func (x *AgentIdentityClaims) GetIssuedAt() int64 {
+	if x != nil {
+		return x.IssuedAt
+	}
+	return 0
+}
+
+func (x *AgentIdentityClaims) GetExpiresAt() int64 {
+	if x != nil {
+		return x.ExpiresAt
+	}
+	return 0
+}
+
+func (x *AgentIdentityClaims) GetLinks() []string {
+	if x != nil {
+		return x.Links
+	}
+	return nil
+}
+
+type GetAgentIdentityResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Token         string                 `protobuf:"bytes,1,opt,name=token,proto3" json:"token,omitempty"`
+	Claims        *AgentIdentityClaims   `protobuf:"bytes,2,opt,name=claims,proto3" json:"claims,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetAgentIdentityResponse) Reset() {
+	*x = GetAgentIdentityResponse{}
+	mi := &file_v1_daemon_proto_msgTypes[144]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetAgentIdentityResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetAgentIdentityResponse) ProtoMessage() {}
+
+func (x *GetAgentIdentityResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_daemon_proto_msgTypes[144]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetAgentIdentityResponse.ProtoReflect.Descriptor instead.
+func (*GetAgentIdentityResponse) Descriptor() ([]byte, []int) {
+	return file_v1_daemon_proto_rawDescGZIP(), []int{144}
+}
+
+func (x *GetAgentIdentityResponse) GetToken() string {
+	if x != nil {
+		return x.Token
+	}
+	return ""
+}
+
+func (x *GetAgentIdentityResponse) GetClaims() *AgentIdentityClaims {
+	if x != nil {
+		return x.Claims
+	}
+	return nil
+}
+
 var File_v1_daemon_proto protoreflect.FileDescriptor
 
 const file_v1_daemon_proto_rawDesc = "" +
@@ -8076,7 +8804,52 @@ const file_v1_daemon_proto_rawDesc = "" +
 	"\x11AgentExecResponse\x12\x1a\n" +
 	"\bresponse\x18\x01 \x01(\tR\bresponse\x12\x1d\n" +
 	"\n" +
-	"session_id\x18\x02 \x01(\tR\tsessionId2\xaa#\n" +
+	"session_id\x18\x02 \x01(\tR\tsessionId\"\xbf\x01\n" +
+	"\x12AgentCreateRequest\x12\x10\n" +
+	"\x03ref\x18\x01 \x01(\tR\x03ref\x12\x12\n" +
+	"\x04name\x18\x02 \x01(\tR\x04name\x12\x14\n" +
+	"\x05model\x18\x03 \x01(\tR\x05model\x125\n" +
+	"\x04envs\x18\x04 \x03(\v2!.openotters.daemon.v1.EnvOverrideR\x04envs\x12\x14\n" +
+	"\x05links\x18\x05 \x03(\tR\x05links\x12 \n" +
+	"\vdescription\x18\x06 \x01(\tR\vdescription\"Q\n" +
+	"\x13AgentCreateResponse\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
+	"\x04name\x18\x02 \x01(\tR\x04name\x12\x16\n" +
+	"\x06status\x18\x03 \x01(\tR\x06status\"\xd5\x01\n" +
+	"\x1cAgentCreateFromSourceRequest\x12\x1c\n" +
+	"\tagentfile\x18\x01 \x01(\fR\tagentfile\x12\x12\n" +
+	"\x04name\x18\x02 \x01(\tR\x04name\x12\x14\n" +
+	"\x05model\x18\x03 \x01(\tR\x05model\x125\n" +
+	"\x04envs\x18\x04 \x03(\v2!.openotters.daemon.v1.EnvOverrideR\x04envs\x12\x14\n" +
+	"\x05links\x18\x05 \x03(\tR\x05links\x12 \n" +
+	"\vdescription\x18\x06 \x01(\tR\vdescription\"&\n" +
+	"\x12AgentDeleteRequest\x12\x10\n" +
+	"\x03ref\x18\x01 \x01(\tR\x03ref\"\x15\n" +
+	"\x13AgentDeleteResponse\"j\n" +
+	"\bImageRow\x12\x10\n" +
+	"\x03ref\x18\x01 \x01(\tR\x03ref\x12\x16\n" +
+	"\x06digest\x18\x02 \x01(\tR\x06digest\x12 \n" +
+	"\vdescription\x18\x03 \x01(\tR\vdescription\x12\x12\n" +
+	"\x04size\x18\x04 \x01(\x03R\x04size\"\x12\n" +
+	"\x10ImageListRequest\"K\n" +
+	"\x11ImageListResponse\x126\n" +
+	"\x06images\x18\x01 \x03(\v2\x1e.openotters.daemon.v1.ImageRowR\x06images\"\x10\n" +
+	"\x0eBinListRequest\"E\n" +
+	"\x0fBinListResponse\x122\n" +
+	"\x04bins\x18\x01 \x03(\v2\x1e.openotters.daemon.v1.ImageRowR\x04bins\"+\n" +
+	"\x17GetAgentIdentityRequest\x12\x10\n" +
+	"\x03ref\x18\x01 \x01(\tR\x03ref\"\xae\x01\n" +
+	"\x13AgentIdentityClaims\x12\x16\n" +
+	"\x06issuer\x18\x01 \x01(\tR\x06issuer\x12\x1b\n" +
+	"\tagent_ref\x18\x02 \x01(\tR\bagentRef\x12\x10\n" +
+	"\x03jti\x18\x03 \x01(\tR\x03jti\x12\x1b\n" +
+	"\tissued_at\x18\x04 \x01(\x03R\bissuedAt\x12\x1d\n" +
+	"\n" +
+	"expires_at\x18\x05 \x01(\x03R\texpiresAt\x12\x14\n" +
+	"\x05links\x18\x06 \x03(\tR\x05links\"s\n" +
+	"\x18GetAgentIdentityResponse\x12\x14\n" +
+	"\x05token\x18\x01 \x01(\tR\x05token\x12A\n" +
+	"\x06claims\x18\x02 \x01(\v2).openotters.daemon.v1.AgentIdentityClaimsR\x06claims2\x93(\n" +
 	"\aRuntime\x12V\n" +
 	"\aGetInfo\x12$.openotters.daemon.v1.GetInfoRequest\x1a%.openotters.daemon.v1.GetInfoResponse\x12_\n" +
 	"\n" +
@@ -8126,7 +8899,13 @@ const file_v1_daemon_proto_rawDesc = "" +
 	"\x0eListAgentLinks\x12+.openotters.daemon.v1.ListAgentLinksRequest\x1a,.openotters.daemon.v1.ListAgentLinksResponse\x12\\\n" +
 	"\tAgentList\x12&.openotters.daemon.v1.AgentListRequest\x1a'.openotters.daemon.v1.AgentListResponse\x12\\\n" +
 	"\tAgentInfo\x12&.openotters.daemon.v1.AgentInfoRequest\x1a'.openotters.daemon.v1.AgentInfoResponse\x12\\\n" +
-	"\tAgentExec\x12&.openotters.daemon.v1.AgentExecRequest\x1a'.openotters.daemon.v1.AgentExecResponse\x12j\n" +
+	"\tAgentExec\x12&.openotters.daemon.v1.AgentExecRequest\x1a'.openotters.daemon.v1.AgentExecResponse\x12b\n" +
+	"\vAgentCreate\x12(.openotters.daemon.v1.AgentCreateRequest\x1a).openotters.daemon.v1.AgentCreateResponse\x12v\n" +
+	"\x15AgentCreateFromSource\x122.openotters.daemon.v1.AgentCreateFromSourceRequest\x1a).openotters.daemon.v1.AgentCreateResponse\x12b\n" +
+	"\vAgentDelete\x12(.openotters.daemon.v1.AgentDeleteRequest\x1a).openotters.daemon.v1.AgentDeleteResponse\x12\\\n" +
+	"\tImageList\x12&.openotters.daemon.v1.ImageListRequest\x1a'.openotters.daemon.v1.ImageListResponse\x12V\n" +
+	"\aBinList\x12$.openotters.daemon.v1.BinListRequest\x1a%.openotters.daemon.v1.BinListResponse\x12q\n" +
+	"\x10GetAgentIdentity\x12-.openotters.daemon.v1.GetAgentIdentityRequest\x1a..openotters.daemon.v1.GetAgentIdentityResponse\x12j\n" +
 	"\rWatchAsyncJob\x12*.openotters.daemon.v1.WatchAsyncJobRequest\x1a+.openotters.daemon.v1.WatchAsyncJobResponse0\x012\xbf\f\n" +
 	"\n" +
 	"AgentState\x12o\n" +
@@ -8159,7 +8938,7 @@ func file_v1_daemon_proto_rawDescGZIP() []byte {
 	return file_v1_daemon_proto_rawDescData
 }
 
-var file_v1_daemon_proto_msgTypes = make([]protoimpl.MessageInfo, 139)
+var file_v1_daemon_proto_msgTypes = make([]protoimpl.MessageInfo, 152)
 var file_v1_daemon_proto_goTypes = []any{
 	(*ListModelsRequest)(nil),             // 0: openotters.daemon.v1.ListModelsRequest
 	(*ListModelsResponse)(nil),            // 1: openotters.daemon.v1.ListModelsResponse
@@ -8293,26 +9072,39 @@ var file_v1_daemon_proto_goTypes = []any{
 	(*AgentInfoResponse)(nil),             // 129: openotters.daemon.v1.AgentInfoResponse
 	(*AgentExecRequest)(nil),              // 130: openotters.daemon.v1.AgentExecRequest
 	(*AgentExecResponse)(nil),             // 131: openotters.daemon.v1.AgentExecResponse
-	nil,                                   // 132: openotters.daemon.v1.DescribeImageResponse.LabelsEntry
-	nil,                                   // 133: openotters.daemon.v1.CreateAgentRequest.LabelsEntry
-	nil,                                   // 134: openotters.daemon.v1.ListAgentsRequest.LabelSelectorEntry
-	nil,                                   // 135: openotters.daemon.v1.AgentInfo.LabelsEntry
-	nil,                                   // 136: openotters.daemon.v1.SubmitAsyncJobRequest.LabelsEntry
-	nil,                                   // 137: openotters.daemon.v1.ListAsyncJobsRequest.LabelSelectorEntry
-	nil,                                   // 138: openotters.daemon.v1.AsyncJob.LabelsEntry
+	(*AgentCreateRequest)(nil),            // 132: openotters.daemon.v1.AgentCreateRequest
+	(*AgentCreateResponse)(nil),           // 133: openotters.daemon.v1.AgentCreateResponse
+	(*AgentCreateFromSourceRequest)(nil),  // 134: openotters.daemon.v1.AgentCreateFromSourceRequest
+	(*AgentDeleteRequest)(nil),            // 135: openotters.daemon.v1.AgentDeleteRequest
+	(*AgentDeleteResponse)(nil),           // 136: openotters.daemon.v1.AgentDeleteResponse
+	(*ImageRow)(nil),                      // 137: openotters.daemon.v1.ImageRow
+	(*ImageListRequest)(nil),              // 138: openotters.daemon.v1.ImageListRequest
+	(*ImageListResponse)(nil),             // 139: openotters.daemon.v1.ImageListResponse
+	(*BinListRequest)(nil),                // 140: openotters.daemon.v1.BinListRequest
+	(*BinListResponse)(nil),               // 141: openotters.daemon.v1.BinListResponse
+	(*GetAgentIdentityRequest)(nil),       // 142: openotters.daemon.v1.GetAgentIdentityRequest
+	(*AgentIdentityClaims)(nil),           // 143: openotters.daemon.v1.AgentIdentityClaims
+	(*GetAgentIdentityResponse)(nil),      // 144: openotters.daemon.v1.GetAgentIdentityResponse
+	nil,                                   // 145: openotters.daemon.v1.DescribeImageResponse.LabelsEntry
+	nil,                                   // 146: openotters.daemon.v1.CreateAgentRequest.LabelsEntry
+	nil,                                   // 147: openotters.daemon.v1.ListAgentsRequest.LabelSelectorEntry
+	nil,                                   // 148: openotters.daemon.v1.AgentInfo.LabelsEntry
+	nil,                                   // 149: openotters.daemon.v1.SubmitAsyncJobRequest.LabelsEntry
+	nil,                                   // 150: openotters.daemon.v1.ListAsyncJobsRequest.LabelSelectorEntry
+	nil,                                   // 151: openotters.daemon.v1.AsyncJob.LabelsEntry
 }
 var file_v1_daemon_proto_depIdxs = []int32{
 	2,   // 0: openotters.daemon.v1.ListModelsResponse.models:type_name -> openotters.daemon.v1.Model
 	9,   // 1: openotters.daemon.v1.BuildToolImageRequest.platforms:type_name -> openotters.daemon.v1.ToolPlatform
 	19,  // 2: openotters.daemon.v1.ListImagesResponse.images:type_name -> openotters.daemon.v1.ImageInfo
-	132, // 3: openotters.daemon.v1.DescribeImageResponse.labels:type_name -> openotters.daemon.v1.DescribeImageResponse.LabelsEntry
+	145, // 3: openotters.daemon.v1.DescribeImageResponse.labels:type_name -> openotters.daemon.v1.DescribeImageResponse.LabelsEntry
 	28,  // 4: openotters.daemon.v1.CreateAgentRequest.mounts:type_name -> openotters.daemon.v1.Mount
 	30,  // 5: openotters.daemon.v1.CreateAgentRequest.envs:type_name -> openotters.daemon.v1.EnvOverride
-	133, // 6: openotters.daemon.v1.CreateAgentRequest.labels:type_name -> openotters.daemon.v1.CreateAgentRequest.LabelsEntry
-	134, // 7: openotters.daemon.v1.ListAgentsRequest.label_selector:type_name -> openotters.daemon.v1.ListAgentsRequest.LabelSelectorEntry
+	146, // 6: openotters.daemon.v1.CreateAgentRequest.labels:type_name -> openotters.daemon.v1.CreateAgentRequest.LabelsEntry
+	147, // 7: openotters.daemon.v1.ListAgentsRequest.label_selector:type_name -> openotters.daemon.v1.ListAgentsRequest.LabelSelectorEntry
 	28,  // 8: openotters.daemon.v1.AgentInfo.mounts:type_name -> openotters.daemon.v1.Mount
 	20,  // 9: openotters.daemon.v1.AgentInfo.tools:type_name -> openotters.daemon.v1.AgentTool
-	135, // 10: openotters.daemon.v1.AgentInfo.labels:type_name -> openotters.daemon.v1.AgentInfo.LabelsEntry
+	148, // 10: openotters.daemon.v1.AgentInfo.labels:type_name -> openotters.daemon.v1.AgentInfo.LabelsEntry
 	33,  // 11: openotters.daemon.v1.ListAgentsResponse.agents:type_name -> openotters.daemon.v1.AgentInfo
 	48,  // 12: openotters.daemon.v1.ListSessionMessagesResponse.messages:type_name -> openotters.daemon.v1.SessionMessage
 	51,  // 13: openotters.daemon.v1.ListSessionsResponse.sessions:type_name -> openotters.daemon.v1.SessionInfo
@@ -8321,12 +9113,12 @@ var file_v1_daemon_proto_depIdxs = []int32{
 	55,  // 16: openotters.daemon.v1.AddProviderResponse.provider:type_name -> openotters.daemon.v1.Provider
 	55,  // 17: openotters.daemon.v1.UpdateProviderRequest.provider:type_name -> openotters.daemon.v1.Provider
 	55,  // 18: openotters.daemon.v1.UpdateProviderResponse.provider:type_name -> openotters.daemon.v1.Provider
-	136, // 19: openotters.daemon.v1.SubmitAsyncJobRequest.labels:type_name -> openotters.daemon.v1.SubmitAsyncJobRequest.LabelsEntry
+	149, // 19: openotters.daemon.v1.SubmitAsyncJobRequest.labels:type_name -> openotters.daemon.v1.SubmitAsyncJobRequest.LabelsEntry
 	74,  // 20: openotters.daemon.v1.GetAsyncJobResponse.job:type_name -> openotters.daemon.v1.AsyncJob
 	74,  // 21: openotters.daemon.v1.WatchAsyncJobResponse.job:type_name -> openotters.daemon.v1.AsyncJob
-	137, // 22: openotters.daemon.v1.ListAsyncJobsRequest.label_selector:type_name -> openotters.daemon.v1.ListAsyncJobsRequest.LabelSelectorEntry
+	150, // 22: openotters.daemon.v1.ListAsyncJobsRequest.label_selector:type_name -> openotters.daemon.v1.ListAsyncJobsRequest.LabelSelectorEntry
 	74,  // 23: openotters.daemon.v1.ListAsyncJobsResponse.jobs:type_name -> openotters.daemon.v1.AsyncJob
-	138, // 24: openotters.daemon.v1.AsyncJob.labels:type_name -> openotters.daemon.v1.AsyncJob.LabelsEntry
+	151, // 24: openotters.daemon.v1.AsyncJob.labels:type_name -> openotters.daemon.v1.AsyncJob.LabelsEntry
 	75,  // 25: openotters.daemon.v1.ListAgentNotesResponse.notes:type_name -> openotters.daemon.v1.AgentNote
 	75,  // 26: openotters.daemon.v1.GetAgentNoteResponse.note:type_name -> openotters.daemon.v1.AgentNote
 	75,  // 27: openotters.daemon.v1.SaveAgentNoteResponse.note:type_name -> openotters.daemon.v1.AgentNote
@@ -8343,127 +9135,144 @@ var file_v1_daemon_proto_depIdxs = []int32{
 	119, // 38: openotters.daemon.v1.ListAgentLinksResponse.inbound:type_name -> openotters.daemon.v1.LinkedAgent
 	119, // 39: openotters.daemon.v1.AgentListResponse.agents:type_name -> openotters.daemon.v1.LinkedAgent
 	119, // 40: openotters.daemon.v1.AgentInfoResponse.agent:type_name -> openotters.daemon.v1.LinkedAgent
-	5,   // 41: openotters.daemon.v1.Runtime.GetInfo:input_type -> openotters.daemon.v1.GetInfoRequest
-	7,   // 42: openotters.daemon.v1.Runtime.BuildAgent:input_type -> openotters.daemon.v1.BuildAgentRequest
-	10,  // 43: openotters.daemon.v1.Runtime.BuildToolImage:input_type -> openotters.daemon.v1.BuildToolImageRequest
-	12,  // 44: openotters.daemon.v1.Runtime.SaveAgentImage:input_type -> openotters.daemon.v1.SaveAgentImageRequest
-	14,  // 45: openotters.daemon.v1.Runtime.PullAgentImage:input_type -> openotters.daemon.v1.PullRequest
-	16,  // 46: openotters.daemon.v1.Runtime.PushAgentImage:input_type -> openotters.daemon.v1.PushRequest
-	18,  // 47: openotters.daemon.v1.Runtime.ListImages:input_type -> openotters.daemon.v1.ListImagesRequest
-	22,  // 48: openotters.daemon.v1.Runtime.RefreshImage:input_type -> openotters.daemon.v1.RefreshImageRequest
-	24,  // 49: openotters.daemon.v1.Runtime.RemoveImage:input_type -> openotters.daemon.v1.RemoveImageRequest
-	26,  // 50: openotters.daemon.v1.Runtime.DescribeImage:input_type -> openotters.daemon.v1.DescribeImageRequest
-	29,  // 51: openotters.daemon.v1.Runtime.CreateAgent:input_type -> openotters.daemon.v1.CreateAgentRequest
-	32,  // 52: openotters.daemon.v1.Runtime.ListAgents:input_type -> openotters.daemon.v1.ListAgentsRequest
-	35,  // 53: openotters.daemon.v1.Runtime.StartAgent:input_type -> openotters.daemon.v1.StartAgentRequest
-	37,  // 54: openotters.daemon.v1.Runtime.StopAgent:input_type -> openotters.daemon.v1.StopAgentRequest
-	39,  // 55: openotters.daemon.v1.Runtime.RemoveAgent:input_type -> openotters.daemon.v1.RemoveAgentRequest
-	41,  // 56: openotters.daemon.v1.Runtime.ChatWithAgent:input_type -> openotters.daemon.v1.ChatRequest
-	43,  // 57: openotters.daemon.v1.Runtime.PromptObject:input_type -> openotters.daemon.v1.PromptObjectRequest
-	45,  // 58: openotters.daemon.v1.Runtime.ChatStreamWithAgent:input_type -> openotters.daemon.v1.ChatStreamRequest
-	47,  // 59: openotters.daemon.v1.Runtime.ListSessionMessages:input_type -> openotters.daemon.v1.ListSessionMessagesRequest
-	50,  // 60: openotters.daemon.v1.Runtime.ListSessions:input_type -> openotters.daemon.v1.ListSessionsRequest
-	53,  // 61: openotters.daemon.v1.Runtime.DeleteSession:input_type -> openotters.daemon.v1.DeleteSessionRequest
-	3,   // 62: openotters.daemon.v1.Runtime.GetAgentLogs:input_type -> openotters.daemon.v1.GetAgentLogsRequest
-	0,   // 63: openotters.daemon.v1.Runtime.ListModels:input_type -> openotters.daemon.v1.ListModelsRequest
-	56,  // 64: openotters.daemon.v1.Runtime.ListProviders:input_type -> openotters.daemon.v1.ListProvidersRequest
-	58,  // 65: openotters.daemon.v1.Runtime.AddProvider:input_type -> openotters.daemon.v1.AddProviderRequest
-	60,  // 66: openotters.daemon.v1.Runtime.UpdateProvider:input_type -> openotters.daemon.v1.UpdateProviderRequest
-	62,  // 67: openotters.daemon.v1.Runtime.RemoveProvider:input_type -> openotters.daemon.v1.RemoveProviderRequest
-	64,  // 68: openotters.daemon.v1.Runtime.SubmitAsyncJob:input_type -> openotters.daemon.v1.SubmitAsyncJobRequest
-	66,  // 69: openotters.daemon.v1.Runtime.CancelAsyncJob:input_type -> openotters.daemon.v1.CancelAsyncJobRequest
-	68,  // 70: openotters.daemon.v1.Runtime.GetAsyncJob:input_type -> openotters.daemon.v1.GetAsyncJobRequest
-	72,  // 71: openotters.daemon.v1.Runtime.ListAsyncJobs:input_type -> openotters.daemon.v1.ListAsyncJobsRequest
-	76,  // 72: openotters.daemon.v1.Runtime.ListAgentNotes:input_type -> openotters.daemon.v1.ListAgentNotesRequest
-	78,  // 73: openotters.daemon.v1.Runtime.GetAgentNote:input_type -> openotters.daemon.v1.GetAgentNoteRequest
-	80,  // 74: openotters.daemon.v1.Runtime.SaveAgentNote:input_type -> openotters.daemon.v1.SaveAgentNoteRequest
-	82,  // 75: openotters.daemon.v1.Runtime.DeleteAgentNote:input_type -> openotters.daemon.v1.DeleteAgentNoteRequest
-	84,  // 76: openotters.daemon.v1.Runtime.SetAgentNoteInContext:input_type -> openotters.daemon.v1.SetAgentNoteInContextRequest
-	87,  // 77: openotters.daemon.v1.Runtime.StreamRPCCalls:input_type -> openotters.daemon.v1.StreamRPCCallsRequest
-	120, // 78: openotters.daemon.v1.Runtime.LinkAgents:input_type -> openotters.daemon.v1.LinkAgentsRequest
-	122, // 79: openotters.daemon.v1.Runtime.UnlinkAgents:input_type -> openotters.daemon.v1.UnlinkAgentsRequest
-	124, // 80: openotters.daemon.v1.Runtime.ListAgentLinks:input_type -> openotters.daemon.v1.ListAgentLinksRequest
-	126, // 81: openotters.daemon.v1.Runtime.AgentList:input_type -> openotters.daemon.v1.AgentListRequest
-	128, // 82: openotters.daemon.v1.Runtime.AgentInfo:input_type -> openotters.daemon.v1.AgentInfoRequest
-	130, // 83: openotters.daemon.v1.Runtime.AgentExec:input_type -> openotters.daemon.v1.AgentExecRequest
-	70,  // 84: openotters.daemon.v1.Runtime.WatchAsyncJob:input_type -> openotters.daemon.v1.WatchAsyncJobRequest
-	89,  // 85: openotters.daemon.v1.AgentState.ListMessages:input_type -> openotters.daemon.v1.StateListMessagesRequest
-	91,  // 86: openotters.daemon.v1.AgentState.AppendMessage:input_type -> openotters.daemon.v1.StateAppendMessageRequest
-	93,  // 87: openotters.daemon.v1.AgentState.ReplaceMessages:input_type -> openotters.daemon.v1.StateReplaceMessagesRequest
-	95,  // 88: openotters.daemon.v1.AgentState.UpdateMessageBranches:input_type -> openotters.daemon.v1.StateUpdateBranchesRequest
-	97,  // 89: openotters.daemon.v1.AgentState.LastAssistantMessage:input_type -> openotters.daemon.v1.StateLastAssistantRequest
-	99,  // 90: openotters.daemon.v1.AgentState.CountMessages:input_type -> openotters.daemon.v1.StateCountMessagesRequest
-	102, // 91: openotters.daemon.v1.AgentState.ListSessions:input_type -> openotters.daemon.v1.StateListSessionsRequest
-	104, // 92: openotters.daemon.v1.AgentState.DeleteSession:input_type -> openotters.daemon.v1.StateDeleteSessionRequest
-	107, // 93: openotters.daemon.v1.AgentState.ListNotes:input_type -> openotters.daemon.v1.StateListNotesRequest
-	109, // 94: openotters.daemon.v1.AgentState.GetNote:input_type -> openotters.daemon.v1.StateGetNoteRequest
-	111, // 95: openotters.daemon.v1.AgentState.SaveNote:input_type -> openotters.daemon.v1.StateSaveNoteRequest
-	113, // 96: openotters.daemon.v1.AgentState.DeleteNote:input_type -> openotters.daemon.v1.StateDeleteNoteRequest
-	115, // 97: openotters.daemon.v1.AgentState.SetNoteInContext:input_type -> openotters.daemon.v1.StateSetNoteInContextRequest
-	117, // 98: openotters.daemon.v1.AgentState.CountNotes:input_type -> openotters.daemon.v1.StateCountNotesRequest
-	6,   // 99: openotters.daemon.v1.Runtime.GetInfo:output_type -> openotters.daemon.v1.GetInfoResponse
-	8,   // 100: openotters.daemon.v1.Runtime.BuildAgent:output_type -> openotters.daemon.v1.BuildAgentResponse
-	11,  // 101: openotters.daemon.v1.Runtime.BuildToolImage:output_type -> openotters.daemon.v1.BuildToolImageResponse
-	13,  // 102: openotters.daemon.v1.Runtime.SaveAgentImage:output_type -> openotters.daemon.v1.SaveAgentImageResponse
-	15,  // 103: openotters.daemon.v1.Runtime.PullAgentImage:output_type -> openotters.daemon.v1.PullResponse
-	17,  // 104: openotters.daemon.v1.Runtime.PushAgentImage:output_type -> openotters.daemon.v1.PushResponse
-	21,  // 105: openotters.daemon.v1.Runtime.ListImages:output_type -> openotters.daemon.v1.ListImagesResponse
-	23,  // 106: openotters.daemon.v1.Runtime.RefreshImage:output_type -> openotters.daemon.v1.RefreshImageResponse
-	25,  // 107: openotters.daemon.v1.Runtime.RemoveImage:output_type -> openotters.daemon.v1.RemoveImageResponse
-	27,  // 108: openotters.daemon.v1.Runtime.DescribeImage:output_type -> openotters.daemon.v1.DescribeImageResponse
-	31,  // 109: openotters.daemon.v1.Runtime.CreateAgent:output_type -> openotters.daemon.v1.CreateAgentResponse
-	34,  // 110: openotters.daemon.v1.Runtime.ListAgents:output_type -> openotters.daemon.v1.ListAgentsResponse
-	36,  // 111: openotters.daemon.v1.Runtime.StartAgent:output_type -> openotters.daemon.v1.StartAgentResponse
-	38,  // 112: openotters.daemon.v1.Runtime.StopAgent:output_type -> openotters.daemon.v1.StopAgentResponse
-	40,  // 113: openotters.daemon.v1.Runtime.RemoveAgent:output_type -> openotters.daemon.v1.RemoveAgentResponse
-	42,  // 114: openotters.daemon.v1.Runtime.ChatWithAgent:output_type -> openotters.daemon.v1.ChatResponse
-	44,  // 115: openotters.daemon.v1.Runtime.PromptObject:output_type -> openotters.daemon.v1.PromptObjectResponse
-	46,  // 116: openotters.daemon.v1.Runtime.ChatStreamWithAgent:output_type -> openotters.daemon.v1.ChatStreamEvent
-	49,  // 117: openotters.daemon.v1.Runtime.ListSessionMessages:output_type -> openotters.daemon.v1.ListSessionMessagesResponse
-	52,  // 118: openotters.daemon.v1.Runtime.ListSessions:output_type -> openotters.daemon.v1.ListSessionsResponse
-	54,  // 119: openotters.daemon.v1.Runtime.DeleteSession:output_type -> openotters.daemon.v1.DeleteSessionResponse
-	4,   // 120: openotters.daemon.v1.Runtime.GetAgentLogs:output_type -> openotters.daemon.v1.GetAgentLogsResponse
-	1,   // 121: openotters.daemon.v1.Runtime.ListModels:output_type -> openotters.daemon.v1.ListModelsResponse
-	57,  // 122: openotters.daemon.v1.Runtime.ListProviders:output_type -> openotters.daemon.v1.ListProvidersResponse
-	59,  // 123: openotters.daemon.v1.Runtime.AddProvider:output_type -> openotters.daemon.v1.AddProviderResponse
-	61,  // 124: openotters.daemon.v1.Runtime.UpdateProvider:output_type -> openotters.daemon.v1.UpdateProviderResponse
-	63,  // 125: openotters.daemon.v1.Runtime.RemoveProvider:output_type -> openotters.daemon.v1.RemoveProviderResponse
-	65,  // 126: openotters.daemon.v1.Runtime.SubmitAsyncJob:output_type -> openotters.daemon.v1.SubmitAsyncJobResponse
-	67,  // 127: openotters.daemon.v1.Runtime.CancelAsyncJob:output_type -> openotters.daemon.v1.CancelAsyncJobResponse
-	69,  // 128: openotters.daemon.v1.Runtime.GetAsyncJob:output_type -> openotters.daemon.v1.GetAsyncJobResponse
-	73,  // 129: openotters.daemon.v1.Runtime.ListAsyncJobs:output_type -> openotters.daemon.v1.ListAsyncJobsResponse
-	77,  // 130: openotters.daemon.v1.Runtime.ListAgentNotes:output_type -> openotters.daemon.v1.ListAgentNotesResponse
-	79,  // 131: openotters.daemon.v1.Runtime.GetAgentNote:output_type -> openotters.daemon.v1.GetAgentNoteResponse
-	81,  // 132: openotters.daemon.v1.Runtime.SaveAgentNote:output_type -> openotters.daemon.v1.SaveAgentNoteResponse
-	83,  // 133: openotters.daemon.v1.Runtime.DeleteAgentNote:output_type -> openotters.daemon.v1.DeleteAgentNoteResponse
-	85,  // 134: openotters.daemon.v1.Runtime.SetAgentNoteInContext:output_type -> openotters.daemon.v1.SetAgentNoteInContextResponse
-	86,  // 135: openotters.daemon.v1.Runtime.StreamRPCCalls:output_type -> openotters.daemon.v1.RPCCallEvent
-	121, // 136: openotters.daemon.v1.Runtime.LinkAgents:output_type -> openotters.daemon.v1.LinkAgentsResponse
-	123, // 137: openotters.daemon.v1.Runtime.UnlinkAgents:output_type -> openotters.daemon.v1.UnlinkAgentsResponse
-	125, // 138: openotters.daemon.v1.Runtime.ListAgentLinks:output_type -> openotters.daemon.v1.ListAgentLinksResponse
-	127, // 139: openotters.daemon.v1.Runtime.AgentList:output_type -> openotters.daemon.v1.AgentListResponse
-	129, // 140: openotters.daemon.v1.Runtime.AgentInfo:output_type -> openotters.daemon.v1.AgentInfoResponse
-	131, // 141: openotters.daemon.v1.Runtime.AgentExec:output_type -> openotters.daemon.v1.AgentExecResponse
-	71,  // 142: openotters.daemon.v1.Runtime.WatchAsyncJob:output_type -> openotters.daemon.v1.WatchAsyncJobResponse
-	90,  // 143: openotters.daemon.v1.AgentState.ListMessages:output_type -> openotters.daemon.v1.StateListMessagesResponse
-	92,  // 144: openotters.daemon.v1.AgentState.AppendMessage:output_type -> openotters.daemon.v1.StateAppendMessageResponse
-	94,  // 145: openotters.daemon.v1.AgentState.ReplaceMessages:output_type -> openotters.daemon.v1.StateReplaceMessagesResponse
-	96,  // 146: openotters.daemon.v1.AgentState.UpdateMessageBranches:output_type -> openotters.daemon.v1.StateUpdateBranchesResponse
-	98,  // 147: openotters.daemon.v1.AgentState.LastAssistantMessage:output_type -> openotters.daemon.v1.StateLastAssistantResponse
-	100, // 148: openotters.daemon.v1.AgentState.CountMessages:output_type -> openotters.daemon.v1.StateCountMessagesResponse
-	103, // 149: openotters.daemon.v1.AgentState.ListSessions:output_type -> openotters.daemon.v1.StateListSessionsResponse
-	105, // 150: openotters.daemon.v1.AgentState.DeleteSession:output_type -> openotters.daemon.v1.StateDeleteSessionResponse
-	108, // 151: openotters.daemon.v1.AgentState.ListNotes:output_type -> openotters.daemon.v1.StateListNotesResponse
-	110, // 152: openotters.daemon.v1.AgentState.GetNote:output_type -> openotters.daemon.v1.StateGetNoteResponse
-	112, // 153: openotters.daemon.v1.AgentState.SaveNote:output_type -> openotters.daemon.v1.StateSaveNoteResponse
-	114, // 154: openotters.daemon.v1.AgentState.DeleteNote:output_type -> openotters.daemon.v1.StateDeleteNoteResponse
-	116, // 155: openotters.daemon.v1.AgentState.SetNoteInContext:output_type -> openotters.daemon.v1.StateSetNoteInContextResponse
-	118, // 156: openotters.daemon.v1.AgentState.CountNotes:output_type -> openotters.daemon.v1.StateCountNotesResponse
-	99,  // [99:157] is the sub-list for method output_type
-	41,  // [41:99] is the sub-list for method input_type
-	41,  // [41:41] is the sub-list for extension type_name
-	41,  // [41:41] is the sub-list for extension extendee
-	0,   // [0:41] is the sub-list for field type_name
+	30,  // 41: openotters.daemon.v1.AgentCreateRequest.envs:type_name -> openotters.daemon.v1.EnvOverride
+	30,  // 42: openotters.daemon.v1.AgentCreateFromSourceRequest.envs:type_name -> openotters.daemon.v1.EnvOverride
+	137, // 43: openotters.daemon.v1.ImageListResponse.images:type_name -> openotters.daemon.v1.ImageRow
+	137, // 44: openotters.daemon.v1.BinListResponse.bins:type_name -> openotters.daemon.v1.ImageRow
+	143, // 45: openotters.daemon.v1.GetAgentIdentityResponse.claims:type_name -> openotters.daemon.v1.AgentIdentityClaims
+	5,   // 46: openotters.daemon.v1.Runtime.GetInfo:input_type -> openotters.daemon.v1.GetInfoRequest
+	7,   // 47: openotters.daemon.v1.Runtime.BuildAgent:input_type -> openotters.daemon.v1.BuildAgentRequest
+	10,  // 48: openotters.daemon.v1.Runtime.BuildToolImage:input_type -> openotters.daemon.v1.BuildToolImageRequest
+	12,  // 49: openotters.daemon.v1.Runtime.SaveAgentImage:input_type -> openotters.daemon.v1.SaveAgentImageRequest
+	14,  // 50: openotters.daemon.v1.Runtime.PullAgentImage:input_type -> openotters.daemon.v1.PullRequest
+	16,  // 51: openotters.daemon.v1.Runtime.PushAgentImage:input_type -> openotters.daemon.v1.PushRequest
+	18,  // 52: openotters.daemon.v1.Runtime.ListImages:input_type -> openotters.daemon.v1.ListImagesRequest
+	22,  // 53: openotters.daemon.v1.Runtime.RefreshImage:input_type -> openotters.daemon.v1.RefreshImageRequest
+	24,  // 54: openotters.daemon.v1.Runtime.RemoveImage:input_type -> openotters.daemon.v1.RemoveImageRequest
+	26,  // 55: openotters.daemon.v1.Runtime.DescribeImage:input_type -> openotters.daemon.v1.DescribeImageRequest
+	29,  // 56: openotters.daemon.v1.Runtime.CreateAgent:input_type -> openotters.daemon.v1.CreateAgentRequest
+	32,  // 57: openotters.daemon.v1.Runtime.ListAgents:input_type -> openotters.daemon.v1.ListAgentsRequest
+	35,  // 58: openotters.daemon.v1.Runtime.StartAgent:input_type -> openotters.daemon.v1.StartAgentRequest
+	37,  // 59: openotters.daemon.v1.Runtime.StopAgent:input_type -> openotters.daemon.v1.StopAgentRequest
+	39,  // 60: openotters.daemon.v1.Runtime.RemoveAgent:input_type -> openotters.daemon.v1.RemoveAgentRequest
+	41,  // 61: openotters.daemon.v1.Runtime.ChatWithAgent:input_type -> openotters.daemon.v1.ChatRequest
+	43,  // 62: openotters.daemon.v1.Runtime.PromptObject:input_type -> openotters.daemon.v1.PromptObjectRequest
+	45,  // 63: openotters.daemon.v1.Runtime.ChatStreamWithAgent:input_type -> openotters.daemon.v1.ChatStreamRequest
+	47,  // 64: openotters.daemon.v1.Runtime.ListSessionMessages:input_type -> openotters.daemon.v1.ListSessionMessagesRequest
+	50,  // 65: openotters.daemon.v1.Runtime.ListSessions:input_type -> openotters.daemon.v1.ListSessionsRequest
+	53,  // 66: openotters.daemon.v1.Runtime.DeleteSession:input_type -> openotters.daemon.v1.DeleteSessionRequest
+	3,   // 67: openotters.daemon.v1.Runtime.GetAgentLogs:input_type -> openotters.daemon.v1.GetAgentLogsRequest
+	0,   // 68: openotters.daemon.v1.Runtime.ListModels:input_type -> openotters.daemon.v1.ListModelsRequest
+	56,  // 69: openotters.daemon.v1.Runtime.ListProviders:input_type -> openotters.daemon.v1.ListProvidersRequest
+	58,  // 70: openotters.daemon.v1.Runtime.AddProvider:input_type -> openotters.daemon.v1.AddProviderRequest
+	60,  // 71: openotters.daemon.v1.Runtime.UpdateProvider:input_type -> openotters.daemon.v1.UpdateProviderRequest
+	62,  // 72: openotters.daemon.v1.Runtime.RemoveProvider:input_type -> openotters.daemon.v1.RemoveProviderRequest
+	64,  // 73: openotters.daemon.v1.Runtime.SubmitAsyncJob:input_type -> openotters.daemon.v1.SubmitAsyncJobRequest
+	66,  // 74: openotters.daemon.v1.Runtime.CancelAsyncJob:input_type -> openotters.daemon.v1.CancelAsyncJobRequest
+	68,  // 75: openotters.daemon.v1.Runtime.GetAsyncJob:input_type -> openotters.daemon.v1.GetAsyncJobRequest
+	72,  // 76: openotters.daemon.v1.Runtime.ListAsyncJobs:input_type -> openotters.daemon.v1.ListAsyncJobsRequest
+	76,  // 77: openotters.daemon.v1.Runtime.ListAgentNotes:input_type -> openotters.daemon.v1.ListAgentNotesRequest
+	78,  // 78: openotters.daemon.v1.Runtime.GetAgentNote:input_type -> openotters.daemon.v1.GetAgentNoteRequest
+	80,  // 79: openotters.daemon.v1.Runtime.SaveAgentNote:input_type -> openotters.daemon.v1.SaveAgentNoteRequest
+	82,  // 80: openotters.daemon.v1.Runtime.DeleteAgentNote:input_type -> openotters.daemon.v1.DeleteAgentNoteRequest
+	84,  // 81: openotters.daemon.v1.Runtime.SetAgentNoteInContext:input_type -> openotters.daemon.v1.SetAgentNoteInContextRequest
+	87,  // 82: openotters.daemon.v1.Runtime.StreamRPCCalls:input_type -> openotters.daemon.v1.StreamRPCCallsRequest
+	120, // 83: openotters.daemon.v1.Runtime.LinkAgents:input_type -> openotters.daemon.v1.LinkAgentsRequest
+	122, // 84: openotters.daemon.v1.Runtime.UnlinkAgents:input_type -> openotters.daemon.v1.UnlinkAgentsRequest
+	124, // 85: openotters.daemon.v1.Runtime.ListAgentLinks:input_type -> openotters.daemon.v1.ListAgentLinksRequest
+	126, // 86: openotters.daemon.v1.Runtime.AgentList:input_type -> openotters.daemon.v1.AgentListRequest
+	128, // 87: openotters.daemon.v1.Runtime.AgentInfo:input_type -> openotters.daemon.v1.AgentInfoRequest
+	130, // 88: openotters.daemon.v1.Runtime.AgentExec:input_type -> openotters.daemon.v1.AgentExecRequest
+	132, // 89: openotters.daemon.v1.Runtime.AgentCreate:input_type -> openotters.daemon.v1.AgentCreateRequest
+	134, // 90: openotters.daemon.v1.Runtime.AgentCreateFromSource:input_type -> openotters.daemon.v1.AgentCreateFromSourceRequest
+	135, // 91: openotters.daemon.v1.Runtime.AgentDelete:input_type -> openotters.daemon.v1.AgentDeleteRequest
+	138, // 92: openotters.daemon.v1.Runtime.ImageList:input_type -> openotters.daemon.v1.ImageListRequest
+	140, // 93: openotters.daemon.v1.Runtime.BinList:input_type -> openotters.daemon.v1.BinListRequest
+	142, // 94: openotters.daemon.v1.Runtime.GetAgentIdentity:input_type -> openotters.daemon.v1.GetAgentIdentityRequest
+	70,  // 95: openotters.daemon.v1.Runtime.WatchAsyncJob:input_type -> openotters.daemon.v1.WatchAsyncJobRequest
+	89,  // 96: openotters.daemon.v1.AgentState.ListMessages:input_type -> openotters.daemon.v1.StateListMessagesRequest
+	91,  // 97: openotters.daemon.v1.AgentState.AppendMessage:input_type -> openotters.daemon.v1.StateAppendMessageRequest
+	93,  // 98: openotters.daemon.v1.AgentState.ReplaceMessages:input_type -> openotters.daemon.v1.StateReplaceMessagesRequest
+	95,  // 99: openotters.daemon.v1.AgentState.UpdateMessageBranches:input_type -> openotters.daemon.v1.StateUpdateBranchesRequest
+	97,  // 100: openotters.daemon.v1.AgentState.LastAssistantMessage:input_type -> openotters.daemon.v1.StateLastAssistantRequest
+	99,  // 101: openotters.daemon.v1.AgentState.CountMessages:input_type -> openotters.daemon.v1.StateCountMessagesRequest
+	102, // 102: openotters.daemon.v1.AgentState.ListSessions:input_type -> openotters.daemon.v1.StateListSessionsRequest
+	104, // 103: openotters.daemon.v1.AgentState.DeleteSession:input_type -> openotters.daemon.v1.StateDeleteSessionRequest
+	107, // 104: openotters.daemon.v1.AgentState.ListNotes:input_type -> openotters.daemon.v1.StateListNotesRequest
+	109, // 105: openotters.daemon.v1.AgentState.GetNote:input_type -> openotters.daemon.v1.StateGetNoteRequest
+	111, // 106: openotters.daemon.v1.AgentState.SaveNote:input_type -> openotters.daemon.v1.StateSaveNoteRequest
+	113, // 107: openotters.daemon.v1.AgentState.DeleteNote:input_type -> openotters.daemon.v1.StateDeleteNoteRequest
+	115, // 108: openotters.daemon.v1.AgentState.SetNoteInContext:input_type -> openotters.daemon.v1.StateSetNoteInContextRequest
+	117, // 109: openotters.daemon.v1.AgentState.CountNotes:input_type -> openotters.daemon.v1.StateCountNotesRequest
+	6,   // 110: openotters.daemon.v1.Runtime.GetInfo:output_type -> openotters.daemon.v1.GetInfoResponse
+	8,   // 111: openotters.daemon.v1.Runtime.BuildAgent:output_type -> openotters.daemon.v1.BuildAgentResponse
+	11,  // 112: openotters.daemon.v1.Runtime.BuildToolImage:output_type -> openotters.daemon.v1.BuildToolImageResponse
+	13,  // 113: openotters.daemon.v1.Runtime.SaveAgentImage:output_type -> openotters.daemon.v1.SaveAgentImageResponse
+	15,  // 114: openotters.daemon.v1.Runtime.PullAgentImage:output_type -> openotters.daemon.v1.PullResponse
+	17,  // 115: openotters.daemon.v1.Runtime.PushAgentImage:output_type -> openotters.daemon.v1.PushResponse
+	21,  // 116: openotters.daemon.v1.Runtime.ListImages:output_type -> openotters.daemon.v1.ListImagesResponse
+	23,  // 117: openotters.daemon.v1.Runtime.RefreshImage:output_type -> openotters.daemon.v1.RefreshImageResponse
+	25,  // 118: openotters.daemon.v1.Runtime.RemoveImage:output_type -> openotters.daemon.v1.RemoveImageResponse
+	27,  // 119: openotters.daemon.v1.Runtime.DescribeImage:output_type -> openotters.daemon.v1.DescribeImageResponse
+	31,  // 120: openotters.daemon.v1.Runtime.CreateAgent:output_type -> openotters.daemon.v1.CreateAgentResponse
+	34,  // 121: openotters.daemon.v1.Runtime.ListAgents:output_type -> openotters.daemon.v1.ListAgentsResponse
+	36,  // 122: openotters.daemon.v1.Runtime.StartAgent:output_type -> openotters.daemon.v1.StartAgentResponse
+	38,  // 123: openotters.daemon.v1.Runtime.StopAgent:output_type -> openotters.daemon.v1.StopAgentResponse
+	40,  // 124: openotters.daemon.v1.Runtime.RemoveAgent:output_type -> openotters.daemon.v1.RemoveAgentResponse
+	42,  // 125: openotters.daemon.v1.Runtime.ChatWithAgent:output_type -> openotters.daemon.v1.ChatResponse
+	44,  // 126: openotters.daemon.v1.Runtime.PromptObject:output_type -> openotters.daemon.v1.PromptObjectResponse
+	46,  // 127: openotters.daemon.v1.Runtime.ChatStreamWithAgent:output_type -> openotters.daemon.v1.ChatStreamEvent
+	49,  // 128: openotters.daemon.v1.Runtime.ListSessionMessages:output_type -> openotters.daemon.v1.ListSessionMessagesResponse
+	52,  // 129: openotters.daemon.v1.Runtime.ListSessions:output_type -> openotters.daemon.v1.ListSessionsResponse
+	54,  // 130: openotters.daemon.v1.Runtime.DeleteSession:output_type -> openotters.daemon.v1.DeleteSessionResponse
+	4,   // 131: openotters.daemon.v1.Runtime.GetAgentLogs:output_type -> openotters.daemon.v1.GetAgentLogsResponse
+	1,   // 132: openotters.daemon.v1.Runtime.ListModels:output_type -> openotters.daemon.v1.ListModelsResponse
+	57,  // 133: openotters.daemon.v1.Runtime.ListProviders:output_type -> openotters.daemon.v1.ListProvidersResponse
+	59,  // 134: openotters.daemon.v1.Runtime.AddProvider:output_type -> openotters.daemon.v1.AddProviderResponse
+	61,  // 135: openotters.daemon.v1.Runtime.UpdateProvider:output_type -> openotters.daemon.v1.UpdateProviderResponse
+	63,  // 136: openotters.daemon.v1.Runtime.RemoveProvider:output_type -> openotters.daemon.v1.RemoveProviderResponse
+	65,  // 137: openotters.daemon.v1.Runtime.SubmitAsyncJob:output_type -> openotters.daemon.v1.SubmitAsyncJobResponse
+	67,  // 138: openotters.daemon.v1.Runtime.CancelAsyncJob:output_type -> openotters.daemon.v1.CancelAsyncJobResponse
+	69,  // 139: openotters.daemon.v1.Runtime.GetAsyncJob:output_type -> openotters.daemon.v1.GetAsyncJobResponse
+	73,  // 140: openotters.daemon.v1.Runtime.ListAsyncJobs:output_type -> openotters.daemon.v1.ListAsyncJobsResponse
+	77,  // 141: openotters.daemon.v1.Runtime.ListAgentNotes:output_type -> openotters.daemon.v1.ListAgentNotesResponse
+	79,  // 142: openotters.daemon.v1.Runtime.GetAgentNote:output_type -> openotters.daemon.v1.GetAgentNoteResponse
+	81,  // 143: openotters.daemon.v1.Runtime.SaveAgentNote:output_type -> openotters.daemon.v1.SaveAgentNoteResponse
+	83,  // 144: openotters.daemon.v1.Runtime.DeleteAgentNote:output_type -> openotters.daemon.v1.DeleteAgentNoteResponse
+	85,  // 145: openotters.daemon.v1.Runtime.SetAgentNoteInContext:output_type -> openotters.daemon.v1.SetAgentNoteInContextResponse
+	86,  // 146: openotters.daemon.v1.Runtime.StreamRPCCalls:output_type -> openotters.daemon.v1.RPCCallEvent
+	121, // 147: openotters.daemon.v1.Runtime.LinkAgents:output_type -> openotters.daemon.v1.LinkAgentsResponse
+	123, // 148: openotters.daemon.v1.Runtime.UnlinkAgents:output_type -> openotters.daemon.v1.UnlinkAgentsResponse
+	125, // 149: openotters.daemon.v1.Runtime.ListAgentLinks:output_type -> openotters.daemon.v1.ListAgentLinksResponse
+	127, // 150: openotters.daemon.v1.Runtime.AgentList:output_type -> openotters.daemon.v1.AgentListResponse
+	129, // 151: openotters.daemon.v1.Runtime.AgentInfo:output_type -> openotters.daemon.v1.AgentInfoResponse
+	131, // 152: openotters.daemon.v1.Runtime.AgentExec:output_type -> openotters.daemon.v1.AgentExecResponse
+	133, // 153: openotters.daemon.v1.Runtime.AgentCreate:output_type -> openotters.daemon.v1.AgentCreateResponse
+	133, // 154: openotters.daemon.v1.Runtime.AgentCreateFromSource:output_type -> openotters.daemon.v1.AgentCreateResponse
+	136, // 155: openotters.daemon.v1.Runtime.AgentDelete:output_type -> openotters.daemon.v1.AgentDeleteResponse
+	139, // 156: openotters.daemon.v1.Runtime.ImageList:output_type -> openotters.daemon.v1.ImageListResponse
+	141, // 157: openotters.daemon.v1.Runtime.BinList:output_type -> openotters.daemon.v1.BinListResponse
+	144, // 158: openotters.daemon.v1.Runtime.GetAgentIdentity:output_type -> openotters.daemon.v1.GetAgentIdentityResponse
+	71,  // 159: openotters.daemon.v1.Runtime.WatchAsyncJob:output_type -> openotters.daemon.v1.WatchAsyncJobResponse
+	90,  // 160: openotters.daemon.v1.AgentState.ListMessages:output_type -> openotters.daemon.v1.StateListMessagesResponse
+	92,  // 161: openotters.daemon.v1.AgentState.AppendMessage:output_type -> openotters.daemon.v1.StateAppendMessageResponse
+	94,  // 162: openotters.daemon.v1.AgentState.ReplaceMessages:output_type -> openotters.daemon.v1.StateReplaceMessagesResponse
+	96,  // 163: openotters.daemon.v1.AgentState.UpdateMessageBranches:output_type -> openotters.daemon.v1.StateUpdateBranchesResponse
+	98,  // 164: openotters.daemon.v1.AgentState.LastAssistantMessage:output_type -> openotters.daemon.v1.StateLastAssistantResponse
+	100, // 165: openotters.daemon.v1.AgentState.CountMessages:output_type -> openotters.daemon.v1.StateCountMessagesResponse
+	103, // 166: openotters.daemon.v1.AgentState.ListSessions:output_type -> openotters.daemon.v1.StateListSessionsResponse
+	105, // 167: openotters.daemon.v1.AgentState.DeleteSession:output_type -> openotters.daemon.v1.StateDeleteSessionResponse
+	108, // 168: openotters.daemon.v1.AgentState.ListNotes:output_type -> openotters.daemon.v1.StateListNotesResponse
+	110, // 169: openotters.daemon.v1.AgentState.GetNote:output_type -> openotters.daemon.v1.StateGetNoteResponse
+	112, // 170: openotters.daemon.v1.AgentState.SaveNote:output_type -> openotters.daemon.v1.StateSaveNoteResponse
+	114, // 171: openotters.daemon.v1.AgentState.DeleteNote:output_type -> openotters.daemon.v1.StateDeleteNoteResponse
+	116, // 172: openotters.daemon.v1.AgentState.SetNoteInContext:output_type -> openotters.daemon.v1.StateSetNoteInContextResponse
+	118, // 173: openotters.daemon.v1.AgentState.CountNotes:output_type -> openotters.daemon.v1.StateCountNotesResponse
+	110, // [110:174] is the sub-list for method output_type
+	46,  // [46:110] is the sub-list for method input_type
+	46,  // [46:46] is the sub-list for extension type_name
+	46,  // [46:46] is the sub-list for extension extendee
+	0,   // [0:46] is the sub-list for field type_name
 }
 
 func init() { file_v1_daemon_proto_init() }
@@ -8477,7 +9286,7 @@ func file_v1_daemon_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_v1_daemon_proto_rawDesc), len(file_v1_daemon_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   139,
+			NumMessages:   152,
 			NumExtensions: 0,
 			NumServices:   2,
 		},
