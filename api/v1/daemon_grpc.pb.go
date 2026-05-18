@@ -61,7 +61,6 @@ const (
 	Runtime_ListAgentLinks_FullMethodName        = "/openotters.daemon.v1.Runtime/ListAgentLinks"
 	Runtime_AgentList_FullMethodName             = "/openotters.daemon.v1.Runtime/AgentList"
 	Runtime_AgentInfo_FullMethodName             = "/openotters.daemon.v1.Runtime/AgentInfo"
-	Runtime_AgentChat_FullMethodName             = "/openotters.daemon.v1.Runtime/AgentChat"
 	Runtime_AgentExec_FullMethodName             = "/openotters.daemon.v1.Runtime/AgentExec"
 	Runtime_WatchAsyncJob_FullMethodName         = "/openotters.daemon.v1.Runtime/WatchAsyncJob"
 )
@@ -135,11 +134,13 @@ type RuntimeClient interface {
 	UnlinkAgents(ctx context.Context, in *UnlinkAgentsRequest, opts ...grpc.CallOption) (*UnlinkAgentsResponse, error)
 	ListAgentLinks(ctx context.Context, in *ListAgentLinksRequest, opts ...grpc.CallOption) (*ListAgentLinksResponse, error)
 	// Agent-facing cross-agent RPCs. Caller must present an agent
-	// token; target must be in the JWT's Links claim. Enforced by
-	// the AgentLinkedInterceptor wrapping these four handlers.
+	// token; target must be in the JWT's Links claim. Enforced
+	// inside the handlers via requireLinkedTarget. agent_chat was
+	// removed in alpha.85 — its semantics (threaded session,
+	// memory-preserving) are now agent_exec's default once a
+	// session_id is supplied.
 	AgentList(ctx context.Context, in *AgentListRequest, opts ...grpc.CallOption) (*AgentListResponse, error)
 	AgentInfo(ctx context.Context, in *AgentInfoRequest, opts ...grpc.CallOption) (*AgentInfoResponse, error)
-	AgentChat(ctx context.Context, in *AgentChatRequest, opts ...grpc.CallOption) (*AgentChatResponse, error)
 	AgentExec(ctx context.Context, in *AgentExecRequest, opts ...grpc.CallOption) (*AgentExecResponse, error)
 	// Server-streaming watch: emits the current AsyncJob immediately,
 	// then again on every material change (status, handle, exit_code,
@@ -597,16 +598,6 @@ func (c *runtimeClient) AgentInfo(ctx context.Context, in *AgentInfoRequest, opt
 	return out, nil
 }
 
-func (c *runtimeClient) AgentChat(ctx context.Context, in *AgentChatRequest, opts ...grpc.CallOption) (*AgentChatResponse, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(AgentChatResponse)
-	err := c.cc.Invoke(ctx, Runtime_AgentChat_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
 func (c *runtimeClient) AgentExec(ctx context.Context, in *AgentExecRequest, opts ...grpc.CallOption) (*AgentExecResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(AgentExecResponse)
@@ -705,11 +696,13 @@ type RuntimeServer interface {
 	UnlinkAgents(context.Context, *UnlinkAgentsRequest) (*UnlinkAgentsResponse, error)
 	ListAgentLinks(context.Context, *ListAgentLinksRequest) (*ListAgentLinksResponse, error)
 	// Agent-facing cross-agent RPCs. Caller must present an agent
-	// token; target must be in the JWT's Links claim. Enforced by
-	// the AgentLinkedInterceptor wrapping these four handlers.
+	// token; target must be in the JWT's Links claim. Enforced
+	// inside the handlers via requireLinkedTarget. agent_chat was
+	// removed in alpha.85 — its semantics (threaded session,
+	// memory-preserving) are now agent_exec's default once a
+	// session_id is supplied.
 	AgentList(context.Context, *AgentListRequest) (*AgentListResponse, error)
 	AgentInfo(context.Context, *AgentInfoRequest) (*AgentInfoResponse, error)
-	AgentChat(context.Context, *AgentChatRequest) (*AgentChatResponse, error)
 	AgentExec(context.Context, *AgentExecRequest) (*AgentExecResponse, error)
 	// Server-streaming watch: emits the current AsyncJob immediately,
 	// then again on every material change (status, handle, exit_code,
@@ -854,9 +847,6 @@ func (UnimplementedRuntimeServer) AgentList(context.Context, *AgentListRequest) 
 }
 func (UnimplementedRuntimeServer) AgentInfo(context.Context, *AgentInfoRequest) (*AgentInfoResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method AgentInfo not implemented")
-}
-func (UnimplementedRuntimeServer) AgentChat(context.Context, *AgentChatRequest) (*AgentChatResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method AgentChat not implemented")
 }
 func (UnimplementedRuntimeServer) AgentExec(context.Context, *AgentExecRequest) (*AgentExecResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method AgentExec not implemented")
@@ -1627,24 +1617,6 @@ func _Runtime_AgentInfo_Handler(srv interface{}, ctx context.Context, dec func(i
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Runtime_AgentChat_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(AgentChatRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(RuntimeServer).AgentChat(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: Runtime_AgentChat_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(RuntimeServer).AgentChat(ctx, req.(*AgentChatRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
 func _Runtime_AgentExec_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(AgentExecRequest)
 	if err := dec(in); err != nil {
@@ -1840,10 +1812,6 @@ var Runtime_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "AgentInfo",
 			Handler:    _Runtime_AgentInfo_Handler,
-		},
-		{
-			MethodName: "AgentChat",
-			Handler:    _Runtime_AgentChat_Handler,
 		},
 		{
 			MethodName: "AgentExec",

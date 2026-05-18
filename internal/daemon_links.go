@@ -29,13 +29,17 @@ import (
 // Returns whether the source was restarted; the CLI uses this to
 // print a different success message (just "linked" vs "linked +
 // restarted A").
-func (d *Daemon) LinkAgents(ctx context.Context, sourceRef, targetRef string) (bool, error) {
+func (d *Daemon) LinkAgents(
+	ctx context.Context, sourceRef, targetRef, description string,
+) (bool, error) {
 	source, target, err := d.resolveLinkEndpoints(sourceRef, targetRef)
 	if err != nil {
 		return false, err
 	}
 
-	if addErr := d.state.AgentLinksAdd(ctx, source.id.String(), target.id.String()); addErr != nil {
+	if addErr := d.state.AgentLinksAdd(
+		ctx, source.id.String(), target.id.String(), description,
+	); addErr != nil {
 		return false, addErr
 	}
 	return d.refreshAgentTokenAndMaybeRestart(ctx, source)
@@ -64,40 +68,59 @@ type AgentLinkInfo struct {
 }
 
 // LinkedAgentInfo is the daemon-side carrier of one edge endpoint.
-// Mirrors the wire shape (id/name/model/status) but stays out of
-// the Connect handler so the daemon can be embedded / tested
-// without dragging the proto types in.
+// Mirrors the wire shape (id/name/model/status/description) but
+// stays out of the Connect handler so the daemon can be embedded
+// or tested without dragging the proto types in.
+//
+// Description is the *effective* string the operator + the model
+// see: link-specific override when set, otherwise the target's
+// `description` label. Empty when neither source has a value.
 type LinkedAgentInfo struct {
-	ID     string
-	Name   string
-	Model  string
-	Status string
+	ID          string
+	Name        string
+	Model       string
+	Status      string
+	Description string
 }
 
 // ListAgentLinks returns the directed in / out edges for the
-// agent referenced by `ref`. Resolves once, then enriches each
-// edge endpoint via the existing pool / state lookup so the
-// caller doesn't need to round-trip again for human-readable
-// names.
+// agent referenced by `ref`. Each entry carries its effective
+// description (operator-supplied link override, falling back to
+// the target agent's `description` label).
 func (d *Daemon) ListAgentLinks(ctx context.Context, ref string) (AgentLinkInfo, error) {
 	ma, err := d.resolve(ref)
 	if err != nil {
 		return AgentLinkInfo{}, err
 	}
 
-	outboundIDs, err := d.state.AgentLinksListOutbound(ctx, ma.id.String())
+	outDetails, err := d.state.AgentLinksListOutboundDetails(ctx, ma.id.String())
 	if err != nil {
 		return AgentLinkInfo{}, err
 	}
-	inboundIDs, err := d.state.AgentLinksListInbound(ctx, ma.id.String())
+	inDetails, err := d.state.AgentLinksListInboundDetails(ctx, ma.id.String())
 	if err != nil {
 		return AgentLinkInfo{}, err
 	}
 
-	return AgentLinkInfo{
-		Outbound: d.lookupLinkedAgents(outboundIDs),
-		Inbound:  d.lookupLinkedAgents(inboundIDs),
-	}, nil
+	outbound := make([]LinkedAgentInfo, 0, len(outDetails))
+	for _, det := range outDetails {
+		info := d.lookupLinkedAgent(det.TargetID)
+		info.Description = effectiveLinkDescription(det.Description, info)
+		outbound = append(outbound, info)
+	}
+
+	inbound := make([]LinkedAgentInfo, 0, len(inDetails))
+	for _, det := range inDetails {
+		info := d.lookupLinkedAgent(det.SourceID)
+		// Inbound description reads "what the SOURCE wrote about
+		// this edge" — its operator-supplied rationale for
+		// being able to call us. Fall back to the source's own
+		// `description` label so the row's never empty.
+		info.Description = effectiveLinkDescription(det.Description, info)
+		inbound = append(inbound, info)
+	}
+
+	return AgentLinkInfo{Outbound: outbound, Inbound: inbound}, nil
 }
 
 // AgentList returns the outbound edges for the agent identified by
@@ -106,11 +129,46 @@ func (d *Daemon) ListAgentLinks(ctx context.Context, ref string) (AgentLinkInfo,
 // enumerate inbound (no caller has a need to discover who's
 // linked TO them).
 func (d *Daemon) AgentLinkedAgents(ctx context.Context, agentID string) ([]LinkedAgentInfo, error) {
-	outboundIDs, err := d.state.AgentLinksListOutbound(ctx, agentID)
+	outDetails, err := d.state.AgentLinksListOutboundDetails(ctx, agentID)
 	if err != nil {
 		return nil, err
 	}
-	return d.lookupLinkedAgents(outboundIDs), nil
+	out := make([]LinkedAgentInfo, 0, len(outDetails))
+	for _, det := range outDetails {
+		info := d.lookupLinkedAgent(det.TargetID)
+		info.Description = effectiveLinkDescription(det.Description, info)
+		out = append(out, info)
+	}
+	return out, nil
+}
+
+// effectiveLinkDescription returns the link-specific override when
+// set, otherwise the target's labels["description"]. Centralised
+// so every surface (operator UI, agent_list, agent_info) renders
+// the same string.
+func effectiveLinkDescription(linkOverride string, target LinkedAgentInfo) string {
+	if linkOverride != "" {
+		return linkOverride
+	}
+	return target.Description
+}
+
+// LinkDescriptionFor returns the operator-supplied description on
+// the source → target edge, or "" when no override was set.
+// Used by AgentInfo so a caller's view of a target reflects what
+// the operator wrote about *this specific* link, not the
+// target's generic label.
+func (d *Daemon) LinkDescriptionFor(ctx context.Context, sourceID, targetID string) string {
+	details, err := d.state.AgentLinksListOutboundDetails(ctx, sourceID)
+	if err != nil {
+		return ""
+	}
+	for _, det := range details {
+		if det.TargetID == targetID {
+			return det.Description
+		}
+	}
+	return ""
 }
 
 // AgentInfo returns the wire-shape AgentInfoResponse for an agent
@@ -224,37 +282,40 @@ func (d *Daemon) refreshAgentTokenAndMaybeRestart(
 	return false, nil
 }
 
-// lookupLinkedAgents expands a slice of agent UUIDs into the
-// richer LinkedAgentInfo shape. Missing rows (agent removed
-// after the link was created — shouldn't happen given cascade,
-// but defensive) surface with empty Name/Model and the status
-// "removed".
-func (d *Daemon) lookupLinkedAgents(ids []string) []LinkedAgentInfo {
-	// d.agents access mirrors the existing read pattern (see
-	// Info() / Get() etc.) — no lock today; the pool is the
-	// authoritative live-state owner and writes to d.agents are
-	// serialised through CreateAgent / Restore at startup.
-	out := make([]LinkedAgentInfo, 0, len(ids))
-	for _, id := range ids {
-		u, err := uuid.Parse(id)
-		if err != nil {
-			continue
-		}
-		ma, ok := d.agents[id]
-		if !ok {
-			out = append(out, LinkedAgentInfo{ID: id, Status: "removed"})
-			continue
-		}
-		status := "stopped"
-		if a, alive := d.pool.Get(u); alive && a != nil {
-			status = a.StatusTracker().Get().String()
-		}
-		out = append(out, LinkedAgentInfo{
-			ID:     id,
-			Name:   ma.name,
-			Model:  ma.model,
-			Status: status,
-		})
+// lookupLinkedAgent enriches one agent UUID into the richer
+// LinkedAgentInfo shape. Description is the agent's own
+// `description` label — the caller layers a link-specific
+// override on top via effectiveLinkDescription. Missing rows
+// (agent removed after the link was created — shouldn't happen
+// given cascade, defensive) surface with empty Name/Model and
+// the status "removed".
+//
+// d.agents access mirrors the existing read pattern (Info(),
+// Get() etc.) — no lock today; the pool is the authoritative
+// live-state owner and writes to d.agents are serialised through
+// CreateAgent / Restore at startup.
+func (d *Daemon) lookupLinkedAgent(id string) LinkedAgentInfo {
+	u, err := uuid.Parse(id)
+	if err != nil {
+		return LinkedAgentInfo{ID: id, Status: "removed"}
 	}
-	return out
+	ma, ok := d.agents[id]
+	if !ok {
+		return LinkedAgentInfo{ID: id, Status: "removed"}
+	}
+	status := "stopped"
+	if a, alive := d.pool.Get(u); alive && a != nil {
+		status = a.StatusTracker().Get().String()
+	}
+	desc := ""
+	if ma.labels != nil {
+		desc = ma.labels["description"]
+	}
+	return LinkedAgentInfo{
+		ID:          id,
+		Name:        ma.name,
+		Model:       ma.model,
+		Status:      status,
+		Description: desc,
+	}
 }

@@ -1678,7 +1678,7 @@ func (d *Daemon) CreateAgent(
 	// (INSERT OR IGNORE) and operators can re-run `otters link`
 	// if anything went sideways.
 	for _, linkID := range linkIDs {
-		if linkErr := d.state.AgentLinksAdd(ctx, id.String(), linkID); linkErr != nil {
+		if linkErr := d.state.AgentLinksAdd(ctx, id.String(), linkID, ""); linkErr != nil {
 			d.logger.Warn("failed to persist link at create",
 				zap.String("source", id.String()),
 				zap.String("target", linkID),

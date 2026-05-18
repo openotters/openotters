@@ -15,18 +15,120 @@ import (
 	"fmt"
 )
 
-// AgentLinksAdd records a directed edge source → target. INSERT
-// OR IGNORE so re-adding an existing link is a silent no-op
-// (callers can call without probing first).
-func (s *StateStore) AgentLinksAdd(ctx context.Context, sourceID, targetID string) error {
+// AgentLinksAdd records a directed edge source → target with an
+// optional operator-supplied description. When description is
+// non-empty on a re-add, it overwrites the previous value (so
+// `otters link a b --description "..."` lets the operator update
+// the rationale without unlink+link). Empty description preserves
+// whatever was there.
+func (s *StateStore) AgentLinksAdd(ctx context.Context, sourceID, targetID, description string) error {
+	if description == "" {
+		// INSERT OR IGNORE — re-adding a known edge is a no-op
+		// so callers don't need to probe first.
+		if _, err := s.db.ExecContext(ctx, `
+			INSERT OR IGNORE INTO agent_links (source_agent_id, target_agent_id)
+			VALUES (?, ?)`,
+			sourceID, targetID,
+		); err != nil {
+			return fmt.Errorf("add agent link %s → %s: %w", sourceID, targetID, err)
+		}
+		return nil
+	}
+	// Description supplied → upsert so a re-add with a new
+	// description rewrites the row in place.
 	if _, err := s.db.ExecContext(ctx, `
-		INSERT OR IGNORE INTO agent_links (source_agent_id, target_agent_id)
-		VALUES (?, ?)`,
-		sourceID, targetID,
+		INSERT INTO agent_links (source_agent_id, target_agent_id, description)
+		VALUES (?, ?, ?)
+		ON CONFLICT(source_agent_id, target_agent_id) DO UPDATE SET
+		  description = excluded.description`,
+		sourceID, targetID, description,
 	); err != nil {
 		return fmt.Errorf("add agent link %s → %s: %w", sourceID, targetID, err)
 	}
 	return nil
+}
+
+// AgentLinkDetail bundles one outbound edge with its operator-
+// supplied description (empty when none was set; caller falls
+// back to the target's labels["description"]).
+type AgentLinkDetail struct {
+	TargetID    string
+	Description string
+}
+
+// AgentLinksListOutboundDetails returns the source's outbound
+// edges with their per-link descriptions. Used by ListAgentLinks
+// (operator UI) + AgentList (agent-facing) — both surfaces show
+// the effective description, with the daemon falling back to the
+// target's labels when the override is empty.
+func (s *StateStore) AgentLinksListOutboundDetails(
+	ctx context.Context, sourceID string,
+) ([]AgentLinkDetail, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT target_agent_id, description
+		  FROM agent_links
+		 WHERE source_agent_id = ?
+		 ORDER BY created_at`,
+		sourceID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("list outbound link details: %w", err)
+	}
+	defer rows.Close()
+
+	var out []AgentLinkDetail
+	for rows.Next() {
+		var d AgentLinkDetail
+		if scanErr := rows.Scan(&d.TargetID, &d.Description); scanErr != nil {
+			return nil, fmt.Errorf("scan outbound link detail: %w", scanErr)
+		}
+		out = append(out, d)
+	}
+	if rowsErr := rows.Err(); rowsErr != nil {
+		return nil, fmt.Errorf("iterate outbound link details: %w", rowsErr)
+	}
+	return out, nil
+}
+
+// AgentInboundLinkDetail bundles one inbound edge with its
+// description (the source-side rationale for the link). Mirror of
+// AgentLinkDetail but with the field name flipped from
+// TargetID to SourceID.
+type AgentInboundLinkDetail struct {
+	SourceID    string
+	Description string
+}
+
+// AgentLinksListInboundDetails returns the inbound edges + per-
+// link descriptions targeted at the supplied id. Mirror of the
+// outbound query; used by the operator UI's "linked from" view.
+func (s *StateStore) AgentLinksListInboundDetails(
+	ctx context.Context, targetID string,
+) ([]AgentInboundLinkDetail, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT source_agent_id, description
+		  FROM agent_links
+		 WHERE target_agent_id = ?
+		 ORDER BY created_at`,
+		targetID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("list inbound link details: %w", err)
+	}
+	defer rows.Close()
+
+	var out []AgentInboundLinkDetail
+	for rows.Next() {
+		var d AgentInboundLinkDetail
+		if scanErr := rows.Scan(&d.SourceID, &d.Description); scanErr != nil {
+			return nil, fmt.Errorf("scan inbound link detail: %w", scanErr)
+		}
+		out = append(out, d)
+	}
+	if rowsErr := rows.Err(); rowsErr != nil {
+		return nil, fmt.Errorf("iterate inbound link details: %w", rowsErr)
+	}
+	return out, nil
 }
 
 // AgentLinksRemove drops a single directed edge. Missing rows are

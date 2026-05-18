@@ -1,9 +1,3 @@
-// per-target loop on purpose: they're symmetric operator commands
-// and the parallel structure is the readability win. Refactoring
-// the body out would force callers into a tagged dispatch harder
-// to follow than two parallel files.
-//
-//nolint:dupl // Link and Unlink share the same kong arg shape +
 package commands
 
 import (
@@ -25,8 +19,9 @@ import (
 // `otters link orchestrator worker-a worker-b` is equivalent to
 // running the command twice with one target each.
 type Link struct {
-	Source  string   `arg:"" name:"source" help:"Source agent (the one that gains call permission)"`
-	Targets []string `arg:"" name:"target" help:"One or more targets the source can call"`
+	Source      string   `arg:"" name:"source" help:"Source agent (the one that gains call permission)"`
+	Targets     []string `arg:"" name:"target" help:"One or more targets the source can call"`
+	Description string   `short:"d" name:"description" help:"Optional per-link description. Overrides the target's own description label on the caller's view (agent_info / agent_list). Applies to every target in this batch — run the command per-target to set different descriptions."`
 }
 
 func (l *Link) Run(ctx context.Context, common *cmd.Commons, d *Daemon) error {
@@ -45,8 +40,9 @@ func (l *Link) Run(ctx context.Context, common *cmd.Commons, d *Daemon) error {
 
 	for _, target := range l.Targets {
 		resp, linkErr := c.LinkAgents(ctx, &daemonv1.LinkAgentsRequest{
-			SourceRef: l.Source,
-			TargetRef: target,
+			SourceRef:   l.Source,
+			TargetRef:   target,
+			Description: l.Description,
 		})
 		if linkErr != nil {
 			clean := unwrapRPC(linkErr)

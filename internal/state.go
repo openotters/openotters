@@ -185,6 +185,14 @@ func migrateAgentLinksTable(ctx context.Context, db *sql.DB) error {
 			return fmt.Errorf("agent_links schema: %w", err)
 		}
 	}
+	// description — operator-supplied override that explains why
+	// the link exists / how the source should use the target.
+	// Empty ⇒ the daemon falls back to the target's labels[
+	// "description"] when surfacing the link in UI / agent_list.
+	if err := addColumnIfMissing(ctx, db, "agent_links",
+		"description", "TEXT NOT NULL DEFAULT ''"); err != nil {
+		return err
+	}
 	return nil
 }
 

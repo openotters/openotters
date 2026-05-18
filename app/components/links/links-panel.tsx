@@ -14,6 +14,7 @@ import {
 	CardHeader,
 	CardTitle,
 } from "@/components/ui/card"
+import { Input } from "@/components/ui/input"
 import {
 	Select,
 	SelectContent,
@@ -51,6 +52,7 @@ export function LinksPanel({ agentRef }: LinksPanelProps) {
 	const links = useQuery(listAgentLinks, { ref: agentRef })
 	const allAgents = useQuery(listAgents, {})
 	const [pendingTarget, setPendingTarget] = useState<string>("")
+	const [pendingDescription, setPendingDescription] = useState<string>("")
 
 	const invalidate = () =>
 		queryClient.invalidateQueries({
@@ -65,6 +67,7 @@ export function LinksPanel({ agentRef }: LinksPanelProps) {
 					: `Linked ${vars.sourceRef} → ${vars.targetRef}`,
 			)
 			setPendingTarget("")
+			setPendingDescription("")
 			invalidate()
 		},
 		onError: (err) => toast.error(err.message),
@@ -98,17 +101,18 @@ export function LinksPanel({ agentRef }: LinksPanelProps) {
 		<div className="space-y-4">
 			<Card>
 				<CardHeader>
-					<div className="flex items-center justify-between">
+					<div className="space-y-3">
 						<div>
 							<CardTitle>Outbound links</CardTitle>
 							<CardDescription>
 								Agents <code className="font-mono text-xs">{agentRef}</code> can call via{" "}
-								<code>agent_chat</code> / <code>agent_exec</code> / <code>agent_info</code>.
-								Adding or removing a link triggers an automatic restart so the JWT picks up
-								the change.
+								<code>agent_exec</code> / <code>agent_info</code>. Adding or removing a link
+								triggers an automatic restart so the JWT picks up the change. The optional
+								description overrides what the source sees as the target's purpose — useful
+								for narrowing a generic agent to one role (e.g. "Use only for cluster reads").
 							</CardDescription>
 						</div>
-						<div className="flex items-center gap-2">
+						<div className="flex flex-wrap items-center gap-2">
 							<Select
 								disabled={linkableTargets.length === 0 || link.isPending}
 								onValueChange={setPendingTarget}
@@ -125,10 +129,21 @@ export function LinksPanel({ agentRef }: LinksPanelProps) {
 									))}
 								</SelectContent>
 							</Select>
+							<Input
+								className="w-[320px]"
+								disabled={link.isPending}
+								onChange={(e) => setPendingDescription(e.target.value)}
+								placeholder="Description (optional) — overrides target's default"
+								value={pendingDescription}
+							/>
 							<Button
 								disabled={pendingTarget === "" || link.isPending}
 								onClick={() =>
-									link.mutate({ sourceRef: agentRef, targetRef: pendingTarget })
+									link.mutate({
+										sourceRef: agentRef,
+										targetRef: pendingTarget,
+										description: pendingDescription.trim(),
+									})
 								}
 								size="sm"
 							>
@@ -183,9 +198,10 @@ function LinkedAgentsTable({ agents, emptyMessage, onUnlink }: LinkedAgentsTable
 		<Table>
 			<TableHeader>
 				<TableRow>
-					<TableHead>Name</TableHead>
-					<TableHead>Model</TableHead>
-					<TableHead className="w-[120px]">Status</TableHead>
+					<TableHead className="w-[180px]">Name</TableHead>
+					<TableHead>Description</TableHead>
+					<TableHead className="w-[180px]">Model</TableHead>
+					<TableHead className="w-[100px]">Status</TableHead>
 					{onUnlink && <TableHead className="w-[100px]" />}
 				</TableRow>
 			</TableHeader>
@@ -193,6 +209,11 @@ function LinkedAgentsTable({ agents, emptyMessage, onUnlink }: LinkedAgentsTable
 				{agents.map((a) => (
 					<TableRow key={a.id}>
 						<TableCell className="font-mono text-sm">{a.name}</TableCell>
+						<TableCell className="text-sm text-muted-foreground">
+							{a.description || (
+								<span className="italic text-muted-foreground/60">—</span>
+							)}
+						</TableCell>
 						<TableCell className="font-mono text-xs text-muted-foreground">{a.model}</TableCell>
 						<TableCell>
 							<Badge variant={statusVariant(a.status)}>{a.status || "—"}</Badge>

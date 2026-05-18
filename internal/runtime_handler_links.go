@@ -34,7 +34,9 @@ import (
 func (h *runtimeHandler) LinkAgents(
 	ctx context.Context, req *connect.Request[daemonv1.LinkAgentsRequest],
 ) (*connect.Response[daemonv1.LinkAgentsResponse], error) {
-	restarted, err := h.daemon.LinkAgents(ctx, req.Msg.GetSourceRef(), req.Msg.GetTargetRef())
+	restarted, err := h.daemon.LinkAgents(
+		ctx, req.Msg.GetSourceRef(), req.Msg.GetTargetRef(), req.Msg.GetDescription(),
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -85,20 +87,6 @@ func (h *runtimeHandler) AgentList(
 func (h *runtimeHandler) AgentInfo(
 	ctx context.Context, req *connect.Request[daemonv1.AgentInfoRequest],
 ) (*connect.Response[daemonv1.AgentInfoResponse], error) {
-	target, err := h.requireLinkedTarget(ctx, req.Msg.GetRef())
-	if err != nil {
-		return nil, err
-	}
-	info, err := h.daemon.AgentInfo(target.id.String())
-	if err != nil {
-		return nil, err
-	}
-	return connect.NewResponse(info), nil
-}
-
-func (h *runtimeHandler) AgentChat(
-	ctx context.Context, req *connect.Request[daemonv1.AgentChatRequest],
-) (*connect.Response[daemonv1.AgentChatResponse], error) {
 	caller, err := requireAgentCaller(ctx)
 	if err != nil {
 		return nil, err
@@ -107,11 +95,49 @@ func (h *runtimeHandler) AgentChat(
 	if err != nil {
 		return nil, err
 	}
-	// Mint a session id if the caller didn't provide one. The
-	// "from-agent:<source>:" prefix makes cross-agent sessions
-	// self-describing in the target's session list — the UI
-	// renders them with a "via Orchestrator" badge instead of
-	// the usual anonymous shape.
+	info, err := h.daemon.AgentInfo(target.id.String())
+	if err != nil {
+		return nil, err
+	}
+	// If the caller's outbound link to this target carries a
+	// per-link description, that wins over the target's own
+	// `description` label. The link-specific text is the
+	// operator's hint to the SOURCE about how to use the target;
+	// it should win on the caller-facing surface.
+	if override := h.daemon.LinkDescriptionFor(ctx, caller.AgentRef, target.id.String()); override != "" {
+		info.Description = override
+		if info.Agent != nil {
+			info.Agent.Description = override
+		}
+	}
+	return connect.NewResponse(info), nil
+}
+
+// AgentExec dispatches the caller's prompt to a linked target and
+// returns the target's full reply alongside the session id the
+// turn was persisted under. Pass back the returned session_id on
+// subsequent calls to preserve history with that target; omit it
+// to start a fresh thread.
+//
+// The daemon mints a self-describing
+// `from-agent:<source-id>:<uuid>` session id when the caller
+// doesn't supply one, so cross-agent sessions are recognisable
+// in the target's session list at a glance.
+//
+// (agent_chat existed in alpha.82–.84 as a separate threaded
+// variant. It was removed in alpha.85 — exec + session_id is the
+// single shape now.)
+func (h *runtimeHandler) AgentExec(
+	ctx context.Context, req *connect.Request[daemonv1.AgentExecRequest],
+) (*connect.Response[daemonv1.AgentExecResponse], error) {
+	caller, err := requireAgentCaller(ctx)
+	if err != nil {
+		return nil, err
+	}
+	target, err := h.requireLinkedTarget(ctx, req.Msg.GetRef())
+	if err != nil {
+		return nil, err
+	}
 	sessionID := req.Msg.GetSessionId()
 	if sessionID == "" {
 		sessionID = "from-agent:" + caller.AgentRef + ":" + uuid.NewString()
@@ -120,31 +146,10 @@ func (h *runtimeHandler) AgentChat(
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(&daemonv1.AgentChatResponse{
+	return connect.NewResponse(&daemonv1.AgentExecResponse{
 		Response:  resp,
 		SessionId: sessionID,
 	}), nil
-}
-
-func (h *runtimeHandler) AgentExec(
-	ctx context.Context, req *connect.Request[daemonv1.AgentExecRequest],
-) (*connect.Response[daemonv1.AgentExecResponse], error) {
-	target, err := h.requireLinkedTarget(ctx, req.Msg.GetRef())
-	if err != nil {
-		return nil, err
-	}
-	// Exec uses the existing one-shot chat path with a synthetic
-	// session id so the target's compactor doesn't pile up
-	// rows from cross-agent calls. The "exec session" is single-
-	// turn by construction (model writes one reply, no follow-up).
-	sessionID := "exec:" + target.id.String()
-	resp, err := h.daemon.ChatWithAgent(ctx, target.name, sessionID, req.Msg.GetPrompt())
-	if err != nil {
-		return nil, err
-	}
-	// Drop the session so the next exec call starts clean.
-	_ = h.daemon.DeleteSession(ctx, target.name, sessionID)
-	return connect.NewResponse(&daemonv1.AgentExecResponse{Response: resp}), nil
 }
 
 // ── helpers ─────────────────────────────────────────────────────
@@ -192,10 +197,11 @@ func linkedAgentsToProto(list []LinkedAgentInfo) []*daemonv1.LinkedAgent {
 	out := make([]*daemonv1.LinkedAgent, 0, len(list))
 	for _, l := range list {
 		out = append(out, &daemonv1.LinkedAgent{
-			Id:     l.ID,
-			Name:   l.Name,
-			Model:  l.Model,
-			Status: l.Status,
+			Id:          l.ID,
+			Name:        l.Name,
+			Model:       l.Model,
+			Status:      l.Status,
+			Description: l.Description,
 		})
 	}
 	return out

@@ -1459,30 +1459,34 @@ function clipForInline(s: string, limit: number): { shown: string; clipped: bool
 
 // isAgentCallTool reports whether a tool row should render as a
 // cross-agent conversation panel (prompt + response bubbles) rather
-// than the generic input/output JSON view. agent_chat and
-// agent_exec both wrap a {ref, prompt} → {response, …} round-trip
-// and benefit from a chat-shaped renderer.
+// than the generic input/output JSON view. agent_exec wraps a
+// {ref, prompt, session_id?} → {response, session_id} round-trip
+// and benefits from a chat-shaped renderer.
+//
+// (agent_chat used to be a separate threaded variant; alpha.85
+// folded it into agent_exec — pass a session_id to preserve
+// history, omit it for a fresh thread.)
 function isAgentCallTool(name: string): boolean {
-	return name === "agent_chat" || name === "agent_exec"
+	return name === "agent_exec"
 }
 
-// AgentCallPanel renders an agent_chat / agent_exec round-trip as
-// a mini-conversation: a "you said" bubble for the prompt the
-// caller sent and a "they replied" bubble for the target's
-// response. The session id (when agent_chat returned one) sits
-// in the footer so the operator can match the row to the target's
-// session view at a glance — the CrossAgentLink button below
-// wraps the same id into a clickable jump.
+// AgentCallPanel renders an agent_exec round-trip as a mini-
+// conversation: a "you said" bubble for the prompt the caller
+// sent and a "they replied" bubble for the target's response.
+// The session id sits in the footer so the operator can match
+// the row to the target's session view at a glance — the
+// CrossAgentLink button below wraps the same id into a clickable
+// jump. When the caller passed a session_id in the input, the
+// panel shows "threaded" — multiple agent_exec calls on the same
+// session preserve history on the target.
 function AgentCallPanel({
 	input,
 	output,
 	running,
-	toolName,
 }: {
 	input: unknown
 	output: string | null
 	running: boolean
-	toolName: string
 }) {
 	const ref = parseAgentRef(input)
 	const prompt = parseAgentPrompt(input)
@@ -1504,7 +1508,7 @@ function AgentCallPanel({
 					</span>
 				)}
 				<span className="rounded bg-muted/60 px-1.5 py-0.5">
-					{toolName === "agent_chat" ? "threaded" : "one-shot"}
+					{inputSession ? "threaded (continues session)" : "new thread"}
 				</span>
 			</div>
 			<AgentBubble role="prompt" text={prompt || "(empty prompt)"} />
@@ -1574,14 +1578,13 @@ function parseAgentOutput(output: string | null): { response: string; sessionID:
 	}
 }
 
-// CrossAgentLink surfaces a "view in <target>" jump for agent_chat
-// (and agent_exec) tool rows. The output of those tools is a JSON
-// envelope with the target ref + session id; the daemon's
-// AgentChat handler always returns a session_id (mints one if the
-// caller didn't supply one) so the link is always usable. For
-// agent_exec, the daemon uses a synthetic "exec:<id>" session
-// that's wiped after the call — we still link to it briefly so the
-// operator can read the one-shot exchange.
+// CrossAgentLink surfaces a "view conversation in <target>" jump
+// for agent_exec tool rows. The daemon's AgentExec handler always
+// returns a session_id (mints a self-describing one if the caller
+// didn't supply it), so the link always resolves to the target's
+// own session view — the operator can read the full thread
+// including any follow-up agent_exec calls the orchestrator made
+// on the same session.
 function CrossAgentLink({
 	toolName,
 	input,
@@ -1591,14 +1594,17 @@ function CrossAgentLink({
 	input: unknown
 	output: string
 }) {
-	if (toolName !== "agent_chat" && toolName !== "agent_exec") return null
+	if (toolName !== "agent_exec") return null
 	const targetRef = parseAgentRef(input)
-	const sessionID = parseSessionID(output)
 	if (!targetRef) return null
-	const href =
-		sessionID && toolName === "agent_chat"
-			? `/agents/${encodeURIComponent(targetRef)}/chat/${encodeURIComponent(sessionID)}`
-			: `/agents/${encodeURIComponent(targetRef)}`
+	// Prefer the session id the target persisted under (output);
+	// fall back to whatever the caller supplied (input) so the
+	// link still resolves when output parsing fails for any
+	// reason.
+	const sessionID = parseSessionID(output) || parseInputSessionID(input)
+	const href = sessionID
+		? `/agents/${encodeURIComponent(targetRef)}/chat/${encodeURIComponent(sessionID)}`
+		: `/agents/${encodeURIComponent(targetRef)}`
 	return (
 		<div className="flex items-center justify-end gap-2 pt-1">
 			<Link
@@ -1755,7 +1761,6 @@ function CompactToolRow({ part, densityCompact }: CompactToolRowProps) {
 							input={part.input}
 							output={part.output}
 							running={status === "running"}
-							toolName={part.name}
 						/>
 					) : (
 						<>

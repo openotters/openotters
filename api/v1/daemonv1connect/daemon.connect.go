@@ -122,8 +122,6 @@ const (
 	RuntimeAgentListProcedure = "/openotters.daemon.v1.Runtime/AgentList"
 	// RuntimeAgentInfoProcedure is the fully-qualified name of the Runtime's AgentInfo RPC.
 	RuntimeAgentInfoProcedure = "/openotters.daemon.v1.Runtime/AgentInfo"
-	// RuntimeAgentChatProcedure is the fully-qualified name of the Runtime's AgentChat RPC.
-	RuntimeAgentChatProcedure = "/openotters.daemon.v1.Runtime/AgentChat"
 	// RuntimeAgentExecProcedure is the fully-qualified name of the Runtime's AgentExec RPC.
 	RuntimeAgentExecProcedure = "/openotters.daemon.v1.Runtime/AgentExec"
 	// RuntimeWatchAsyncJobProcedure is the fully-qualified name of the Runtime's WatchAsyncJob RPC.
@@ -232,11 +230,13 @@ type RuntimeClient interface {
 	UnlinkAgents(context.Context, *connect.Request[v1.UnlinkAgentsRequest]) (*connect.Response[v1.UnlinkAgentsResponse], error)
 	ListAgentLinks(context.Context, *connect.Request[v1.ListAgentLinksRequest]) (*connect.Response[v1.ListAgentLinksResponse], error)
 	// Agent-facing cross-agent RPCs. Caller must present an agent
-	// token; target must be in the JWT's Links claim. Enforced by
-	// the AgentLinkedInterceptor wrapping these four handlers.
+	// token; target must be in the JWT's Links claim. Enforced
+	// inside the handlers via requireLinkedTarget. agent_chat was
+	// removed in alpha.85 — its semantics (threaded session,
+	// memory-preserving) are now agent_exec's default once a
+	// session_id is supplied.
 	AgentList(context.Context, *connect.Request[v1.AgentListRequest]) (*connect.Response[v1.AgentListResponse], error)
 	AgentInfo(context.Context, *connect.Request[v1.AgentInfoRequest]) (*connect.Response[v1.AgentInfoResponse], error)
-	AgentChat(context.Context, *connect.Request[v1.AgentChatRequest]) (*connect.Response[v1.AgentChatResponse], error)
 	AgentExec(context.Context, *connect.Request[v1.AgentExecRequest]) (*connect.Response[v1.AgentExecResponse], error)
 	// Server-streaming watch: emits the current AsyncJob immediately,
 	// then again on every material change (status, handle, exit_code,
@@ -511,12 +511,6 @@ func NewRuntimeClient(httpClient connect.HTTPClient, baseURL string, opts ...con
 			connect.WithSchema(runtimeMethods.ByName("AgentInfo")),
 			connect.WithClientOptions(opts...),
 		),
-		agentChat: connect.NewClient[v1.AgentChatRequest, v1.AgentChatResponse](
-			httpClient,
-			baseURL+RuntimeAgentChatProcedure,
-			connect.WithSchema(runtimeMethods.ByName("AgentChat")),
-			connect.WithClientOptions(opts...),
-		),
 		agentExec: connect.NewClient[v1.AgentExecRequest, v1.AgentExecResponse](
 			httpClient,
 			baseURL+RuntimeAgentExecProcedure,
@@ -576,7 +570,6 @@ type runtimeClient struct {
 	listAgentLinks        *connect.Client[v1.ListAgentLinksRequest, v1.ListAgentLinksResponse]
 	agentList             *connect.Client[v1.AgentListRequest, v1.AgentListResponse]
 	agentInfo             *connect.Client[v1.AgentInfoRequest, v1.AgentInfoResponse]
-	agentChat             *connect.Client[v1.AgentChatRequest, v1.AgentChatResponse]
 	agentExec             *connect.Client[v1.AgentExecRequest, v1.AgentExecResponse]
 	watchAsyncJob         *connect.Client[v1.WatchAsyncJobRequest, v1.WatchAsyncJobResponse]
 }
@@ -791,11 +784,6 @@ func (c *runtimeClient) AgentInfo(ctx context.Context, req *connect.Request[v1.A
 	return c.agentInfo.CallUnary(ctx, req)
 }
 
-// AgentChat calls openotters.daemon.v1.Runtime.AgentChat.
-func (c *runtimeClient) AgentChat(ctx context.Context, req *connect.Request[v1.AgentChatRequest]) (*connect.Response[v1.AgentChatResponse], error) {
-	return c.agentChat.CallUnary(ctx, req)
-}
-
 // AgentExec calls openotters.daemon.v1.Runtime.AgentExec.
 func (c *runtimeClient) AgentExec(ctx context.Context, req *connect.Request[v1.AgentExecRequest]) (*connect.Response[v1.AgentExecResponse], error) {
 	return c.agentExec.CallUnary(ctx, req)
@@ -873,11 +861,13 @@ type RuntimeHandler interface {
 	UnlinkAgents(context.Context, *connect.Request[v1.UnlinkAgentsRequest]) (*connect.Response[v1.UnlinkAgentsResponse], error)
 	ListAgentLinks(context.Context, *connect.Request[v1.ListAgentLinksRequest]) (*connect.Response[v1.ListAgentLinksResponse], error)
 	// Agent-facing cross-agent RPCs. Caller must present an agent
-	// token; target must be in the JWT's Links claim. Enforced by
-	// the AgentLinkedInterceptor wrapping these four handlers.
+	// token; target must be in the JWT's Links claim. Enforced
+	// inside the handlers via requireLinkedTarget. agent_chat was
+	// removed in alpha.85 — its semantics (threaded session,
+	// memory-preserving) are now agent_exec's default once a
+	// session_id is supplied.
 	AgentList(context.Context, *connect.Request[v1.AgentListRequest]) (*connect.Response[v1.AgentListResponse], error)
 	AgentInfo(context.Context, *connect.Request[v1.AgentInfoRequest]) (*connect.Response[v1.AgentInfoResponse], error)
-	AgentChat(context.Context, *connect.Request[v1.AgentChatRequest]) (*connect.Response[v1.AgentChatResponse], error)
 	AgentExec(context.Context, *connect.Request[v1.AgentExecRequest]) (*connect.Response[v1.AgentExecResponse], error)
 	// Server-streaming watch: emits the current AsyncJob immediately,
 	// then again on every material change (status, handle, exit_code,
@@ -1148,12 +1138,6 @@ func NewRuntimeHandler(svc RuntimeHandler, opts ...connect.HandlerOption) (strin
 		connect.WithSchema(runtimeMethods.ByName("AgentInfo")),
 		connect.WithHandlerOptions(opts...),
 	)
-	runtimeAgentChatHandler := connect.NewUnaryHandler(
-		RuntimeAgentChatProcedure,
-		svc.AgentChat,
-		connect.WithSchema(runtimeMethods.ByName("AgentChat")),
-		connect.WithHandlerOptions(opts...),
-	)
 	runtimeAgentExecHandler := connect.NewUnaryHandler(
 		RuntimeAgentExecProcedure,
 		svc.AgentExec,
@@ -1252,8 +1236,6 @@ func NewRuntimeHandler(svc RuntimeHandler, opts ...connect.HandlerOption) (strin
 			runtimeAgentListHandler.ServeHTTP(w, r)
 		case RuntimeAgentInfoProcedure:
 			runtimeAgentInfoHandler.ServeHTTP(w, r)
-		case RuntimeAgentChatProcedure:
-			runtimeAgentChatHandler.ServeHTTP(w, r)
 		case RuntimeAgentExecProcedure:
 			runtimeAgentExecHandler.ServeHTTP(w, r)
 		case RuntimeWatchAsyncJobProcedure:
@@ -1433,10 +1415,6 @@ func (UnimplementedRuntimeHandler) AgentList(context.Context, *connect.Request[v
 
 func (UnimplementedRuntimeHandler) AgentInfo(context.Context, *connect.Request[v1.AgentInfoRequest]) (*connect.Response[v1.AgentInfoResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("openotters.daemon.v1.Runtime.AgentInfo is not implemented"))
-}
-
-func (UnimplementedRuntimeHandler) AgentChat(context.Context, *connect.Request[v1.AgentChatRequest]) (*connect.Response[v1.AgentChatResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("openotters.daemon.v1.Runtime.AgentChat is not implemented"))
 }
 
 func (UnimplementedRuntimeHandler) AgentExec(context.Context, *connect.Request[v1.AgentExecRequest]) (*connect.Response[v1.AgentExecResponse], error) {

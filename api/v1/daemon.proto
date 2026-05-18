@@ -97,11 +97,13 @@ service Runtime {
   rpc ListAgentLinks(ListAgentLinksRequest) returns (ListAgentLinksResponse);
 
   // Agent-facing cross-agent RPCs. Caller must present an agent
-  // token; target must be in the JWT's Links claim. Enforced by
-  // the AgentLinkedInterceptor wrapping these four handlers.
+  // token; target must be in the JWT's Links claim. Enforced
+  // inside the handlers via requireLinkedTarget. agent_chat was
+  // removed in alpha.85 — its semantics (threaded session,
+  // memory-preserving) are now agent_exec's default once a
+  // session_id is supplied.
   rpc AgentList(AgentListRequest) returns (AgentListResponse);
   rpc AgentInfo(AgentInfoRequest) returns (AgentInfoResponse);
-  rpc AgentChat(AgentChatRequest) returns (AgentChatResponse);
   rpc AgentExec(AgentExecRequest) returns (AgentExecResponse);
   // Server-streaming watch: emits the current AsyncJob immediately,
   // then again on every material change (status, handle, exit_code,
@@ -939,11 +941,21 @@ message LinkedAgent {
   string name   = 2;
   string model  = 3;
   string status = 4;
+  // The effective description shown to the operator + the model.
+  // When the link carried a per-link override (LinkAgentsRequest.
+  // description), that wins; otherwise the daemon falls back to
+  // the target agent's `description` label.
+  string description = 5;
 }
 
 message LinkAgentsRequest {
   string source_ref = 1;
   string target_ref = 2;
+  // Optional. Per-link description that overrides the target's
+  // baked-in `description` label when this link is surfaced to
+  // the model (agent_list / agent_info) or the operator UI.
+  // Empty ⇒ fall back to the target's label.
+  string description = 3;
 }
 message LinkAgentsResponse {
   // True when the source agent was running and got auto-restarted
@@ -985,24 +997,21 @@ message AgentInfoResponse {
   repeated string capabilities = 3; // tool function names the target exposes
 }
 
-message AgentChatRequest {
+message AgentExecRequest {
   string ref        = 1;
   string prompt     = 2;
-  // Optional. Empty → server creates a fresh session. Re-use the
-  // returned session_id to thread follow-ups.
+  // Optional. Empty → server mints a fresh session id, formatted
+  // `from-agent:<source-id>:<uuid>` so cross-agent sessions are
+  // self-describing in the target's session list. Reuse the
+  // returned session_id on subsequent agent_exec calls to keep
+  // memory on the target — the target sees a continuing
+  // conversation, not isolated one-shots.
   string session_id = 3;
 }
-message AgentChatResponse {
-  string response   = 1;
-  string session_id = 2;
-}
-
-message AgentExecRequest {
-  string ref    = 1;
-  string prompt = 2;
-}
 message AgentExecResponse {
-  // Stateless one-shot — the target's PromptObject path. No
-  // session, no memory write.
-  string response = 1;
+  string response   = 1;
+  // The session id the target persisted the turn under. Always
+  // non-empty; the caller threads it through subsequent calls
+  // to preserve history with that target.
+  string session_id = 2;
 }

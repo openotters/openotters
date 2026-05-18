@@ -34,7 +34,8 @@ func (l *Links) Run(ctx context.Context, common *cmd.Commons, d *Daemon) error {
 		_, _ = p.Printf("  (none)\n")
 	} else {
 		for _, a := range resp.GetOutbound() {
-			_, _ = p.Printf("  %-30s %-30s %-12s\n", a.GetName(), a.GetModel(), a.GetStatus())
+			_, _ = p.Printf("  %-30s %-30s %-12s %s\n",
+				a.GetName(), a.GetModel(), a.GetStatus(), a.GetDescription())
 		}
 	}
 
@@ -43,7 +44,8 @@ func (l *Links) Run(ctx context.Context, common *cmd.Commons, d *Daemon) error {
 		_, _ = p.Printf("  (none)\n")
 	} else {
 		for _, a := range resp.GetInbound() {
-			_, _ = p.Printf("  %-30s %-30s %-12s\n", a.GetName(), a.GetModel(), a.GetStatus())
+			_, _ = p.Printf("  %-30s %-30s %-12s %s\n",
+				a.GetName(), a.GetModel(), a.GetStatus(), a.GetDescription())
 		}
 	}
 

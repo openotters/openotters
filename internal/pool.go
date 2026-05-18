@@ -404,19 +404,16 @@ func runtimeCapsForExtras(extras AgentExtras) []agentpkg.Capability {
 		},
 		{
 			Name:        "agent_list",
-			Description: "List the agents you are linked to and can call (agent_chat / agent_info / agent_exec).",
+			Description: "List the agents you are linked to and can call (agent_info / agent_exec).",
 		},
 		{
 			Name:        "agent_info",
 			Description: "Inspect a linked agent — name, model, status, description, capabilities. Use before delegating.",
 		},
 		{
-			Name:        "agent_chat",
-			Description: "Send a prompt to a linked agent and wait for the full reply. Pass a session_id to thread follow-ups.",
-		},
-		{
-			Name:        "agent_exec",
-			Description: "Stateless one-shot prompt to a linked agent. No session, no memory write on the target.",
+			Name: "agent_exec",
+			Description: "Send a prompt to a linked agent and wait for the full reply. " +
+				"Pass session_id to preserve history with that target across calls; omit it for a fresh thread.",
 		},
 	}
 	if extras.DaemonURL != "" && extras.AgentToken != "" {

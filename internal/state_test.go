@@ -130,15 +130,15 @@ func TestAgentLinks_AddListRemove(t *testing.T) {
 
 	const a, b, c = "agent-a", "agent-b", "agent-c"
 
-	if err := store.AgentLinksAdd(ctx, a, b); err != nil {
+	if err := store.AgentLinksAdd(ctx, a, b, ""); err != nil {
 		t.Fatalf("Add a→b: %v", err)
 	}
-	if err := store.AgentLinksAdd(ctx, a, c); err != nil {
+	if err := store.AgentLinksAdd(ctx, a, c, ""); err != nil {
 		t.Fatalf("Add a→c: %v", err)
 	}
 	// Re-add must be silent — INSERT OR IGNORE keeps the call
 	// idempotent so the daemon doesn't have to probe first.
-	if err := store.AgentLinksAdd(ctx, a, b); err != nil {
+	if err := store.AgentLinksAdd(ctx, a, b, ""); err != nil {
 		t.Fatalf("re-Add a→b should be no-op: %v", err)
 	}
 
@@ -193,9 +193,9 @@ func TestRemoveAgent_CascadesLinks(t *testing.T) {
 	}
 
 	// a → b, a → c, b → a (a appears as both source AND target).
-	_ = store.AgentLinksAdd(ctx, a, b)
-	_ = store.AgentLinksAdd(ctx, a, c)
-	_ = store.AgentLinksAdd(ctx, b, a)
+	_ = store.AgentLinksAdd(ctx, a, b, "")
+	_ = store.AgentLinksAdd(ctx, a, c, "")
+	_ = store.AgentLinksAdd(ctx, b, a, "")
 
 	if err := store.RemoveAgent(ctx, a); err != nil {
 		t.Fatalf("RemoveAgent a: %v", err)

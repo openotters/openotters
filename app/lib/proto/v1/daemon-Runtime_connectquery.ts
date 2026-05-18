@@ -216,8 +216,11 @@ export const listAgentLinks = Runtime.method.listAgentLinks;
 
 /**
  * Agent-facing cross-agent RPCs. Caller must present an agent
- * token; target must be in the JWT's Links claim. Enforced by
- * the AgentLinkedInterceptor wrapping these four handlers.
+ * token; target must be in the JWT's Links claim. Enforced
+ * inside the handlers via requireLinkedTarget. agent_chat was
+ * removed in alpha.85 — its semantics (threaded session,
+ * memory-preserving) are now agent_exec's default once a
+ * session_id is supplied.
  *
  * @generated from rpc openotters.daemon.v1.Runtime.AgentList
  */
@@ -227,11 +230,6 @@ export const agentList = Runtime.method.agentList;
  * @generated from rpc openotters.daemon.v1.Runtime.AgentInfo
  */
 export const agentInfo = Runtime.method.agentInfo;
-
-/**
- * @generated from rpc openotters.daemon.v1.Runtime.AgentChat
- */
-export const agentChat = Runtime.method.agentChat;
 
 /**
  * @generated from rpc openotters.daemon.v1.Runtime.AgentExec

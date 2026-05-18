@@ -1,6 +1,3 @@
-// parallel structure preferred over a tagged-dispatch refactor.
-//
-//nolint:dupl // See link.go for the rationale; symmetric command,
 package commands
 
 import (
