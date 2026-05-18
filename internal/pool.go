@@ -381,6 +381,12 @@ func (p *Pool) createAgent(
 //
 // A future Agentfile CAPABILITY directive will let operators
 // opt-out of individual entries.
+//
+// authoritative table of every runtime-injected capability;
+// splitting it across helpers would make the cap surface
+// harder to scan, not easier.
+//
+//nolint:funlen // long by design — the function is a single
 func runtimeCapsForExtras(extras AgentExtras) []agentpkg.Capability {
 	caps := []agentpkg.Capability{
 		{Name: "context_list", Description: "List the context files declared in agent.yaml (name, file, description)."},
@@ -441,6 +447,12 @@ func runtimeCapsForExtras(extras AgentExtras) []agentpkg.Capability {
 			Name: "bin_list",
 			Description: "List available BIN images (ref / digest / description / size). " +
 				"Useful when composing an Agentfile for agent_create_from_source.",
+		},
+		{
+			Name: "model_list",
+			Description: "List the LLM models the daemon's providers expose " +
+				"(provider/name refs, context window, pricing). Pick one and " +
+				"pass its ref as MODEL when calling agent_create_from_source.",
 		},
 		{
 			Name: "self_reload",
