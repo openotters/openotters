@@ -9,6 +9,7 @@ import {
 	ChevronDown,
 	ChevronRight,
 	Copy,
+	ExternalLink,
 	Loader2,
 	Maximize2,
 	Pencil,
@@ -1456,6 +1457,61 @@ function clipForInline(s: string, limit: number): { shown: string; clipped: bool
 	return { shown, clipped: true }
 }
 
+// CrossAgentLink surfaces a "view in <target>" jump for agent_chat
+// (and agent_exec) tool rows. The output of those tools is a JSON
+// envelope with the target ref + session id; the daemon's
+// AgentChat handler always returns a session_id (mints one if the
+// caller didn't supply one) so the link is always usable. For
+// agent_exec, the daemon uses a synthetic "exec:<id>" session
+// that's wiped after the call — we still link to it briefly so the
+// operator can read the one-shot exchange.
+function CrossAgentLink({
+	toolName,
+	input,
+	output,
+}: {
+	toolName: string
+	input: unknown
+	output: string
+}) {
+	if (toolName !== "agent_chat" && toolName !== "agent_exec") return null
+	const targetRef = parseAgentRef(input)
+	const sessionID = parseSessionID(output)
+	if (!targetRef) return null
+	const href =
+		sessionID && toolName === "agent_chat"
+			? `/agents/${encodeURIComponent(targetRef)}/chat/${encodeURIComponent(sessionID)}`
+			: `/agents/${encodeURIComponent(targetRef)}`
+	return (
+		<div className="flex items-center justify-end gap-2 pt-1">
+			<Link
+				className="inline-flex items-center gap-1 rounded border bg-muted/40 px-2 py-1 text-[11px] text-muted-foreground hover:bg-muted hover:text-foreground"
+				href={href}
+			>
+				<ExternalLink className="h-3 w-3" />
+				View conversation in {targetRef}
+			</Link>
+		</div>
+	)
+}
+
+function parseAgentRef(input: unknown): string {
+	if (!input || typeof input !== "object") return ""
+	const v = (input as Record<string, unknown>).ref
+	return typeof v === "string" ? v : ""
+}
+
+function parseSessionID(output: string): string {
+	try {
+		const parsed = JSON.parse(output) as { session_id?: unknown }
+		if (typeof parsed.session_id === "string") return parsed.session_id
+	} catch {
+		// agent_exec returns a plain string, not JSON — no
+		// session id available. Fall through.
+	}
+	return ""
+}
+
 // CompactToolRow renders one tool call as a single line with a
 // status dot and the input preview. Click expands to show the full
 // input/output payload via the heavier <Tool> components. The
@@ -1592,6 +1648,16 @@ function CompactToolRow({ part, densityCompact }: CompactToolRowProps) {
 							/>
 						</div>
 					)}
+					{/*
+					 * Agent-to-agent shortcut: when this row is an
+					 * agent_chat (or agent_exec) call that succeeded,
+					 * surface a one-click link to the target's session
+					 * so the operator can read the cross-agent thread
+					 * in the target's own chat view. The target persists
+					 * the conversation under the session_id we returned;
+					 * no extra plumbing needed.
+					 */}
+					{part.output && <CrossAgentLink toolName={part.name} input={part.input} output={part.output} />}
 					{/*
 					 * Live job logs for any job-observing tool row — renders
 					 * regardless of tool status. While the tool is running,

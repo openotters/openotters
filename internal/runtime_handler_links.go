@@ -24,6 +24,7 @@ import (
 	"fmt"
 
 	"connectrpc.com/connect"
+	"github.com/google/uuid"
 	daemonv1 "github.com/openotters/openotters/api/v1"
 	"github.com/openotters/openotters/internal/auth"
 )
@@ -98,11 +99,23 @@ func (h *runtimeHandler) AgentInfo(
 func (h *runtimeHandler) AgentChat(
 	ctx context.Context, req *connect.Request[daemonv1.AgentChatRequest],
 ) (*connect.Response[daemonv1.AgentChatResponse], error) {
+	caller, err := requireAgentCaller(ctx)
+	if err != nil {
+		return nil, err
+	}
 	target, err := h.requireLinkedTarget(ctx, req.Msg.GetRef())
 	if err != nil {
 		return nil, err
 	}
+	// Mint a session id if the caller didn't provide one. The
+	// "from-agent:<source>:" prefix makes cross-agent sessions
+	// self-describing in the target's session list — the UI
+	// renders them with a "via Orchestrator" badge instead of
+	// the usual anonymous shape.
 	sessionID := req.Msg.GetSessionId()
+	if sessionID == "" {
+		sessionID = "from-agent:" + caller.AgentRef + ":" + uuid.NewString()
+	}
 	resp, err := h.daemon.ChatWithAgent(ctx, target.name, sessionID, req.Msg.GetPrompt())
 	if err != nil {
 		return nil, err
