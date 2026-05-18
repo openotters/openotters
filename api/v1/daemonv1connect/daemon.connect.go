@@ -85,6 +85,9 @@ const (
 	RuntimeListModelsProcedure = "/openotters.daemon.v1.Runtime/ListModels"
 	// RuntimeListProvidersProcedure is the fully-qualified name of the Runtime's ListProviders RPC.
 	RuntimeListProvidersProcedure = "/openotters.daemon.v1.Runtime/ListProviders"
+	// RuntimeListAvailableProvidersProcedure is the fully-qualified name of the Runtime's
+	// ListAvailableProviders RPC.
+	RuntimeListAvailableProvidersProcedure = "/openotters.daemon.v1.Runtime/ListAvailableProviders"
 	// RuntimeAddProviderProcedure is the fully-qualified name of the Runtime's AddProvider RPC.
 	RuntimeAddProviderProcedure = "/openotters.daemon.v1.Runtime/AddProvider"
 	// RuntimeUpdateProviderProcedure is the fully-qualified name of the Runtime's UpdateProvider RPC.
@@ -205,6 +208,12 @@ type RuntimeClient interface {
 	GetAgentLogs(context.Context, *connect.Request[v1.GetAgentLogsRequest]) (*connect.Response[v1.GetAgentLogsResponse], error)
 	ListModels(context.Context, *connect.Request[v1.ListModelsRequest]) (*connect.Response[v1.ListModelsResponse], error)
 	ListProviders(context.Context, *connect.Request[v1.ListProvidersRequest]) (*connect.Response[v1.ListProvidersResponse], error)
+	// ListAvailableProviders returns the curated Catwalk provider
+	// catalogue — the set of provider slugs the runtime knows how to
+	// talk to natively plus the OpenAI-compat fallback. The dashboard's
+	// Add Provider form uses it to populate a combobox so operators
+	// pick a known slug (gemini, anthropic, xai, …) instead of guessing.
+	ListAvailableProviders(context.Context, *connect.Request[v1.ListAvailableProvidersRequest]) (*connect.Response[v1.ListAvailableProvidersResponse], error)
 	AddProvider(context.Context, *connect.Request[v1.AddProviderRequest]) (*connect.Response[v1.AddProviderResponse], error)
 	UpdateProvider(context.Context, *connect.Request[v1.UpdateProviderRequest]) (*connect.Response[v1.UpdateProviderResponse], error)
 	RemoveProvider(context.Context, *connect.Request[v1.RemoveProviderRequest]) (*connect.Response[v1.RemoveProviderResponse], error)
@@ -443,6 +452,12 @@ func NewRuntimeClient(httpClient connect.HTTPClient, baseURL string, opts ...con
 			connect.WithSchema(runtimeMethods.ByName("ListProviders")),
 			connect.WithClientOptions(opts...),
 		),
+		listAvailableProviders: connect.NewClient[v1.ListAvailableProvidersRequest, v1.ListAvailableProvidersResponse](
+			httpClient,
+			baseURL+RuntimeListAvailableProvidersProcedure,
+			connect.WithSchema(runtimeMethods.ByName("ListAvailableProviders")),
+			connect.WithClientOptions(opts...),
+		),
 		addProvider: connect.NewClient[v1.AddProviderRequest, v1.AddProviderResponse](
 			httpClient,
 			baseURL+RuntimeAddProviderProcedure,
@@ -610,57 +625,58 @@ func NewRuntimeClient(httpClient connect.HTTPClient, baseURL string, opts ...con
 
 // runtimeClient implements RuntimeClient.
 type runtimeClient struct {
-	getInfo               *connect.Client[v1.GetInfoRequest, v1.GetInfoResponse]
-	buildAgent            *connect.Client[v1.BuildAgentRequest, v1.BuildAgentResponse]
-	buildToolImage        *connect.Client[v1.BuildToolImageRequest, v1.BuildToolImageResponse]
-	saveAgentImage        *connect.Client[v1.SaveAgentImageRequest, v1.SaveAgentImageResponse]
-	pullAgentImage        *connect.Client[v1.PullRequest, v1.PullResponse]
-	pushAgentImage        *connect.Client[v1.PushRequest, v1.PushResponse]
-	listImages            *connect.Client[v1.ListImagesRequest, v1.ListImagesResponse]
-	refreshImage          *connect.Client[v1.RefreshImageRequest, v1.RefreshImageResponse]
-	removeImage           *connect.Client[v1.RemoveImageRequest, v1.RemoveImageResponse]
-	describeImage         *connect.Client[v1.DescribeImageRequest, v1.DescribeImageResponse]
-	createAgent           *connect.Client[v1.CreateAgentRequest, v1.CreateAgentResponse]
-	listAgents            *connect.Client[v1.ListAgentsRequest, v1.ListAgentsResponse]
-	startAgent            *connect.Client[v1.StartAgentRequest, v1.StartAgentResponse]
-	stopAgent             *connect.Client[v1.StopAgentRequest, v1.StopAgentResponse]
-	removeAgent           *connect.Client[v1.RemoveAgentRequest, v1.RemoveAgentResponse]
-	chatWithAgent         *connect.Client[v1.ChatRequest, v1.ChatResponse]
-	promptObject          *connect.Client[v1.PromptObjectRequest, v1.PromptObjectResponse]
-	chatStreamWithAgent   *connect.Client[v1.ChatStreamRequest, v1.ChatStreamEvent]
-	listSessionMessages   *connect.Client[v1.ListSessionMessagesRequest, v1.ListSessionMessagesResponse]
-	listSessions          *connect.Client[v1.ListSessionsRequest, v1.ListSessionsResponse]
-	deleteSession         *connect.Client[v1.DeleteSessionRequest, v1.DeleteSessionResponse]
-	getAgentLogs          *connect.Client[v1.GetAgentLogsRequest, v1.GetAgentLogsResponse]
-	listModels            *connect.Client[v1.ListModelsRequest, v1.ListModelsResponse]
-	listProviders         *connect.Client[v1.ListProvidersRequest, v1.ListProvidersResponse]
-	addProvider           *connect.Client[v1.AddProviderRequest, v1.AddProviderResponse]
-	updateProvider        *connect.Client[v1.UpdateProviderRequest, v1.UpdateProviderResponse]
-	removeProvider        *connect.Client[v1.RemoveProviderRequest, v1.RemoveProviderResponse]
-	submitAsyncJob        *connect.Client[v1.SubmitAsyncJobRequest, v1.SubmitAsyncJobResponse]
-	cancelAsyncJob        *connect.Client[v1.CancelAsyncJobRequest, v1.CancelAsyncJobResponse]
-	getAsyncJob           *connect.Client[v1.GetAsyncJobRequest, v1.GetAsyncJobResponse]
-	listAsyncJobs         *connect.Client[v1.ListAsyncJobsRequest, v1.ListAsyncJobsResponse]
-	listAgentNotes        *connect.Client[v1.ListAgentNotesRequest, v1.ListAgentNotesResponse]
-	getAgentNote          *connect.Client[v1.GetAgentNoteRequest, v1.GetAgentNoteResponse]
-	saveAgentNote         *connect.Client[v1.SaveAgentNoteRequest, v1.SaveAgentNoteResponse]
-	deleteAgentNote       *connect.Client[v1.DeleteAgentNoteRequest, v1.DeleteAgentNoteResponse]
-	setAgentNoteInContext *connect.Client[v1.SetAgentNoteInContextRequest, v1.SetAgentNoteInContextResponse]
-	streamRPCCalls        *connect.Client[v1.StreamRPCCallsRequest, v1.RPCCallEvent]
-	linkAgents            *connect.Client[v1.LinkAgentsRequest, v1.LinkAgentsResponse]
-	unlinkAgents          *connect.Client[v1.UnlinkAgentsRequest, v1.UnlinkAgentsResponse]
-	listAgentLinks        *connect.Client[v1.ListAgentLinksRequest, v1.ListAgentLinksResponse]
-	agentList             *connect.Client[v1.AgentListRequest, v1.AgentListResponse]
-	agentInfo             *connect.Client[v1.AgentInfoRequest, v1.AgentInfoResponse]
-	agentExec             *connect.Client[v1.AgentExecRequest, v1.AgentExecResponse]
-	agentCreate           *connect.Client[v1.AgentCreateRequest, v1.AgentCreateResponse]
-	agentCreateFromSource *connect.Client[v1.AgentCreateFromSourceRequest, v1.AgentCreateResponse]
-	agentDelete           *connect.Client[v1.AgentDeleteRequest, v1.AgentDeleteResponse]
-	imageList             *connect.Client[v1.ImageListRequest, v1.ImageListResponse]
-	binList               *connect.Client[v1.BinListRequest, v1.BinListResponse]
-	selfReload            *connect.Client[v1.SelfReloadRequest, v1.SelfReloadResponse]
-	getAgentIdentity      *connect.Client[v1.GetAgentIdentityRequest, v1.GetAgentIdentityResponse]
-	watchAsyncJob         *connect.Client[v1.WatchAsyncJobRequest, v1.WatchAsyncJobResponse]
+	getInfo                *connect.Client[v1.GetInfoRequest, v1.GetInfoResponse]
+	buildAgent             *connect.Client[v1.BuildAgentRequest, v1.BuildAgentResponse]
+	buildToolImage         *connect.Client[v1.BuildToolImageRequest, v1.BuildToolImageResponse]
+	saveAgentImage         *connect.Client[v1.SaveAgentImageRequest, v1.SaveAgentImageResponse]
+	pullAgentImage         *connect.Client[v1.PullRequest, v1.PullResponse]
+	pushAgentImage         *connect.Client[v1.PushRequest, v1.PushResponse]
+	listImages             *connect.Client[v1.ListImagesRequest, v1.ListImagesResponse]
+	refreshImage           *connect.Client[v1.RefreshImageRequest, v1.RefreshImageResponse]
+	removeImage            *connect.Client[v1.RemoveImageRequest, v1.RemoveImageResponse]
+	describeImage          *connect.Client[v1.DescribeImageRequest, v1.DescribeImageResponse]
+	createAgent            *connect.Client[v1.CreateAgentRequest, v1.CreateAgentResponse]
+	listAgents             *connect.Client[v1.ListAgentsRequest, v1.ListAgentsResponse]
+	startAgent             *connect.Client[v1.StartAgentRequest, v1.StartAgentResponse]
+	stopAgent              *connect.Client[v1.StopAgentRequest, v1.StopAgentResponse]
+	removeAgent            *connect.Client[v1.RemoveAgentRequest, v1.RemoveAgentResponse]
+	chatWithAgent          *connect.Client[v1.ChatRequest, v1.ChatResponse]
+	promptObject           *connect.Client[v1.PromptObjectRequest, v1.PromptObjectResponse]
+	chatStreamWithAgent    *connect.Client[v1.ChatStreamRequest, v1.ChatStreamEvent]
+	listSessionMessages    *connect.Client[v1.ListSessionMessagesRequest, v1.ListSessionMessagesResponse]
+	listSessions           *connect.Client[v1.ListSessionsRequest, v1.ListSessionsResponse]
+	deleteSession          *connect.Client[v1.DeleteSessionRequest, v1.DeleteSessionResponse]
+	getAgentLogs           *connect.Client[v1.GetAgentLogsRequest, v1.GetAgentLogsResponse]
+	listModels             *connect.Client[v1.ListModelsRequest, v1.ListModelsResponse]
+	listProviders          *connect.Client[v1.ListProvidersRequest, v1.ListProvidersResponse]
+	listAvailableProviders *connect.Client[v1.ListAvailableProvidersRequest, v1.ListAvailableProvidersResponse]
+	addProvider            *connect.Client[v1.AddProviderRequest, v1.AddProviderResponse]
+	updateProvider         *connect.Client[v1.UpdateProviderRequest, v1.UpdateProviderResponse]
+	removeProvider         *connect.Client[v1.RemoveProviderRequest, v1.RemoveProviderResponse]
+	submitAsyncJob         *connect.Client[v1.SubmitAsyncJobRequest, v1.SubmitAsyncJobResponse]
+	cancelAsyncJob         *connect.Client[v1.CancelAsyncJobRequest, v1.CancelAsyncJobResponse]
+	getAsyncJob            *connect.Client[v1.GetAsyncJobRequest, v1.GetAsyncJobResponse]
+	listAsyncJobs          *connect.Client[v1.ListAsyncJobsRequest, v1.ListAsyncJobsResponse]
+	listAgentNotes         *connect.Client[v1.ListAgentNotesRequest, v1.ListAgentNotesResponse]
+	getAgentNote           *connect.Client[v1.GetAgentNoteRequest, v1.GetAgentNoteResponse]
+	saveAgentNote          *connect.Client[v1.SaveAgentNoteRequest, v1.SaveAgentNoteResponse]
+	deleteAgentNote        *connect.Client[v1.DeleteAgentNoteRequest, v1.DeleteAgentNoteResponse]
+	setAgentNoteInContext  *connect.Client[v1.SetAgentNoteInContextRequest, v1.SetAgentNoteInContextResponse]
+	streamRPCCalls         *connect.Client[v1.StreamRPCCallsRequest, v1.RPCCallEvent]
+	linkAgents             *connect.Client[v1.LinkAgentsRequest, v1.LinkAgentsResponse]
+	unlinkAgents           *connect.Client[v1.UnlinkAgentsRequest, v1.UnlinkAgentsResponse]
+	listAgentLinks         *connect.Client[v1.ListAgentLinksRequest, v1.ListAgentLinksResponse]
+	agentList              *connect.Client[v1.AgentListRequest, v1.AgentListResponse]
+	agentInfo              *connect.Client[v1.AgentInfoRequest, v1.AgentInfoResponse]
+	agentExec              *connect.Client[v1.AgentExecRequest, v1.AgentExecResponse]
+	agentCreate            *connect.Client[v1.AgentCreateRequest, v1.AgentCreateResponse]
+	agentCreateFromSource  *connect.Client[v1.AgentCreateFromSourceRequest, v1.AgentCreateResponse]
+	agentDelete            *connect.Client[v1.AgentDeleteRequest, v1.AgentDeleteResponse]
+	imageList              *connect.Client[v1.ImageListRequest, v1.ImageListResponse]
+	binList                *connect.Client[v1.BinListRequest, v1.BinListResponse]
+	selfReload             *connect.Client[v1.SelfReloadRequest, v1.SelfReloadResponse]
+	getAgentIdentity       *connect.Client[v1.GetAgentIdentityRequest, v1.GetAgentIdentityResponse]
+	watchAsyncJob          *connect.Client[v1.WatchAsyncJobRequest, v1.WatchAsyncJobResponse]
 }
 
 // GetInfo calls openotters.daemon.v1.Runtime.GetInfo.
@@ -781,6 +797,11 @@ func (c *runtimeClient) ListModels(ctx context.Context, req *connect.Request[v1.
 // ListProviders calls openotters.daemon.v1.Runtime.ListProviders.
 func (c *runtimeClient) ListProviders(ctx context.Context, req *connect.Request[v1.ListProvidersRequest]) (*connect.Response[v1.ListProvidersResponse], error) {
 	return c.listProviders.CallUnary(ctx, req)
+}
+
+// ListAvailableProviders calls openotters.daemon.v1.Runtime.ListAvailableProviders.
+func (c *runtimeClient) ListAvailableProviders(ctx context.Context, req *connect.Request[v1.ListAvailableProvidersRequest]) (*connect.Response[v1.ListAvailableProvidersResponse], error) {
+	return c.listAvailableProviders.CallUnary(ctx, req)
 }
 
 // AddProvider calls openotters.daemon.v1.Runtime.AddProvider.
@@ -944,6 +965,12 @@ type RuntimeHandler interface {
 	GetAgentLogs(context.Context, *connect.Request[v1.GetAgentLogsRequest]) (*connect.Response[v1.GetAgentLogsResponse], error)
 	ListModels(context.Context, *connect.Request[v1.ListModelsRequest]) (*connect.Response[v1.ListModelsResponse], error)
 	ListProviders(context.Context, *connect.Request[v1.ListProvidersRequest]) (*connect.Response[v1.ListProvidersResponse], error)
+	// ListAvailableProviders returns the curated Catwalk provider
+	// catalogue — the set of provider slugs the runtime knows how to
+	// talk to natively plus the OpenAI-compat fallback. The dashboard's
+	// Add Provider form uses it to populate a combobox so operators
+	// pick a known slug (gemini, anthropic, xai, …) instead of guessing.
+	ListAvailableProviders(context.Context, *connect.Request[v1.ListAvailableProvidersRequest]) (*connect.Response[v1.ListAvailableProvidersResponse], error)
 	AddProvider(context.Context, *connect.Request[v1.AddProviderRequest]) (*connect.Response[v1.AddProviderResponse], error)
 	UpdateProvider(context.Context, *connect.Request[v1.UpdateProviderRequest]) (*connect.Response[v1.UpdateProviderResponse], error)
 	RemoveProvider(context.Context, *connect.Request[v1.RemoveProviderRequest]) (*connect.Response[v1.RemoveProviderResponse], error)
@@ -1178,6 +1205,12 @@ func NewRuntimeHandler(svc RuntimeHandler, opts ...connect.HandlerOption) (strin
 		connect.WithSchema(runtimeMethods.ByName("ListProviders")),
 		connect.WithHandlerOptions(opts...),
 	)
+	runtimeListAvailableProvidersHandler := connect.NewUnaryHandler(
+		RuntimeListAvailableProvidersProcedure,
+		svc.ListAvailableProviders,
+		connect.WithSchema(runtimeMethods.ByName("ListAvailableProviders")),
+		connect.WithHandlerOptions(opts...),
+	)
 	runtimeAddProviderHandler := connect.NewUnaryHandler(
 		RuntimeAddProviderProcedure,
 		svc.AddProvider,
@@ -1390,6 +1423,8 @@ func NewRuntimeHandler(svc RuntimeHandler, opts ...connect.HandlerOption) (strin
 			runtimeListModelsHandler.ServeHTTP(w, r)
 		case RuntimeListProvidersProcedure:
 			runtimeListProvidersHandler.ServeHTTP(w, r)
+		case RuntimeListAvailableProvidersProcedure:
+			runtimeListAvailableProvidersHandler.ServeHTTP(w, r)
 		case RuntimeAddProviderProcedure:
 			runtimeAddProviderHandler.ServeHTTP(w, r)
 		case RuntimeUpdateProviderProcedure:
@@ -1547,6 +1582,10 @@ func (UnimplementedRuntimeHandler) ListModels(context.Context, *connect.Request[
 
 func (UnimplementedRuntimeHandler) ListProviders(context.Context, *connect.Request[v1.ListProvidersRequest]) (*connect.Response[v1.ListProvidersResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("openotters.daemon.v1.Runtime.ListProviders is not implemented"))
+}
+
+func (UnimplementedRuntimeHandler) ListAvailableProviders(context.Context, *connect.Request[v1.ListAvailableProvidersRequest]) (*connect.Response[v1.ListAvailableProvidersResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("openotters.daemon.v1.Runtime.ListAvailableProviders is not implemented"))
 }
 
 func (UnimplementedRuntimeHandler) AddProvider(context.Context, *connect.Request[v1.AddProviderRequest]) (*connect.Response[v1.AddProviderResponse], error) {

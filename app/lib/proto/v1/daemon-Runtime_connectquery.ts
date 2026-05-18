@@ -120,6 +120,17 @@ export const listModels = Runtime.method.listModels;
 export const listProviders = Runtime.method.listProviders;
 
 /**
+ * ListAvailableProviders returns the curated Catwalk provider
+ * catalogue — the set of provider slugs the runtime knows how to
+ * talk to natively plus the OpenAI-compat fallback. The dashboard's
+ * Add Provider form uses it to populate a combobox so operators
+ * pick a known slug (gemini, anthropic, xai, …) instead of guessing.
+ *
+ * @generated from rpc openotters.daemon.v1.Runtime.ListAvailableProviders
+ */
+export const listAvailableProviders = Runtime.method.listAvailableProviders;
+
+/**
  * @generated from rpc openotters.daemon.v1.Runtime.AddProvider
  */
 export const addProvider = Runtime.method.addProvider;

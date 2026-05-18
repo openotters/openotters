@@ -1,6 +1,6 @@
 "use client"
 
-import { useMutation } from "@connectrpc/connect-query"
+import { useMutation, useQuery } from "@connectrpc/connect-query"
 import { useQueryClient } from "@tanstack/react-query"
 import { Check, Copy, Eye, EyeOff, Plus, Trash2 } from "lucide-react"
 import Link from "next/link"
@@ -12,11 +12,16 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Separator } from "@/components/ui/separator"
 import { Switch } from "@/components/ui/switch"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import type { Provider } from "@/lib/proto/v1/daemon_pb"
-import { addProvider, updateProvider } from "@/lib/proto/v1/daemon-Runtime_connectquery"
+import {
+	addProvider,
+	listAvailableProviders,
+	updateProvider,
+} from "@/lib/proto/v1/daemon-Runtime_connectquery"
 
 export interface ProviderFormValue {
 	name: string
@@ -87,7 +92,22 @@ export function ProviderForm({ mode, initial }: ProviderFormProps) {
 	const create = useMutation(addProvider, { onSuccess })
 	const updateMut = useMutation(updateProvider, { onSuccess })
 
+	// Catwalk-driven provider catalogue. Only fetched in create mode —
+	// editing an existing provider doesn't change its id/slug, so the
+	// picker would just be noise. Errors are swallowed: the operator
+	// can still type a slug by hand in the Identifier card below.
+	const catalog = useQuery(listAvailableProviders, {}, { enabled: mode === "create" })
+
 	const update = (patch: Partial<ProviderFormValue>) => setValue((v) => ({ ...v, ...patch }))
+
+	// Selecting from the catalog pre-fills name + apiBase from the
+	// Catwalk entry. The operator can still override either via the
+	// existing free-text inputs.
+	const applyCatalog = (id: string) => {
+		const entry = catalog.data?.providers.find((p) => p.id === id)
+		if (!entry) return
+		update({ name: entry.id, apiBase: entry.apiEndpoint })
+	}
 
 	const yaml = generateYaml(value)
 
@@ -145,6 +165,49 @@ export function ProviderForm({ mode, initial }: ProviderFormProps) {
 					</TabsList>
 
 					<TabsContent className="space-y-4 pt-4" value="connection">
+						{mode === "create" && (catalog.data?.providers?.length ?? 0) > 0 && (
+							<Card>
+								<CardHeader>
+									<CardTitle>From catalog</CardTitle>
+									<CardDescription>
+										Pre-fill identifier + API base URL from{" "}
+										<a
+											className="underline-offset-2 hover:underline"
+											href="https://catwalk.charm.sh/v2/providers"
+											rel="noreferrer"
+											target="_blank">
+											Catwalk's curated provider list
+										</a>
+										. Picking from here gives you a slug the runtime recognises and a model
+										catalogue auto-populates on the Models tab.
+									</CardDescription>
+								</CardHeader>
+								<CardContent>
+									<Select onValueChange={applyCatalog} value={value.name || undefined}>
+										<SelectTrigger>
+											<SelectValue placeholder="Choose a known provider…" />
+										</SelectTrigger>
+										<SelectContent>
+											{catalog.data?.providers.map((p) => (
+												<SelectItem key={p.id} value={p.id}>
+													<div className="flex w-full items-center justify-between gap-3">
+														<span>{p.name}</span>
+														<span className="text-muted-foreground text-xs">
+															{p.modelCount} model{p.modelCount === 1 ? "" : "s"}
+														</span>
+													</div>
+												</SelectItem>
+											))}
+										</SelectContent>
+									</Select>
+									<p className="mt-2 text-muted-foreground text-xs">
+										Not in the list? Type a custom slug in the Identifier card below — the
+										runtime falls back to OpenAI-compatible mode for unknown providers.
+									</p>
+								</CardContent>
+							</Card>
+						)}
+
 						<Card>
 							<CardHeader>
 								<CardTitle>Identifier</CardTitle>

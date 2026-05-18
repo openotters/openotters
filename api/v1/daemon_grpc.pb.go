@@ -19,57 +19,58 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	Runtime_GetInfo_FullMethodName               = "/openotters.daemon.v1.Runtime/GetInfo"
-	Runtime_BuildAgent_FullMethodName            = "/openotters.daemon.v1.Runtime/BuildAgent"
-	Runtime_BuildToolImage_FullMethodName        = "/openotters.daemon.v1.Runtime/BuildToolImage"
-	Runtime_SaveAgentImage_FullMethodName        = "/openotters.daemon.v1.Runtime/SaveAgentImage"
-	Runtime_PullAgentImage_FullMethodName        = "/openotters.daemon.v1.Runtime/PullAgentImage"
-	Runtime_PushAgentImage_FullMethodName        = "/openotters.daemon.v1.Runtime/PushAgentImage"
-	Runtime_ListImages_FullMethodName            = "/openotters.daemon.v1.Runtime/ListImages"
-	Runtime_RefreshImage_FullMethodName          = "/openotters.daemon.v1.Runtime/RefreshImage"
-	Runtime_RemoveImage_FullMethodName           = "/openotters.daemon.v1.Runtime/RemoveImage"
-	Runtime_DescribeImage_FullMethodName         = "/openotters.daemon.v1.Runtime/DescribeImage"
-	Runtime_CreateAgent_FullMethodName           = "/openotters.daemon.v1.Runtime/CreateAgent"
-	Runtime_ListAgents_FullMethodName            = "/openotters.daemon.v1.Runtime/ListAgents"
-	Runtime_StartAgent_FullMethodName            = "/openotters.daemon.v1.Runtime/StartAgent"
-	Runtime_StopAgent_FullMethodName             = "/openotters.daemon.v1.Runtime/StopAgent"
-	Runtime_RemoveAgent_FullMethodName           = "/openotters.daemon.v1.Runtime/RemoveAgent"
-	Runtime_ChatWithAgent_FullMethodName         = "/openotters.daemon.v1.Runtime/ChatWithAgent"
-	Runtime_PromptObject_FullMethodName          = "/openotters.daemon.v1.Runtime/PromptObject"
-	Runtime_ChatStreamWithAgent_FullMethodName   = "/openotters.daemon.v1.Runtime/ChatStreamWithAgent"
-	Runtime_ListSessionMessages_FullMethodName   = "/openotters.daemon.v1.Runtime/ListSessionMessages"
-	Runtime_ListSessions_FullMethodName          = "/openotters.daemon.v1.Runtime/ListSessions"
-	Runtime_DeleteSession_FullMethodName         = "/openotters.daemon.v1.Runtime/DeleteSession"
-	Runtime_GetAgentLogs_FullMethodName          = "/openotters.daemon.v1.Runtime/GetAgentLogs"
-	Runtime_ListModels_FullMethodName            = "/openotters.daemon.v1.Runtime/ListModels"
-	Runtime_ListProviders_FullMethodName         = "/openotters.daemon.v1.Runtime/ListProviders"
-	Runtime_AddProvider_FullMethodName           = "/openotters.daemon.v1.Runtime/AddProvider"
-	Runtime_UpdateProvider_FullMethodName        = "/openotters.daemon.v1.Runtime/UpdateProvider"
-	Runtime_RemoveProvider_FullMethodName        = "/openotters.daemon.v1.Runtime/RemoveProvider"
-	Runtime_SubmitAsyncJob_FullMethodName        = "/openotters.daemon.v1.Runtime/SubmitAsyncJob"
-	Runtime_CancelAsyncJob_FullMethodName        = "/openotters.daemon.v1.Runtime/CancelAsyncJob"
-	Runtime_GetAsyncJob_FullMethodName           = "/openotters.daemon.v1.Runtime/GetAsyncJob"
-	Runtime_ListAsyncJobs_FullMethodName         = "/openotters.daemon.v1.Runtime/ListAsyncJobs"
-	Runtime_ListAgentNotes_FullMethodName        = "/openotters.daemon.v1.Runtime/ListAgentNotes"
-	Runtime_GetAgentNote_FullMethodName          = "/openotters.daemon.v1.Runtime/GetAgentNote"
-	Runtime_SaveAgentNote_FullMethodName         = "/openotters.daemon.v1.Runtime/SaveAgentNote"
-	Runtime_DeleteAgentNote_FullMethodName       = "/openotters.daemon.v1.Runtime/DeleteAgentNote"
-	Runtime_SetAgentNoteInContext_FullMethodName = "/openotters.daemon.v1.Runtime/SetAgentNoteInContext"
-	Runtime_StreamRPCCalls_FullMethodName        = "/openotters.daemon.v1.Runtime/StreamRPCCalls"
-	Runtime_LinkAgents_FullMethodName            = "/openotters.daemon.v1.Runtime/LinkAgents"
-	Runtime_UnlinkAgents_FullMethodName          = "/openotters.daemon.v1.Runtime/UnlinkAgents"
-	Runtime_ListAgentLinks_FullMethodName        = "/openotters.daemon.v1.Runtime/ListAgentLinks"
-	Runtime_AgentList_FullMethodName             = "/openotters.daemon.v1.Runtime/AgentList"
-	Runtime_AgentInfo_FullMethodName             = "/openotters.daemon.v1.Runtime/AgentInfo"
-	Runtime_AgentExec_FullMethodName             = "/openotters.daemon.v1.Runtime/AgentExec"
-	Runtime_AgentCreate_FullMethodName           = "/openotters.daemon.v1.Runtime/AgentCreate"
-	Runtime_AgentCreateFromSource_FullMethodName = "/openotters.daemon.v1.Runtime/AgentCreateFromSource"
-	Runtime_AgentDelete_FullMethodName           = "/openotters.daemon.v1.Runtime/AgentDelete"
-	Runtime_ImageList_FullMethodName             = "/openotters.daemon.v1.Runtime/ImageList"
-	Runtime_BinList_FullMethodName               = "/openotters.daemon.v1.Runtime/BinList"
-	Runtime_SelfReload_FullMethodName            = "/openotters.daemon.v1.Runtime/SelfReload"
-	Runtime_GetAgentIdentity_FullMethodName      = "/openotters.daemon.v1.Runtime/GetAgentIdentity"
-	Runtime_WatchAsyncJob_FullMethodName         = "/openotters.daemon.v1.Runtime/WatchAsyncJob"
+	Runtime_GetInfo_FullMethodName                = "/openotters.daemon.v1.Runtime/GetInfo"
+	Runtime_BuildAgent_FullMethodName             = "/openotters.daemon.v1.Runtime/BuildAgent"
+	Runtime_BuildToolImage_FullMethodName         = "/openotters.daemon.v1.Runtime/BuildToolImage"
+	Runtime_SaveAgentImage_FullMethodName         = "/openotters.daemon.v1.Runtime/SaveAgentImage"
+	Runtime_PullAgentImage_FullMethodName         = "/openotters.daemon.v1.Runtime/PullAgentImage"
+	Runtime_PushAgentImage_FullMethodName         = "/openotters.daemon.v1.Runtime/PushAgentImage"
+	Runtime_ListImages_FullMethodName             = "/openotters.daemon.v1.Runtime/ListImages"
+	Runtime_RefreshImage_FullMethodName           = "/openotters.daemon.v1.Runtime/RefreshImage"
+	Runtime_RemoveImage_FullMethodName            = "/openotters.daemon.v1.Runtime/RemoveImage"
+	Runtime_DescribeImage_FullMethodName          = "/openotters.daemon.v1.Runtime/DescribeImage"
+	Runtime_CreateAgent_FullMethodName            = "/openotters.daemon.v1.Runtime/CreateAgent"
+	Runtime_ListAgents_FullMethodName             = "/openotters.daemon.v1.Runtime/ListAgents"
+	Runtime_StartAgent_FullMethodName             = "/openotters.daemon.v1.Runtime/StartAgent"
+	Runtime_StopAgent_FullMethodName              = "/openotters.daemon.v1.Runtime/StopAgent"
+	Runtime_RemoveAgent_FullMethodName            = "/openotters.daemon.v1.Runtime/RemoveAgent"
+	Runtime_ChatWithAgent_FullMethodName          = "/openotters.daemon.v1.Runtime/ChatWithAgent"
+	Runtime_PromptObject_FullMethodName           = "/openotters.daemon.v1.Runtime/PromptObject"
+	Runtime_ChatStreamWithAgent_FullMethodName    = "/openotters.daemon.v1.Runtime/ChatStreamWithAgent"
+	Runtime_ListSessionMessages_FullMethodName    = "/openotters.daemon.v1.Runtime/ListSessionMessages"
+	Runtime_ListSessions_FullMethodName           = "/openotters.daemon.v1.Runtime/ListSessions"
+	Runtime_DeleteSession_FullMethodName          = "/openotters.daemon.v1.Runtime/DeleteSession"
+	Runtime_GetAgentLogs_FullMethodName           = "/openotters.daemon.v1.Runtime/GetAgentLogs"
+	Runtime_ListModels_FullMethodName             = "/openotters.daemon.v1.Runtime/ListModels"
+	Runtime_ListProviders_FullMethodName          = "/openotters.daemon.v1.Runtime/ListProviders"
+	Runtime_ListAvailableProviders_FullMethodName = "/openotters.daemon.v1.Runtime/ListAvailableProviders"
+	Runtime_AddProvider_FullMethodName            = "/openotters.daemon.v1.Runtime/AddProvider"
+	Runtime_UpdateProvider_FullMethodName         = "/openotters.daemon.v1.Runtime/UpdateProvider"
+	Runtime_RemoveProvider_FullMethodName         = "/openotters.daemon.v1.Runtime/RemoveProvider"
+	Runtime_SubmitAsyncJob_FullMethodName         = "/openotters.daemon.v1.Runtime/SubmitAsyncJob"
+	Runtime_CancelAsyncJob_FullMethodName         = "/openotters.daemon.v1.Runtime/CancelAsyncJob"
+	Runtime_GetAsyncJob_FullMethodName            = "/openotters.daemon.v1.Runtime/GetAsyncJob"
+	Runtime_ListAsyncJobs_FullMethodName          = "/openotters.daemon.v1.Runtime/ListAsyncJobs"
+	Runtime_ListAgentNotes_FullMethodName         = "/openotters.daemon.v1.Runtime/ListAgentNotes"
+	Runtime_GetAgentNote_FullMethodName           = "/openotters.daemon.v1.Runtime/GetAgentNote"
+	Runtime_SaveAgentNote_FullMethodName          = "/openotters.daemon.v1.Runtime/SaveAgentNote"
+	Runtime_DeleteAgentNote_FullMethodName        = "/openotters.daemon.v1.Runtime/DeleteAgentNote"
+	Runtime_SetAgentNoteInContext_FullMethodName  = "/openotters.daemon.v1.Runtime/SetAgentNoteInContext"
+	Runtime_StreamRPCCalls_FullMethodName         = "/openotters.daemon.v1.Runtime/StreamRPCCalls"
+	Runtime_LinkAgents_FullMethodName             = "/openotters.daemon.v1.Runtime/LinkAgents"
+	Runtime_UnlinkAgents_FullMethodName           = "/openotters.daemon.v1.Runtime/UnlinkAgents"
+	Runtime_ListAgentLinks_FullMethodName         = "/openotters.daemon.v1.Runtime/ListAgentLinks"
+	Runtime_AgentList_FullMethodName              = "/openotters.daemon.v1.Runtime/AgentList"
+	Runtime_AgentInfo_FullMethodName              = "/openotters.daemon.v1.Runtime/AgentInfo"
+	Runtime_AgentExec_FullMethodName              = "/openotters.daemon.v1.Runtime/AgentExec"
+	Runtime_AgentCreate_FullMethodName            = "/openotters.daemon.v1.Runtime/AgentCreate"
+	Runtime_AgentCreateFromSource_FullMethodName  = "/openotters.daemon.v1.Runtime/AgentCreateFromSource"
+	Runtime_AgentDelete_FullMethodName            = "/openotters.daemon.v1.Runtime/AgentDelete"
+	Runtime_ImageList_FullMethodName              = "/openotters.daemon.v1.Runtime/ImageList"
+	Runtime_BinList_FullMethodName                = "/openotters.daemon.v1.Runtime/BinList"
+	Runtime_SelfReload_FullMethodName             = "/openotters.daemon.v1.Runtime/SelfReload"
+	Runtime_GetAgentIdentity_FullMethodName       = "/openotters.daemon.v1.Runtime/GetAgentIdentity"
+	Runtime_WatchAsyncJob_FullMethodName          = "/openotters.daemon.v1.Runtime/WatchAsyncJob"
 )
 
 // RuntimeClient is the client API for Runtime service.
@@ -100,6 +101,12 @@ type RuntimeClient interface {
 	GetAgentLogs(ctx context.Context, in *GetAgentLogsRequest, opts ...grpc.CallOption) (*GetAgentLogsResponse, error)
 	ListModels(ctx context.Context, in *ListModelsRequest, opts ...grpc.CallOption) (*ListModelsResponse, error)
 	ListProviders(ctx context.Context, in *ListProvidersRequest, opts ...grpc.CallOption) (*ListProvidersResponse, error)
+	// ListAvailableProviders returns the curated Catwalk provider
+	// catalogue — the set of provider slugs the runtime knows how to
+	// talk to natively plus the OpenAI-compat fallback. The dashboard's
+	// Add Provider form uses it to populate a combobox so operators
+	// pick a known slug (gemini, anthropic, xai, …) instead of guessing.
+	ListAvailableProviders(ctx context.Context, in *ListAvailableProvidersRequest, opts ...grpc.CallOption) (*ListAvailableProvidersResponse, error)
 	AddProvider(ctx context.Context, in *AddProviderRequest, opts ...grpc.CallOption) (*AddProviderResponse, error)
 	UpdateProvider(ctx context.Context, in *UpdateProviderRequest, opts ...grpc.CallOption) (*UpdateProviderResponse, error)
 	RemoveProvider(ctx context.Context, in *RemoveProviderRequest, opts ...grpc.CallOption) (*RemoveProviderResponse, error)
@@ -440,6 +447,16 @@ func (c *runtimeClient) ListProviders(ctx context.Context, in *ListProvidersRequ
 	return out, nil
 }
 
+func (c *runtimeClient) ListAvailableProviders(ctx context.Context, in *ListAvailableProvidersRequest, opts ...grpc.CallOption) (*ListAvailableProvidersResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListAvailableProvidersResponse)
+	err := c.cc.Invoke(ctx, Runtime_ListAvailableProviders_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *runtimeClient) AddProvider(ctx context.Context, in *AddProviderRequest, opts ...grpc.CallOption) (*AddProviderResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(AddProviderResponse)
@@ -756,6 +773,12 @@ type RuntimeServer interface {
 	GetAgentLogs(context.Context, *GetAgentLogsRequest) (*GetAgentLogsResponse, error)
 	ListModels(context.Context, *ListModelsRequest) (*ListModelsResponse, error)
 	ListProviders(context.Context, *ListProvidersRequest) (*ListProvidersResponse, error)
+	// ListAvailableProviders returns the curated Catwalk provider
+	// catalogue — the set of provider slugs the runtime knows how to
+	// talk to natively plus the OpenAI-compat fallback. The dashboard's
+	// Add Provider form uses it to populate a combobox so operators
+	// pick a known slug (gemini, anthropic, xai, …) instead of guessing.
+	ListAvailableProviders(context.Context, *ListAvailableProvidersRequest) (*ListAvailableProvidersResponse, error)
 	AddProvider(context.Context, *AddProviderRequest) (*AddProviderResponse, error)
 	UpdateProvider(context.Context, *UpdateProviderRequest) (*UpdateProviderResponse, error)
 	RemoveProvider(context.Context, *RemoveProviderRequest) (*RemoveProviderResponse, error)
@@ -918,6 +941,9 @@ func (UnimplementedRuntimeServer) ListModels(context.Context, *ListModelsRequest
 }
 func (UnimplementedRuntimeServer) ListProviders(context.Context, *ListProvidersRequest) (*ListProvidersResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListProviders not implemented")
+}
+func (UnimplementedRuntimeServer) ListAvailableProviders(context.Context, *ListAvailableProvidersRequest) (*ListAvailableProvidersResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListAvailableProviders not implemented")
 }
 func (UnimplementedRuntimeServer) AddProvider(context.Context, *AddProviderRequest) (*AddProviderResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method AddProvider not implemented")
@@ -1442,6 +1468,24 @@ func _Runtime_ListProviders_Handler(srv interface{}, ctx context.Context, dec fu
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(RuntimeServer).ListProviders(ctx, req.(*ListProvidersRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Runtime_ListAvailableProviders_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListAvailableProvidersRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(RuntimeServer).ListAvailableProviders(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Runtime_ListAvailableProviders_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(RuntimeServer).ListAvailableProviders(ctx, req.(*ListAvailableProvidersRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -2016,6 +2060,10 @@ var Runtime_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ListProviders",
 			Handler:    _Runtime_ListProviders_Handler,
+		},
+		{
+			MethodName: "ListAvailableProviders",
+			Handler:    _Runtime_ListAvailableProviders_Handler,
 		},
 		{
 			MethodName: "AddProvider",

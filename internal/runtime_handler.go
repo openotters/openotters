@@ -412,6 +412,29 @@ func (h *runtimeHandler) ListProviders(
 	return connect.NewResponse(&daemonv1.ListProvidersResponse{Providers: out}), nil
 }
 
+// ListAvailableProviders thin-wraps Daemon.AvailableProviders for the
+// connect handler. The dashboard's Add Provider form uses it to
+// populate a combobox of Catwalk-known slugs. Returns an empty list
+// on Catwalk fetch failure rather than an error — the form's
+// free-text input is still usable as a fallback.
+func (h *runtimeHandler) ListAvailableProviders(
+	ctx context.Context, _ *connect.Request[daemonv1.ListAvailableProvidersRequest],
+) (*connect.Response[daemonv1.ListAvailableProvidersResponse], error) {
+	rows := h.daemon.AvailableProviders(ctx)
+	out := make([]*daemonv1.AvailableProvider, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, &daemonv1.AvailableProvider{
+			Id:           r.ID,
+			Name:         r.Name,
+			ApiEndpoint:  r.APIEndpoint,
+			DefaultModel: r.DefaultModel,
+			ModelCount:   r.ModelCount,
+		})
+	}
+
+	return connect.NewResponse(&daemonv1.ListAvailableProvidersResponse{Providers: out}), nil
+}
+
 func (h *runtimeHandler) AddProvider(
 	_ context.Context, req *connect.Request[daemonv1.AddProviderRequest],
 ) (*connect.Response[daemonv1.AddProviderResponse], error) {

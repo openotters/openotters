@@ -910,6 +910,51 @@ func (d *Daemon) Models(ctx context.Context) []ModelInfo {
 	return out
 }
 
+// AvailableProvider is one Catwalk catalogue entry surfaced to the
+// dashboard's Add Provider form. Mirrors daemonv1.AvailableProvider —
+// the proto is wire-only; this type keeps the daemon package free
+// of a direct proto dependency for the catalogue path.
+type AvailableProvider struct {
+	ID           string
+	Name         string
+	APIEndpoint  string
+	DefaultModel string
+	ModelCount   int32
+}
+
+// AvailableProviders returns Catwalk's curated provider list — the
+// set of slugs an operator can plug into providers.yaml with a
+// realistic expectation that the runtime will route them correctly
+// (natively for slugs the runtime's createProvider switch knows,
+// otherwise via openaicompat). Returns the empty slice and a logged
+// warning on Catwalk fetch failure so the UI degrades to its
+// existing free-text input rather than blocking the page render.
+func (d *Daemon) AvailableProviders(ctx context.Context) []AvailableProvider {
+	if d.catwalk == nil {
+		return nil
+	}
+
+	providers, err := d.catwalk.fetchProviders(ctx)
+	if err != nil {
+		d.logger.Warn("catwalk fetch failed (available providers)", zap.Error(err))
+		return nil
+	}
+
+	out := make([]AvailableProvider, 0, len(providers))
+	for _, p := range providers {
+		out = append(out, AvailableProvider{
+			ID:           string(p.ID),
+			Name:         p.Name,
+			APIEndpoint:  p.APIEndpoint,
+			DefaultModel: p.DefaultLargeModelID,
+			//nolint:gosec // catalogue sizes are bounded by Catwalk
+			ModelCount: int32(len(p.Models)),
+		})
+	}
+
+	return out
+}
+
 // AgentLogs returns the tail of the runtime log file for the agent
 // identified by ref. If tailLines > 0, return only the last N lines
 // (wins over tailBytes). Otherwise if tailBytes > 0, return only the

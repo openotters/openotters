@@ -29,6 +29,12 @@ service Runtime {
   rpc GetAgentLogs(GetAgentLogsRequest) returns (GetAgentLogsResponse);
   rpc ListModels(ListModelsRequest) returns (ListModelsResponse);
   rpc ListProviders(ListProvidersRequest) returns (ListProvidersResponse);
+  // ListAvailableProviders returns the curated Catwalk provider
+  // catalogue — the set of provider slugs the runtime knows how to
+  // talk to natively plus the OpenAI-compat fallback. The dashboard's
+  // Add Provider form uses it to populate a combobox so operators
+  // pick a known slug (gemini, anthropic, xai, …) instead of guessing.
+  rpc ListAvailableProviders(ListAvailableProvidersRequest) returns (ListAvailableProvidersResponse);
   rpc AddProvider(AddProviderRequest) returns (AddProviderResponse);
   rpc UpdateProvider(UpdateProviderRequest) returns (UpdateProviderResponse);
   rpc RemoveProvider(RemoveProviderRequest) returns (RemoveProviderResponse);
@@ -602,6 +608,37 @@ message ListProvidersRequest {}
 
 message ListProvidersResponse {
   repeated Provider providers = 1;
+}
+
+message ListAvailableProvidersRequest {}
+
+message ListAvailableProvidersResponse {
+  repeated AvailableProvider providers = 1;
+}
+
+// AvailableProvider is one Catwalk catalogue entry — a provider the
+// runtime can talk to (either natively or through the openaicompat
+// fallback) with enough metadata to pre-fill the Add Provider form:
+// id is the slug to type into providers.yaml, name is human-readable,
+// api_endpoint is the upstream default URL.
+message AvailableProvider {
+  // Catwalk-canonical slug (matches providers.yaml's name field and
+  // the runtime's createProvider switch). Examples: "gemini",
+  // "anthropic", "openai", "xai".
+  string id = 1;
+  // Human-readable name from Catwalk, e.g. "Google Gemini".
+  string name = 2;
+  // Default upstream API URL from Catwalk. Operators can override
+  // when configuring a proxy / gateway.
+  string api_endpoint = 3;
+  // Suggested default model id — the one Catwalk flags as the
+  // provider's flagship. Optional; empty when Catwalk doesn't
+  // declare one.
+  string default_model = 4;
+  // Number of models Catwalk knows about for this provider. Lets
+  // the UI surface a "12 models available" hint without sending
+  // the full model list down the wire.
+  int32 model_count = 5;
 }
 
 message AddProviderRequest {
