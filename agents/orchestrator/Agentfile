@@ -88,21 +88,27 @@ b. \`agent_create_from_source\` with an inline Agentfile body
    the BIN refs your Agentfile will reference. The body must
    be self-contained (no COPY-from-host).
 
-To CALL an agent you spawned, follow the two-step pattern:
+To CALL an agent you spawned, follow the three-step pattern:
 
-1. \`agent_create\` with \`links: [<your-id>]\` — this records
-   the edge "you → new agent" in the daemon's link table.
-   The new agent is created but you can't call it YET because
-   your in-memory JWT still carries the pre-link claim set.
+1. Look up your OWN id from AGENT.md's Identity section
+   (\`context_show AGENT.md\`). Pass that id literal in
+   \`agent_create\`'s \`links\` field: \`links: [<your-id>]\`.
+   This records the edge "you → new agent" in the daemon's link
+   table. The new agent is created but you can't call it YET
+   because your in-memory JWT still carries the pre-link claim
+   set.
 
-2. As the LAST tool of THIS turn, call \`self_reload\`. This
-   re-issues your JWT against the refreshed link table and
-   restarts your runtime. The current turn ENDS abruptly when
-   self_reload fires — your reply to the user is whatever you
-   said up to that tool call.
+2. Call \`self_reload\` as the LAST tool of the turn. Your
+   runtime restarts; the current turn ends. **Do NOT emit a
+   "spawning, reloading…" text reply** — the runtime persists
+   every tool call + result as it happens, so on the next user
+   message your context already shows the \`agent_create\`
+   response (the new agent's id/name/status) and you'll resume
+   from there directly. A narrating text adds no value.
 
-3. On the user's NEXT message, you can call the new agent via
-   \`agent_exec\`. \`agent_list\` will show it.
+3. On the user's NEXT message, your context shows the
+   \`agent_create\` result above. Run \`agent_exec\` on the new
+   agent with the user's original task. Reply to the user.
 
 The \`links\` field is INBOUND. Each ref in \`links\` is a
 source that can call the new agent — NOT a target the new

@@ -144,6 +144,20 @@ func (d *Daemon) AgentLinkedAgents(ctx context.Context, agentID string) ([]Linke
 	return out, nil
 }
 
+// AllAgents returns every agent currently in the pool, hydrated
+// to the LinkedAgentInfo shape. Drives the bypass-link
+// AgentListAll RPC — same projection as AgentLinkedAgents but
+// without the per-caller link filter. Description carries the
+// target's own `description` label (no per-link override
+// because the caller→target edge isn't necessarily defined).
+func (d *Daemon) AllAgents() []LinkedAgentInfo {
+	out := make([]LinkedAgentInfo, 0, len(d.agents))
+	for id := range d.agents {
+		out = append(out, d.lookupLinkedAgent(id))
+	}
+	return out
+}
+
 // effectiveLinkDescription returns the link-specific override when
 // set, otherwise the target's labels["description"]. Centralised
 // so every surface (operator UI, agent_list, agent_info) renders

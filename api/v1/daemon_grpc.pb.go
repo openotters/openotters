@@ -63,6 +63,10 @@ const (
 	Runtime_AgentList_FullMethodName              = "/openotters.daemon.v1.Runtime/AgentList"
 	Runtime_AgentInfo_FullMethodName              = "/openotters.daemon.v1.Runtime/AgentInfo"
 	Runtime_AgentExec_FullMethodName              = "/openotters.daemon.v1.Runtime/AgentExec"
+	Runtime_AgentListAll_FullMethodName           = "/openotters.daemon.v1.Runtime/AgentListAll"
+	Runtime_AgentInfoAny_FullMethodName           = "/openotters.daemon.v1.Runtime/AgentInfoAny"
+	Runtime_AgentExecAny_FullMethodName           = "/openotters.daemon.v1.Runtime/AgentExecAny"
+	Runtime_AgentDeleteAny_FullMethodName         = "/openotters.daemon.v1.Runtime/AgentDeleteAny"
 	Runtime_AgentCreate_FullMethodName            = "/openotters.daemon.v1.Runtime/AgentCreate"
 	Runtime_AgentCreateFromSource_FullMethodName  = "/openotters.daemon.v1.Runtime/AgentCreateFromSource"
 	Runtime_AgentDelete_FullMethodName            = "/openotters.daemon.v1.Runtime/AgentDelete"
@@ -156,13 +160,22 @@ type RuntimeClient interface {
 	AgentList(ctx context.Context, in *AgentListRequest, opts ...grpc.CallOption) (*AgentListResponse, error)
 	AgentInfo(ctx context.Context, in *AgentInfoRequest, opts ...grpc.CallOption) (*AgentInfoResponse, error)
 	AgentExec(ctx context.Context, in *AgentExecRequest, opts ...grpc.CallOption) (*AgentExecResponse, error)
+	// Bypass-link variants of the scoped quartet. Same wire
+	// shape (responses are reused), no link-scope check — the
+	// caller can list/inspect/exec/delete any agent in the
+	// daemon. Granted to every agent today; a future capability
+	// wave will move them behind an operator opt-in.
+	AgentListAll(ctx context.Context, in *AgentListAllRequest, opts ...grpc.CallOption) (*AgentListAllResponse, error)
+	AgentInfoAny(ctx context.Context, in *AgentInfoAnyRequest, opts ...grpc.CallOption) (*AgentInfoResponse, error)
+	AgentExecAny(ctx context.Context, in *AgentExecAnyRequest, opts ...grpc.CallOption) (*AgentExecResponse, error)
+	AgentDeleteAny(ctx context.Context, in *AgentDeleteAnyRequest, opts ...grpc.CallOption) (*AgentDeleteResponse, error)
 	// Spawn / delete an agent and enumerate images / BIN images.
 	// All four require an agent token (rejected for operator and
 	// anonymous callers). agent_create rejects mounts and a
 	// build-from-source path — those land on AgentCreateFromSource
 	// and remain a separate capability operators opt into.
-	// agent_delete is unrestricted: any authenticated agent caller
-	// can delete any agent.
+	// agent_delete is link-scoped: caller must have the target in
+	// its JWT.Links. Use AgentDeleteAny for the unscoped variant.
 	AgentCreate(ctx context.Context, in *AgentCreateRequest, opts ...grpc.CallOption) (*AgentCreateResponse, error)
 	AgentCreateFromSource(ctx context.Context, in *AgentCreateFromSourceRequest, opts ...grpc.CallOption) (*AgentCreateResponse, error)
 	AgentDelete(ctx context.Context, in *AgentDeleteRequest, opts ...grpc.CallOption) (*AgentDeleteResponse, error)
@@ -656,6 +669,46 @@ func (c *runtimeClient) AgentExec(ctx context.Context, in *AgentExecRequest, opt
 	return out, nil
 }
 
+func (c *runtimeClient) AgentListAll(ctx context.Context, in *AgentListAllRequest, opts ...grpc.CallOption) (*AgentListAllResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(AgentListAllResponse)
+	err := c.cc.Invoke(ctx, Runtime_AgentListAll_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *runtimeClient) AgentInfoAny(ctx context.Context, in *AgentInfoAnyRequest, opts ...grpc.CallOption) (*AgentInfoResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(AgentInfoResponse)
+	err := c.cc.Invoke(ctx, Runtime_AgentInfoAny_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *runtimeClient) AgentExecAny(ctx context.Context, in *AgentExecAnyRequest, opts ...grpc.CallOption) (*AgentExecResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(AgentExecResponse)
+	err := c.cc.Invoke(ctx, Runtime_AgentExecAny_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *runtimeClient) AgentDeleteAny(ctx context.Context, in *AgentDeleteAnyRequest, opts ...grpc.CallOption) (*AgentDeleteResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(AgentDeleteResponse)
+	err := c.cc.Invoke(ctx, Runtime_AgentDeleteAny_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *runtimeClient) AgentCreate(ctx context.Context, in *AgentCreateRequest, opts ...grpc.CallOption) (*AgentCreateResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(AgentCreateResponse)
@@ -828,13 +881,22 @@ type RuntimeServer interface {
 	AgentList(context.Context, *AgentListRequest) (*AgentListResponse, error)
 	AgentInfo(context.Context, *AgentInfoRequest) (*AgentInfoResponse, error)
 	AgentExec(context.Context, *AgentExecRequest) (*AgentExecResponse, error)
+	// Bypass-link variants of the scoped quartet. Same wire
+	// shape (responses are reused), no link-scope check — the
+	// caller can list/inspect/exec/delete any agent in the
+	// daemon. Granted to every agent today; a future capability
+	// wave will move them behind an operator opt-in.
+	AgentListAll(context.Context, *AgentListAllRequest) (*AgentListAllResponse, error)
+	AgentInfoAny(context.Context, *AgentInfoAnyRequest) (*AgentInfoResponse, error)
+	AgentExecAny(context.Context, *AgentExecAnyRequest) (*AgentExecResponse, error)
+	AgentDeleteAny(context.Context, *AgentDeleteAnyRequest) (*AgentDeleteResponse, error)
 	// Spawn / delete an agent and enumerate images / BIN images.
 	// All four require an agent token (rejected for operator and
 	// anonymous callers). agent_create rejects mounts and a
 	// build-from-source path — those land on AgentCreateFromSource
 	// and remain a separate capability operators opt into.
-	// agent_delete is unrestricted: any authenticated agent caller
-	// can delete any agent.
+	// agent_delete is link-scoped: caller must have the target in
+	// its JWT.Links. Use AgentDeleteAny for the unscoped variant.
 	AgentCreate(context.Context, *AgentCreateRequest) (*AgentCreateResponse, error)
 	AgentCreateFromSource(context.Context, *AgentCreateFromSourceRequest) (*AgentCreateResponse, error)
 	AgentDelete(context.Context, *AgentDeleteRequest) (*AgentDeleteResponse, error)
@@ -1001,6 +1063,18 @@ func (UnimplementedRuntimeServer) AgentInfo(context.Context, *AgentInfoRequest) 
 }
 func (UnimplementedRuntimeServer) AgentExec(context.Context, *AgentExecRequest) (*AgentExecResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method AgentExec not implemented")
+}
+func (UnimplementedRuntimeServer) AgentListAll(context.Context, *AgentListAllRequest) (*AgentListAllResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method AgentListAll not implemented")
+}
+func (UnimplementedRuntimeServer) AgentInfoAny(context.Context, *AgentInfoAnyRequest) (*AgentInfoResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method AgentInfoAny not implemented")
+}
+func (UnimplementedRuntimeServer) AgentExecAny(context.Context, *AgentExecAnyRequest) (*AgentExecResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method AgentExecAny not implemented")
+}
+func (UnimplementedRuntimeServer) AgentDeleteAny(context.Context, *AgentDeleteAnyRequest) (*AgentDeleteResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method AgentDeleteAny not implemented")
 }
 func (UnimplementedRuntimeServer) AgentCreate(context.Context, *AgentCreateRequest) (*AgentCreateResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method AgentCreate not implemented")
@@ -1825,6 +1899,78 @@ func _Runtime_AgentExec_Handler(srv interface{}, ctx context.Context, dec func(i
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Runtime_AgentListAll_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AgentListAllRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(RuntimeServer).AgentListAll(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Runtime_AgentListAll_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(RuntimeServer).AgentListAll(ctx, req.(*AgentListAllRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Runtime_AgentInfoAny_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AgentInfoAnyRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(RuntimeServer).AgentInfoAny(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Runtime_AgentInfoAny_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(RuntimeServer).AgentInfoAny(ctx, req.(*AgentInfoAnyRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Runtime_AgentExecAny_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AgentExecAnyRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(RuntimeServer).AgentExecAny(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Runtime_AgentExecAny_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(RuntimeServer).AgentExecAny(ctx, req.(*AgentExecAnyRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Runtime_AgentDeleteAny_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AgentDeleteAnyRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(RuntimeServer).AgentDeleteAny(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Runtime_AgentDeleteAny_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(RuntimeServer).AgentDeleteAny(ctx, req.(*AgentDeleteAnyRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _Runtime_AgentCreate_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(AgentCreateRequest)
 	if err := dec(in); err != nil {
@@ -2136,6 +2282,22 @@ var Runtime_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "AgentExec",
 			Handler:    _Runtime_AgentExec_Handler,
+		},
+		{
+			MethodName: "AgentListAll",
+			Handler:    _Runtime_AgentListAll_Handler,
+		},
+		{
+			MethodName: "AgentInfoAny",
+			Handler:    _Runtime_AgentInfoAny_Handler,
+		},
+		{
+			MethodName: "AgentExecAny",
+			Handler:    _Runtime_AgentExecAny_Handler,
+		},
+		{
+			MethodName: "AgentDeleteAny",
+			Handler:    _Runtime_AgentDeleteAny_Handler,
 		},
 		{
 			MethodName: "AgentCreate",

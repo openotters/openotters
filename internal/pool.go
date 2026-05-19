@@ -446,8 +446,30 @@ func runtimeCapsForExtras(extras AgentExtras) []agentpkg.Capability {
 		},
 		{
 			Name: "agent_delete",
-			Description: "Delete an agent by name or id. No restriction — any agent can " +
-				"be deleted, including operator-created ones.",
+			Description: "Delete a linked agent by name or id (target must be in your JWT.Links). " +
+				"For unlinked targets use agent_delete_any.",
+		},
+		{
+			Name: "agent_list_all",
+			Description: "List ALL agents in the daemon (bypasses the link-scope " +
+				"filter agent_list applies). Calling agent_exec on an unlinked " +
+				"result still fails unless you also have agent_exec_any.",
+		},
+		{
+			Name: "agent_info_any",
+			Description: "Inspect ANY agent's metadata by name or id (bypasses " +
+				"the link-scope check on agent_info).",
+		},
+		{
+			Name: "agent_exec_any",
+			Description: "Send a prompt to ANY agent by name or id and wait for the " +
+				"full reply (bypasses the link-scope check on agent_exec). Same " +
+				"session_id semantics as agent_exec.",
+		},
+		{
+			Name: "agent_delete_any",
+			Description: "Delete ANY agent by name or id (bypasses the link-scope " +
+				"check on agent_delete). Use sparingly — destructive.",
 		},
 		{
 			Name: "image_list",

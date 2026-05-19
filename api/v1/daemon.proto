@@ -111,13 +111,22 @@ service Runtime {
   rpc AgentList(AgentListRequest) returns (AgentListResponse);
   rpc AgentInfo(AgentInfoRequest) returns (AgentInfoResponse);
   rpc AgentExec(AgentExecRequest) returns (AgentExecResponse);
+  // Bypass-link variants of the scoped quartet. Same wire
+  // shape (responses are reused), no link-scope check — the
+  // caller can list/inspect/exec/delete any agent in the
+  // daemon. Granted to every agent today; a future capability
+  // wave will move them behind an operator opt-in.
+  rpc AgentListAll(AgentListAllRequest)     returns (AgentListAllResponse);
+  rpc AgentInfoAny(AgentInfoAnyRequest)     returns (AgentInfoResponse);
+  rpc AgentExecAny(AgentExecAnyRequest)     returns (AgentExecResponse);
+  rpc AgentDeleteAny(AgentDeleteAnyRequest) returns (AgentDeleteResponse);
   // Spawn / delete an agent and enumerate images / BIN images.
   // All four require an agent token (rejected for operator and
   // anonymous callers). agent_create rejects mounts and a
   // build-from-source path — those land on AgentCreateFromSource
   // and remain a separate capability operators opt into.
-  // agent_delete is unrestricted: any authenticated agent caller
-  // can delete any agent.
+  // agent_delete is link-scoped: caller must have the target in
+  // its JWT.Links. Use AgentDeleteAny for the unscoped variant.
   rpc AgentCreate(AgentCreateRequest)                     returns (AgentCreateResponse);
   rpc AgentCreateFromSource(AgentCreateFromSourceRequest) returns (AgentCreateResponse);
   rpc AgentDelete(AgentDeleteRequest)                     returns (AgentDeleteResponse);
@@ -1142,6 +1151,31 @@ message AgentCreateFromSourceRequest {
 
 message AgentDeleteRequest  { string ref = 1; }
 message AgentDeleteResponse {}
+
+// Bypass-link variants of the scoped agent_* RPCs. Same wire
+// shape on the response side (AgentListAll returns the same
+// LinkedAgent list; AgentInfoAny/ExecAny/DeleteAny reuse the
+// existing scoped response types). The handlers skip the
+// requireLinkedTarget step.
+
+message AgentListAllRequest  {}
+message AgentListAllResponse {
+  repeated LinkedAgent agents = 1;
+}
+
+message AgentInfoAnyRequest  { string ref = 1; }
+
+message AgentExecAnyRequest {
+  string ref        = 1;
+  string prompt     = 2;
+  // Optional. Same self-describing session-id pattern as
+  // AgentExecRequest.session_id — empty mints a fresh
+  // `from-agent:<caller-id>:<uuid>`; pass back the response's
+  // session_id to keep a thread alive.
+  string session_id = 3;
+}
+
+message AgentDeleteAnyRequest { string ref = 1; }
 
 // SelfReload — caller identified by JWT, no fields needed.
 message SelfReloadRequest  {}

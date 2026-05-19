@@ -127,6 +127,14 @@ const (
 	RuntimeAgentInfoProcedure = "/openotters.daemon.v1.Runtime/AgentInfo"
 	// RuntimeAgentExecProcedure is the fully-qualified name of the Runtime's AgentExec RPC.
 	RuntimeAgentExecProcedure = "/openotters.daemon.v1.Runtime/AgentExec"
+	// RuntimeAgentListAllProcedure is the fully-qualified name of the Runtime's AgentListAll RPC.
+	RuntimeAgentListAllProcedure = "/openotters.daemon.v1.Runtime/AgentListAll"
+	// RuntimeAgentInfoAnyProcedure is the fully-qualified name of the Runtime's AgentInfoAny RPC.
+	RuntimeAgentInfoAnyProcedure = "/openotters.daemon.v1.Runtime/AgentInfoAny"
+	// RuntimeAgentExecAnyProcedure is the fully-qualified name of the Runtime's AgentExecAny RPC.
+	RuntimeAgentExecAnyProcedure = "/openotters.daemon.v1.Runtime/AgentExecAny"
+	// RuntimeAgentDeleteAnyProcedure is the fully-qualified name of the Runtime's AgentDeleteAny RPC.
+	RuntimeAgentDeleteAnyProcedure = "/openotters.daemon.v1.Runtime/AgentDeleteAny"
 	// RuntimeAgentCreateProcedure is the fully-qualified name of the Runtime's AgentCreate RPC.
 	RuntimeAgentCreateProcedure = "/openotters.daemon.v1.Runtime/AgentCreate"
 	// RuntimeAgentCreateFromSourceProcedure is the fully-qualified name of the Runtime's
@@ -263,13 +271,22 @@ type RuntimeClient interface {
 	AgentList(context.Context, *connect.Request[v1.AgentListRequest]) (*connect.Response[v1.AgentListResponse], error)
 	AgentInfo(context.Context, *connect.Request[v1.AgentInfoRequest]) (*connect.Response[v1.AgentInfoResponse], error)
 	AgentExec(context.Context, *connect.Request[v1.AgentExecRequest]) (*connect.Response[v1.AgentExecResponse], error)
+	// Bypass-link variants of the scoped quartet. Same wire
+	// shape (responses are reused), no link-scope check — the
+	// caller can list/inspect/exec/delete any agent in the
+	// daemon. Granted to every agent today; a future capability
+	// wave will move them behind an operator opt-in.
+	AgentListAll(context.Context, *connect.Request[v1.AgentListAllRequest]) (*connect.Response[v1.AgentListAllResponse], error)
+	AgentInfoAny(context.Context, *connect.Request[v1.AgentInfoAnyRequest]) (*connect.Response[v1.AgentInfoResponse], error)
+	AgentExecAny(context.Context, *connect.Request[v1.AgentExecAnyRequest]) (*connect.Response[v1.AgentExecResponse], error)
+	AgentDeleteAny(context.Context, *connect.Request[v1.AgentDeleteAnyRequest]) (*connect.Response[v1.AgentDeleteResponse], error)
 	// Spawn / delete an agent and enumerate images / BIN images.
 	// All four require an agent token (rejected for operator and
 	// anonymous callers). agent_create rejects mounts and a
 	// build-from-source path — those land on AgentCreateFromSource
 	// and remain a separate capability operators opt into.
-	// agent_delete is unrestricted: any authenticated agent caller
-	// can delete any agent.
+	// agent_delete is link-scoped: caller must have the target in
+	// its JWT.Links. Use AgentDeleteAny for the unscoped variant.
 	AgentCreate(context.Context, *connect.Request[v1.AgentCreateRequest]) (*connect.Response[v1.AgentCreateResponse], error)
 	AgentCreateFromSource(context.Context, *connect.Request[v1.AgentCreateFromSourceRequest]) (*connect.Response[v1.AgentCreateResponse], error)
 	AgentDelete(context.Context, *connect.Request[v1.AgentDeleteRequest]) (*connect.Response[v1.AgentDeleteResponse], error)
@@ -572,6 +589,30 @@ func NewRuntimeClient(httpClient connect.HTTPClient, baseURL string, opts ...con
 			connect.WithSchema(runtimeMethods.ByName("AgentExec")),
 			connect.WithClientOptions(opts...),
 		),
+		agentListAll: connect.NewClient[v1.AgentListAllRequest, v1.AgentListAllResponse](
+			httpClient,
+			baseURL+RuntimeAgentListAllProcedure,
+			connect.WithSchema(runtimeMethods.ByName("AgentListAll")),
+			connect.WithClientOptions(opts...),
+		),
+		agentInfoAny: connect.NewClient[v1.AgentInfoAnyRequest, v1.AgentInfoResponse](
+			httpClient,
+			baseURL+RuntimeAgentInfoAnyProcedure,
+			connect.WithSchema(runtimeMethods.ByName("AgentInfoAny")),
+			connect.WithClientOptions(opts...),
+		),
+		agentExecAny: connect.NewClient[v1.AgentExecAnyRequest, v1.AgentExecResponse](
+			httpClient,
+			baseURL+RuntimeAgentExecAnyProcedure,
+			connect.WithSchema(runtimeMethods.ByName("AgentExecAny")),
+			connect.WithClientOptions(opts...),
+		),
+		agentDeleteAny: connect.NewClient[v1.AgentDeleteAnyRequest, v1.AgentDeleteResponse](
+			httpClient,
+			baseURL+RuntimeAgentDeleteAnyProcedure,
+			connect.WithSchema(runtimeMethods.ByName("AgentDeleteAny")),
+			connect.WithClientOptions(opts...),
+		),
 		agentCreate: connect.NewClient[v1.AgentCreateRequest, v1.AgentCreateResponse](
 			httpClient,
 			baseURL+RuntimeAgentCreateProcedure,
@@ -669,6 +710,10 @@ type runtimeClient struct {
 	agentList              *connect.Client[v1.AgentListRequest, v1.AgentListResponse]
 	agentInfo              *connect.Client[v1.AgentInfoRequest, v1.AgentInfoResponse]
 	agentExec              *connect.Client[v1.AgentExecRequest, v1.AgentExecResponse]
+	agentListAll           *connect.Client[v1.AgentListAllRequest, v1.AgentListAllResponse]
+	agentInfoAny           *connect.Client[v1.AgentInfoAnyRequest, v1.AgentInfoResponse]
+	agentExecAny           *connect.Client[v1.AgentExecAnyRequest, v1.AgentExecResponse]
+	agentDeleteAny         *connect.Client[v1.AgentDeleteAnyRequest, v1.AgentDeleteResponse]
 	agentCreate            *connect.Client[v1.AgentCreateRequest, v1.AgentCreateResponse]
 	agentCreateFromSource  *connect.Client[v1.AgentCreateFromSourceRequest, v1.AgentCreateResponse]
 	agentDelete            *connect.Client[v1.AgentDeleteRequest, v1.AgentDeleteResponse]
@@ -899,6 +944,26 @@ func (c *runtimeClient) AgentExec(ctx context.Context, req *connect.Request[v1.A
 	return c.agentExec.CallUnary(ctx, req)
 }
 
+// AgentListAll calls openotters.daemon.v1.Runtime.AgentListAll.
+func (c *runtimeClient) AgentListAll(ctx context.Context, req *connect.Request[v1.AgentListAllRequest]) (*connect.Response[v1.AgentListAllResponse], error) {
+	return c.agentListAll.CallUnary(ctx, req)
+}
+
+// AgentInfoAny calls openotters.daemon.v1.Runtime.AgentInfoAny.
+func (c *runtimeClient) AgentInfoAny(ctx context.Context, req *connect.Request[v1.AgentInfoAnyRequest]) (*connect.Response[v1.AgentInfoResponse], error) {
+	return c.agentInfoAny.CallUnary(ctx, req)
+}
+
+// AgentExecAny calls openotters.daemon.v1.Runtime.AgentExecAny.
+func (c *runtimeClient) AgentExecAny(ctx context.Context, req *connect.Request[v1.AgentExecAnyRequest]) (*connect.Response[v1.AgentExecResponse], error) {
+	return c.agentExecAny.CallUnary(ctx, req)
+}
+
+// AgentDeleteAny calls openotters.daemon.v1.Runtime.AgentDeleteAny.
+func (c *runtimeClient) AgentDeleteAny(ctx context.Context, req *connect.Request[v1.AgentDeleteAnyRequest]) (*connect.Response[v1.AgentDeleteResponse], error) {
+	return c.agentDeleteAny.CallUnary(ctx, req)
+}
+
 // AgentCreate calls openotters.daemon.v1.Runtime.AgentCreate.
 func (c *runtimeClient) AgentCreate(ctx context.Context, req *connect.Request[v1.AgentCreateRequest]) (*connect.Response[v1.AgentCreateResponse], error) {
 	return c.agentCreate.CallUnary(ctx, req)
@@ -1020,13 +1085,22 @@ type RuntimeHandler interface {
 	AgentList(context.Context, *connect.Request[v1.AgentListRequest]) (*connect.Response[v1.AgentListResponse], error)
 	AgentInfo(context.Context, *connect.Request[v1.AgentInfoRequest]) (*connect.Response[v1.AgentInfoResponse], error)
 	AgentExec(context.Context, *connect.Request[v1.AgentExecRequest]) (*connect.Response[v1.AgentExecResponse], error)
+	// Bypass-link variants of the scoped quartet. Same wire
+	// shape (responses are reused), no link-scope check — the
+	// caller can list/inspect/exec/delete any agent in the
+	// daemon. Granted to every agent today; a future capability
+	// wave will move them behind an operator opt-in.
+	AgentListAll(context.Context, *connect.Request[v1.AgentListAllRequest]) (*connect.Response[v1.AgentListAllResponse], error)
+	AgentInfoAny(context.Context, *connect.Request[v1.AgentInfoAnyRequest]) (*connect.Response[v1.AgentInfoResponse], error)
+	AgentExecAny(context.Context, *connect.Request[v1.AgentExecAnyRequest]) (*connect.Response[v1.AgentExecResponse], error)
+	AgentDeleteAny(context.Context, *connect.Request[v1.AgentDeleteAnyRequest]) (*connect.Response[v1.AgentDeleteResponse], error)
 	// Spawn / delete an agent and enumerate images / BIN images.
 	// All four require an agent token (rejected for operator and
 	// anonymous callers). agent_create rejects mounts and a
 	// build-from-source path — those land on AgentCreateFromSource
 	// and remain a separate capability operators opt into.
-	// agent_delete is unrestricted: any authenticated agent caller
-	// can delete any agent.
+	// agent_delete is link-scoped: caller must have the target in
+	// its JWT.Links. Use AgentDeleteAny for the unscoped variant.
 	AgentCreate(context.Context, *connect.Request[v1.AgentCreateRequest]) (*connect.Response[v1.AgentCreateResponse], error)
 	AgentCreateFromSource(context.Context, *connect.Request[v1.AgentCreateFromSourceRequest]) (*connect.Response[v1.AgentCreateResponse], error)
 	AgentDelete(context.Context, *connect.Request[v1.AgentDeleteRequest]) (*connect.Response[v1.AgentDeleteResponse], error)
@@ -1325,6 +1399,30 @@ func NewRuntimeHandler(svc RuntimeHandler, opts ...connect.HandlerOption) (strin
 		connect.WithSchema(runtimeMethods.ByName("AgentExec")),
 		connect.WithHandlerOptions(opts...),
 	)
+	runtimeAgentListAllHandler := connect.NewUnaryHandler(
+		RuntimeAgentListAllProcedure,
+		svc.AgentListAll,
+		connect.WithSchema(runtimeMethods.ByName("AgentListAll")),
+		connect.WithHandlerOptions(opts...),
+	)
+	runtimeAgentInfoAnyHandler := connect.NewUnaryHandler(
+		RuntimeAgentInfoAnyProcedure,
+		svc.AgentInfoAny,
+		connect.WithSchema(runtimeMethods.ByName("AgentInfoAny")),
+		connect.WithHandlerOptions(opts...),
+	)
+	runtimeAgentExecAnyHandler := connect.NewUnaryHandler(
+		RuntimeAgentExecAnyProcedure,
+		svc.AgentExecAny,
+		connect.WithSchema(runtimeMethods.ByName("AgentExecAny")),
+		connect.WithHandlerOptions(opts...),
+	)
+	runtimeAgentDeleteAnyHandler := connect.NewUnaryHandler(
+		RuntimeAgentDeleteAnyProcedure,
+		svc.AgentDeleteAny,
+		connect.WithSchema(runtimeMethods.ByName("AgentDeleteAny")),
+		connect.WithHandlerOptions(opts...),
+	)
 	runtimeAgentCreateHandler := connect.NewUnaryHandler(
 		RuntimeAgentCreateProcedure,
 		svc.AgentCreate,
@@ -1463,6 +1561,14 @@ func NewRuntimeHandler(svc RuntimeHandler, opts ...connect.HandlerOption) (strin
 			runtimeAgentInfoHandler.ServeHTTP(w, r)
 		case RuntimeAgentExecProcedure:
 			runtimeAgentExecHandler.ServeHTTP(w, r)
+		case RuntimeAgentListAllProcedure:
+			runtimeAgentListAllHandler.ServeHTTP(w, r)
+		case RuntimeAgentInfoAnyProcedure:
+			runtimeAgentInfoAnyHandler.ServeHTTP(w, r)
+		case RuntimeAgentExecAnyProcedure:
+			runtimeAgentExecAnyHandler.ServeHTTP(w, r)
+		case RuntimeAgentDeleteAnyProcedure:
+			runtimeAgentDeleteAnyHandler.ServeHTTP(w, r)
 		case RuntimeAgentCreateProcedure:
 			runtimeAgentCreateHandler.ServeHTTP(w, r)
 		case RuntimeAgentCreateFromSourceProcedure:
@@ -1662,6 +1768,22 @@ func (UnimplementedRuntimeHandler) AgentInfo(context.Context, *connect.Request[v
 
 func (UnimplementedRuntimeHandler) AgentExec(context.Context, *connect.Request[v1.AgentExecRequest]) (*connect.Response[v1.AgentExecResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("openotters.daemon.v1.Runtime.AgentExec is not implemented"))
+}
+
+func (UnimplementedRuntimeHandler) AgentListAll(context.Context, *connect.Request[v1.AgentListAllRequest]) (*connect.Response[v1.AgentListAllResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("openotters.daemon.v1.Runtime.AgentListAll is not implemented"))
+}
+
+func (UnimplementedRuntimeHandler) AgentInfoAny(context.Context, *connect.Request[v1.AgentInfoAnyRequest]) (*connect.Response[v1.AgentInfoResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("openotters.daemon.v1.Runtime.AgentInfoAny is not implemented"))
+}
+
+func (UnimplementedRuntimeHandler) AgentExecAny(context.Context, *connect.Request[v1.AgentExecAnyRequest]) (*connect.Response[v1.AgentExecResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("openotters.daemon.v1.Runtime.AgentExecAny is not implemented"))
+}
+
+func (UnimplementedRuntimeHandler) AgentDeleteAny(context.Context, *connect.Request[v1.AgentDeleteAnyRequest]) (*connect.Response[v1.AgentDeleteResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("openotters.daemon.v1.Runtime.AgentDeleteAny is not implemented"))
 }
 
 func (UnimplementedRuntimeHandler) AgentCreate(context.Context, *connect.Request[v1.AgentCreateRequest]) (*connect.Response[v1.AgentCreateResponse], error) {

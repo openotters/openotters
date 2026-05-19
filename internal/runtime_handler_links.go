@@ -333,8 +333,109 @@ func (h *runtimeHandler) SelfReload(
 // agent_delete. Self-delete is allowed at the RPC layer; the
 // runtime observes the token revocation on its next call and
 // exits.
+// AgentDelete is the link-scoped delete: target must appear in
+// the caller's JWT.Links. Callers that need to delete an
+// unlinked agent use AgentDeleteAny, which is granted by
+// default today (a future capability wave will gate it).
 func (h *runtimeHandler) AgentDelete(
 	ctx context.Context, req *connect.Request[daemonv1.AgentDeleteRequest],
+) (*connect.Response[daemonv1.AgentDeleteResponse], error) {
+	if req.Msg.GetRef() == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument,
+			errors.New("ref is required"))
+	}
+	target, err := h.requireLinkedTarget(ctx, req.Msg.GetRef())
+	if err != nil {
+		return nil, err
+	}
+	if rmErr := h.daemon.Remove(ctx, target.id.String()); rmErr != nil {
+		return nil, rmErr
+	}
+	return connect.NewResponse(&daemonv1.AgentDeleteResponse{}), nil
+}
+
+// ── bypass-link variants ────────────────────────────────────────
+//
+// These four RPCs do the same work as AgentList / AgentInfo /
+// AgentExec / AgentDelete but skip the requireLinkedTarget step.
+// Today every agent is granted access (the capability surface
+// includes the corresponding *_all / *_any entry). A future
+// capability-management wave will move them behind an explicit
+// operator grant; for now they exist to establish the surface so
+// supervisor agents can do their job without being pre-linked to
+// every spawn.
+
+// AgentListAll returns every agent in the daemon's pool, not
+// just the caller's outbound links.
+func (h *runtimeHandler) AgentListAll(
+	ctx context.Context, _ *connect.Request[daemonv1.AgentListAllRequest],
+) (*connect.Response[daemonv1.AgentListAllResponse], error) {
+	if _, err := requireAgentCaller(ctx); err != nil {
+		return nil, err
+	}
+	all := h.daemon.AllAgents()
+	return connect.NewResponse(&daemonv1.AgentListAllResponse{
+		Agents: linkedAgentsToProto(all),
+	}), nil
+}
+
+// AgentInfoAny inspects any agent by ref, regardless of links.
+func (h *runtimeHandler) AgentInfoAny(
+	ctx context.Context, req *connect.Request[daemonv1.AgentInfoAnyRequest],
+) (*connect.Response[daemonv1.AgentInfoResponse], error) {
+	if _, err := requireAgentCaller(ctx); err != nil {
+		return nil, err
+	}
+	if req.Msg.GetRef() == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument,
+			errors.New("ref is required"))
+	}
+	target, err := h.daemon.resolve(req.Msg.GetRef())
+	if err != nil {
+		return nil, connect.NewError(connect.CodeNotFound, err)
+	}
+	info, err := h.daemon.AgentInfo(target.id.String())
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(info), nil
+}
+
+// AgentExecAny dispatches a prompt to any agent by ref,
+// regardless of links. Session-id semantics match AgentExec.
+func (h *runtimeHandler) AgentExecAny(
+	ctx context.Context, req *connect.Request[daemonv1.AgentExecAnyRequest],
+) (*connect.Response[daemonv1.AgentExecResponse], error) {
+	caller, err := requireAgentCaller(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if req.Msg.GetRef() == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument,
+			errors.New("ref is required"))
+	}
+	target, err := h.daemon.resolve(req.Msg.GetRef())
+	if err != nil {
+		return nil, connect.NewError(connect.CodeNotFound, err)
+	}
+	sessionID := req.Msg.GetSessionId()
+	if sessionID == "" {
+		sessionID = "from-agent:" + caller.AgentRef + ":" + uuid.NewString()
+	}
+	resp, err := h.daemon.ChatWithAgent(ctx, target.name, sessionID, req.Msg.GetPrompt())
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(&daemonv1.AgentExecResponse{
+		Response:  resp,
+		SessionId: sessionID,
+	}), nil
+}
+
+// AgentDeleteAny removes any agent by ref. Bypass-link variant
+// of AgentDelete.
+func (h *runtimeHandler) AgentDeleteAny(
+	ctx context.Context, req *connect.Request[daemonv1.AgentDeleteAnyRequest],
 ) (*connect.Response[daemonv1.AgentDeleteResponse], error) {
 	if _, err := requireAgentCaller(ctx); err != nil {
 		return nil, err

@@ -248,13 +248,39 @@ export const agentInfo = Runtime.method.agentInfo;
 export const agentExec = Runtime.method.agentExec;
 
 /**
+ * Bypass-link variants of the scoped quartet. Same wire
+ * shape (responses are reused), no link-scope check — the
+ * caller can list/inspect/exec/delete any agent in the
+ * daemon. Granted to every agent today; a future capability
+ * wave will move them behind an operator opt-in.
+ *
+ * @generated from rpc openotters.daemon.v1.Runtime.AgentListAll
+ */
+export const agentListAll = Runtime.method.agentListAll;
+
+/**
+ * @generated from rpc openotters.daemon.v1.Runtime.AgentInfoAny
+ */
+export const agentInfoAny = Runtime.method.agentInfoAny;
+
+/**
+ * @generated from rpc openotters.daemon.v1.Runtime.AgentExecAny
+ */
+export const agentExecAny = Runtime.method.agentExecAny;
+
+/**
+ * @generated from rpc openotters.daemon.v1.Runtime.AgentDeleteAny
+ */
+export const agentDeleteAny = Runtime.method.agentDeleteAny;
+
+/**
  * Spawn / delete an agent and enumerate images / BIN images.
  * All four require an agent token (rejected for operator and
  * anonymous callers). agent_create rejects mounts and a
  * build-from-source path — those land on AgentCreateFromSource
  * and remain a separate capability operators opt into.
- * agent_delete is unrestricted: any authenticated agent caller
- * can delete any agent.
+ * agent_delete is link-scoped: caller must have the target in
+ * its JWT.Links. Use AgentDeleteAny for the unscoped variant.
  *
  * @generated from rpc openotters.daemon.v1.Runtime.AgentCreate
  */
