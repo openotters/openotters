@@ -331,6 +331,31 @@ export const selfReload = Runtime.method.selfReload;
 export const addAgentCapability = Runtime.method.addAgentCapability;
 
 /**
+ * SetAgentCapabilities replaces the agent's effective cap set
+ * with the given list. Idempotent against the current set; a
+ * single restart bounces the runtime once per save, no matter
+ * how many adds + removes the operator batched. Used by the
+ * dashboard's inline-edit Capabilities panel — every checkbox
+ * toggle stays client-side until the user clicks Save. Operator-
+ * only. Unknown cap names fail the call atomically (nothing
+ * persists).
+ *
+ * @generated from rpc openotters.daemon.v1.Runtime.SetAgentCapabilities
+ */
+export const setAgentCapabilities = Runtime.method.setAgentCapabilities;
+
+/**
+ * SetAgentLinks replaces the agent's outbound links with the
+ * given list of target refs (name or id). Same single-restart
+ * contract as SetAgentCapabilities. Operator-only. Targets that
+ * resolve to the source itself or to missing agents fail the
+ * call atomically.
+ *
+ * @generated from rpc openotters.daemon.v1.Runtime.SetAgentLinks
+ */
+export const setAgentLinks = Runtime.method.setAgentLinks;
+
+/**
  * ListCapabilities returns the daemon's full capability catalogue
  * (name + description per entry). Operator-only — used by the
  * dashboard's "Add capability" picker to populate the dropdown

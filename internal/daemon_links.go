@@ -203,6 +203,165 @@ func (d *Daemon) AddAgentCapability(ctx context.Context, ref, capName string) (b
 	return restarted, true, newCaps, nil
 }
 
+// SetAgentCapabilities replaces the agent's effective cap set with
+// `desired`. Idempotent against the current set; one restart per
+// save, no matter how many adds + removes the operator batched.
+//
+// Validation is atomic: any unknown cap name fails the call and
+// nothing persists. Operator-only — the handler enforces.
+func (d *Daemon) SetAgentCapabilities(ctx context.Context, ref string, desired []string) (bool, []string, error) {
+	ma, err := d.resolve(ref)
+	if err != nil {
+		return false, nil, fmt.Errorf("resolve %q: %w", ref, err)
+	}
+
+	// Dedup + atomic-validate before touching anything. Compare
+	// post-dedup so the "already in sync" no-op path works even
+	// when the caller sent duplicates.
+	known := catalogueNames(AgentExtras{
+		DaemonURL:  d.agentReachableURL(),
+		AgentToken: "placeholder",
+	})
+	seen := make(map[string]struct{}, len(desired))
+	clean := make([]string, 0, len(desired))
+	for _, n := range desired {
+		if n == "" {
+			continue
+		}
+		if _, ok := known[n]; !ok {
+			return false, nil, fmt.Errorf("unknown capability %q", n)
+		}
+		if _, dup := seen[n]; dup {
+			continue
+		}
+		seen[n] = struct{}{}
+		clean = append(clean, n)
+	}
+
+	// No-op when the desired set matches the current set exactly.
+	// Order doesn't matter — the runtime treats the list as a set.
+	if stringSetsEqual(ma.capabilities, clean) {
+		return false, append([]string(nil), ma.capabilities...), nil
+	}
+
+	ma.capabilities = clean
+	if persistErr := d.state.UpdateAgentCapabilities(ctx, ma.id.String(), clean); persistErr != nil {
+		return false, nil, fmt.Errorf("persist capabilities: %w", persistErr)
+	}
+
+	if rewriteErr := d.rewriteAgentCapabilitiesOnDisk(ma); rewriteErr != nil {
+		d.logger.Warn("rewrite agent.yaml / AGENT.md after cap set failed",
+			zap.String("id", ma.id.String()), zap.Error(rewriteErr))
+	}
+
+	restarted, err := d.RefreshAgentTokenAndMaybeRestart(ctx, ma)
+	if err != nil {
+		return false, clean, fmt.Errorf("refresh token / restart: %w", err)
+	}
+	return restarted, clean, nil
+}
+
+// SetAgentLinks replaces the source agent's outbound link set with
+// the resolved targets. Adds + removes are applied atomically
+// against the state store, then the source agent gets one JWT
+// refresh + restart. Targets are validated up-front: any unknown
+// ref or self-reference fails the call before any state mutation.
+//
+// Operator-only — the handler enforces authorization.
+func (d *Daemon) SetAgentLinks(ctx context.Context, sourceRef string, targetRefs []string) (bool, []string, error) {
+	source, err := d.resolve(sourceRef)
+	if err != nil {
+		return false, nil, fmt.Errorf("resolve source %q: %w", sourceRef, err)
+	}
+
+	// Resolve every target + reject self-links up front. Build a
+	// set so duplicates collapse silently.
+	desired := make(map[string]struct{}, len(targetRefs))
+	for _, ref := range targetRefs {
+		if ref == "" {
+			continue
+		}
+		target, resolveErr := d.resolve(ref)
+		if resolveErr != nil {
+			return false, nil, fmt.Errorf("resolve target %q: %w", ref, resolveErr)
+		}
+		if target.id == source.id {
+			return false, nil, fmt.Errorf("agent cannot link to itself")
+		}
+		desired[target.id.String()] = struct{}{}
+	}
+
+	current, err := d.state.AgentLinksListOutbound(ctx, source.id.String())
+	if err != nil {
+		return false, nil, fmt.Errorf("list current links: %w", err)
+	}
+	currentSet := make(map[string]struct{}, len(current))
+	for _, id := range current {
+		currentSet[id] = struct{}{}
+	}
+
+	// Apply additions then removals. Both ops are individually
+	// idempotent at the state-store level (AgentLinksAdd uses
+	// INSERT OR IGNORE, AgentLinksRemove tolerates missing rows),
+	// so a partial failure mid-loop leaves the set in a sensible
+	// intermediate state — the caller can retry.
+	mutated := false
+	for id := range desired {
+		if _, have := currentSet[id]; have {
+			continue
+		}
+		if addErr := d.state.AgentLinksAdd(ctx, source.id.String(), id, ""); addErr != nil {
+			return false, nil, fmt.Errorf("link %s → %s: %w", source.id, id, addErr)
+		}
+		mutated = true
+	}
+	for id := range currentSet {
+		if _, want := desired[id]; want {
+			continue
+		}
+		if rmErr := d.state.AgentLinksRemove(ctx, source.id.String(), id); rmErr != nil {
+			return false, nil, fmt.Errorf("unlink %s → %s: %w", source.id, id, rmErr)
+		}
+		mutated = true
+	}
+
+	resolvedIDs := make([]string, 0, len(desired))
+	for id := range desired {
+		resolvedIDs = append(resolvedIDs, id)
+	}
+
+	if !mutated {
+		return false, resolvedIDs, nil
+	}
+
+	restarted, err := d.refreshAgentTokenAndMaybeRestart(ctx, source)
+	if err != nil {
+		return false, resolvedIDs, fmt.Errorf("refresh token / restart: %w", err)
+	}
+	return restarted, resolvedIDs, nil
+}
+
+// stringSetsEqual reports whether a and b contain the same
+// distinct strings (order ignored, duplicates pre-collapsed).
+func stringSetsEqual(a, b []string) bool {
+	if len(a) != len(b) {
+		// Fast path: distinct-count mismatch must imply set
+		// difference IF caller already deduplicated. Both sites
+		// (SetAgentCapabilities's no-op check) do, so this is safe.
+		return false
+	}
+	seen := make(map[string]struct{}, len(a))
+	for _, s := range a {
+		seen[s] = struct{}{}
+	}
+	for _, s := range b {
+		if _, ok := seen[s]; !ok {
+			return false
+		}
+	}
+	return true
+}
+
 // rewriteAgentCapabilitiesOnDisk replaces the capabilities: block
 // in <agent-root>/etc/agent.yaml AND regenerates
 // <agent-root>/etc/context/AGENT.md so a restart picks up the new

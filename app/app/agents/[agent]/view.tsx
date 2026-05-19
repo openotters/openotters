@@ -5,7 +5,7 @@ import { useQueryClient } from "@tanstack/react-query"
 import { Activity, ArrowLeft, Bot, ChevronRight, FileText, Folder, History, KeyRound, Link2, ListChecks, MessageSquare, Pause, Play, ScrollText, ShieldCheck, StickyNote, Terminal, Trash2, Variable } from "lucide-react"
 import Link from "next/link"
 import { notFound, useRouter } from "next/navigation"
-import { useState } from "react"
+import { useMemo, useState } from "react"
 import { toast } from "sonner"
 import { ConfirmDelete } from "@/components/confirm-delete"
 import { StatusBadge } from "@/components/status-badge"
@@ -20,6 +20,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
 	deleteSession,
 	describeImage,
+	getAgentIdentity,
 	getAgentLogs,
 	listAgentLinks,
 	listAgentNotes,
@@ -74,8 +75,44 @@ export default function AgentDetailPage() {
 		{ ref: agentName },
 		{ enabled: agentName !== "", refetchInterval: 30_000 },
 	)
+	// Identity drives the cap-count badge on the Capabilities tab.
+	// Same refetch tier as notes / links — caps only mutate via the
+	// dashboard (or the Capabilities tab itself, which invalidates
+	// this query on save), so a slow tick is fine.
+	const identity = useQuery(
+		getAgentIdentity,
+		{ ref: agentName },
+		{ enabled: agentName !== "", refetchInterval: 30_000 },
+	)
 
-	const agentForJobs = list.data?.agents.find((a) => a.name === agentName)
+	const agent0 = list.data?.agents.find((a) => a.name === agentName)
+	// describeImage drives the Env + Contexts tabs' card lists; we
+	// lift the query here so the tab badges can read the count
+	// without each component running its own duplicate fetch.
+	// TanStack dedups identical queries so AgentEnvCard /
+	// AgentContextsCard re-use this result for free.
+	const desc = useQuery(
+		describeImage,
+		{ ref: agent0?.image ?? "" },
+		{ enabled: !!agent0?.image },
+	)
+	const imageCounts = useMemo(() => {
+		if (!desc.data?.config) return { envs: 0, contexts: 0 }
+		try {
+			const spec = JSON.parse(desc.data.config) as {
+				agent?: { envs?: unknown[]; contexts?: unknown[] }
+			}
+			return {
+				envs: Array.isArray(spec.agent?.envs) ? spec.agent.envs.length : 0,
+				contexts: Array.isArray(spec.agent?.contexts)
+					? spec.agent.contexts.length
+					: 0,
+			}
+		} catch {
+			return { envs: 0, contexts: 0 }
+		}
+	}, [desc.data?.config])
+	const agentForJobs = agent0
 	const jobs = useQuery(
 		listAsyncJobs,
 		{ agentId: agentForJobs?.id ?? "" },
@@ -229,11 +266,21 @@ export default function AgentDetailPage() {
 					</TabsTrigger>
 					<TabsTrigger className="justify-start gap-2" value="env">
 						<Variable className="h-4 w-4" />
-						Env
+						<span className="flex-1 text-left">Env</span>
+						{imageCounts.envs > 0 && (
+							<Badge className="ml-1" variant="secondary">
+								{imageCounts.envs}
+							</Badge>
+						)}
 					</TabsTrigger>
 					<TabsTrigger className="justify-start gap-2" value="contexts">
 						<FileText className="h-4 w-4" />
-						Contexts
+						<span className="flex-1 text-left">Contexts</span>
+						{imageCounts.contexts > 0 && (
+							<Badge className="ml-1" variant="secondary">
+								{imageCounts.contexts}
+							</Badge>
+						)}
 					</TabsTrigger>
 					<TabsTrigger className="justify-start gap-2" value="logs">
 						<ScrollText className="h-4 w-4" />
@@ -278,7 +325,13 @@ export default function AgentDetailPage() {
 					</TabsTrigger>
 					<TabsTrigger className="justify-start gap-2" value="capabilities">
 						<ShieldCheck className="h-4 w-4" />
-						Capabilities
+						<span className="flex-1 text-left">Capabilities</span>
+						{identity.data?.claims &&
+							identity.data.claims.capabilities.length > 0 && (
+								<Badge className="ml-1" variant="secondary">
+									{identity.data.claims.capabilities.length}
+								</Badge>
+							)}
 					</TabsTrigger>
 					<TabsTrigger className="justify-start gap-2" value="identity">
 						<KeyRound className="h-4 w-4" />
@@ -353,30 +406,34 @@ export default function AgentDetailPage() {
 								</CardHeader>
 								<CardContent>
 									{agent.tools.length === 0 ? (
-										<p className="py-4 text-center text-muted-foreground">
+										<p className="py-4 text-center text-muted-foreground text-sm">
 											No bins configured.
 										</p>
 									) : (
-										<div className="space-y-3">
+										<div className="grid gap-2 sm:grid-cols-2">
 											{agent.tools.map((tool) => (
-												<div className="rounded-lg border p-3" key={tool.name}>
-													<div className="flex items-center gap-2">
-														<Terminal className="h-4 w-4 text-primary" />
-														<span className="font-medium font-mono">{tool.name}</span>
+												<div
+													className="flex items-start gap-2 rounded-lg border p-3"
+													key={tool.name}>
+													<Terminal className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+													<div className="min-w-0 flex-1">
+														<code className="break-all font-mono font-medium text-sm">
+															{tool.name}
+														</code>
+														{tool.description && (
+															<p className="mt-1 text-muted-foreground text-xs">
+																{tool.description}
+															</p>
+														)}
+														<p className="mt-1 break-all font-mono text-muted-foreground/80 text-[11px]">
+															{tool.ref}
+														</p>
+														{tool.digest && (
+															<p className="font-mono text-muted-foreground/60 text-[11px]">
+																{tool.digest.substring(0, 19)}…
+															</p>
+														)}
 													</div>
-													{tool.description && (
-														<p className="mt-1 text-muted-foreground text-sm">
-															{tool.description}
-														</p>
-													)}
-													<p className="mt-1 font-mono text-muted-foreground text-xs">
-														{tool.ref}
-													</p>
-													{tool.digest && (
-														<p className="font-mono text-muted-foreground/70 text-xs">
-															{tool.digest.substring(0, 19)}…
-														</p>
-													)}
 												</div>
 											))}
 										</div>
@@ -650,19 +707,24 @@ function AgentEnvCard({ agentImage }: { agentImage: string }) {
 					</p>
 				)}
 				{envs.length > 0 && (
-					<div className="space-y-2">
+					<div className="grid gap-2 sm:grid-cols-2">
 						{envs.map((e) => (
-							<div className="rounded-lg border p-3" key={e.key}>
-								<div className="flex items-baseline gap-2">
-									<code className="font-mono font-semibold text-sm">{e.key}</code>
-									<span className="text-muted-foreground">=</span>
-									<code className="break-all font-mono text-muted-foreground text-sm">
-										{e.value || '""'}
-									</code>
+							<div className="flex items-start gap-2 rounded-lg border p-3" key={e.key}>
+								<Variable className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+								<div className="min-w-0 flex-1">
+									<div className="flex items-baseline gap-1.5">
+										<code className="break-all font-mono font-medium text-sm">
+											{e.key}
+										</code>
+										<span className="text-muted-foreground text-xs">=</span>
+										<code className="break-all font-mono text-muted-foreground text-xs">
+											{e.value || '""'}
+										</code>
+									</div>
+									{e.description && (
+										<p className="mt-1 text-muted-foreground text-xs">{e.description}</p>
+									)}
 								</div>
-								{e.description && (
-									<p className="mt-1 text-muted-foreground text-xs">{e.description}</p>
-								)}
 							</div>
 						))}
 					</div>
@@ -731,24 +793,30 @@ function AgentContextsCard({ agentImage }: { agentImage: string }) {
 					</p>
 				)}
 				{contexts.length > 0 && (
-					<Accordion className="w-full" collapsible type="single">
+					<Accordion className="space-y-2" collapsible type="single">
 						{contexts.map((ctx) => (
-							<AccordionItem key={ctx.name} value={ctx.name}>
-								<AccordionTrigger>
-									<div className="flex min-w-0 flex-1 flex-col items-start gap-0.5 pr-3 text-left">
-										<span className="break-all font-medium font-mono text-sm">
-											{ctx.name}
-										</span>
-										{ctx.description && (
-											<span className="text-muted-foreground text-xs">
-												{ctx.description}
+							<AccordionItem
+								className="rounded-lg border data-[state=open]:bg-muted/30"
+								key={ctx.name}
+								value={ctx.name}>
+								<AccordionTrigger className="px-3 py-2 hover:no-underline">
+									<div className="flex min-w-0 flex-1 items-start gap-2 text-left">
+										<FileText className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+										<div className="min-w-0 flex-1">
+											<span className="break-all font-medium font-mono text-sm">
+												{ctx.name}
 											</span>
-										)}
+											{ctx.description && (
+												<p className="mt-0.5 text-muted-foreground text-xs">
+													{ctx.description}
+												</p>
+											)}
+										</div>
 									</div>
 								</AccordionTrigger>
-								<AccordionContent>
+								<AccordionContent className="px-3 pb-3">
 									{ctx.content ? (
-										<pre className="overflow-x-auto whitespace-pre-wrap break-words rounded-md bg-muted p-3 font-mono text-xs">
+										<pre className="overflow-x-auto whitespace-pre-wrap break-words rounded-md bg-background p-3 font-mono text-xs">
 											{ctx.content}
 										</pre>
 									) : (

@@ -151,6 +151,11 @@ const (
 	// RuntimeAddAgentCapabilityProcedure is the fully-qualified name of the Runtime's
 	// AddAgentCapability RPC.
 	RuntimeAddAgentCapabilityProcedure = "/openotters.daemon.v1.Runtime/AddAgentCapability"
+	// RuntimeSetAgentCapabilitiesProcedure is the fully-qualified name of the Runtime's
+	// SetAgentCapabilities RPC.
+	RuntimeSetAgentCapabilitiesProcedure = "/openotters.daemon.v1.Runtime/SetAgentCapabilities"
+	// RuntimeSetAgentLinksProcedure is the fully-qualified name of the Runtime's SetAgentLinks RPC.
+	RuntimeSetAgentLinksProcedure = "/openotters.daemon.v1.Runtime/SetAgentLinks"
 	// RuntimeListCapabilitiesProcedure is the fully-qualified name of the Runtime's ListCapabilities
 	// RPC.
 	RuntimeListCapabilitiesProcedure = "/openotters.daemon.v1.Runtime/ListCapabilities"
@@ -312,6 +317,21 @@ type RuntimeClient interface {
 	// caps. Idempotent: re-adding an already-granted cap returns
 	// ok without restarting.
 	AddAgentCapability(context.Context, *connect.Request[v1.AddAgentCapabilityRequest]) (*connect.Response[v1.AddAgentCapabilityResponse], error)
+	// SetAgentCapabilities replaces the agent's effective cap set
+	// with the given list. Idempotent against the current set; a
+	// single restart bounces the runtime once per save, no matter
+	// how many adds + removes the operator batched. Used by the
+	// dashboard's inline-edit Capabilities panel — every checkbox
+	// toggle stays client-side until the user clicks Save. Operator-
+	// only. Unknown cap names fail the call atomically (nothing
+	// persists).
+	SetAgentCapabilities(context.Context, *connect.Request[v1.SetAgentCapabilitiesRequest]) (*connect.Response[v1.SetAgentCapabilitiesResponse], error)
+	// SetAgentLinks replaces the agent's outbound links with the
+	// given list of target refs (name or id). Same single-restart
+	// contract as SetAgentCapabilities. Operator-only. Targets that
+	// resolve to the source itself or to missing agents fail the
+	// call atomically.
+	SetAgentLinks(context.Context, *connect.Request[v1.SetAgentLinksRequest]) (*connect.Response[v1.SetAgentLinksResponse], error)
 	// ListCapabilities returns the daemon's full capability catalogue
 	// (name + description per entry). Operator-only — used by the
 	// dashboard's "Add capability" picker to populate the dropdown
@@ -675,6 +695,18 @@ func NewRuntimeClient(httpClient connect.HTTPClient, baseURL string, opts ...con
 			connect.WithSchema(runtimeMethods.ByName("AddAgentCapability")),
 			connect.WithClientOptions(opts...),
 		),
+		setAgentCapabilities: connect.NewClient[v1.SetAgentCapabilitiesRequest, v1.SetAgentCapabilitiesResponse](
+			httpClient,
+			baseURL+RuntimeSetAgentCapabilitiesProcedure,
+			connect.WithSchema(runtimeMethods.ByName("SetAgentCapabilities")),
+			connect.WithClientOptions(opts...),
+		),
+		setAgentLinks: connect.NewClient[v1.SetAgentLinksRequest, v1.SetAgentLinksResponse](
+			httpClient,
+			baseURL+RuntimeSetAgentLinksProcedure,
+			connect.WithSchema(runtimeMethods.ByName("SetAgentLinks")),
+			connect.WithClientOptions(opts...),
+		),
 		listCapabilities: connect.NewClient[v1.ListCapabilitiesRequest, v1.ListCapabilitiesResponse](
 			httpClient,
 			baseURL+RuntimeListCapabilitiesProcedure,
@@ -753,6 +785,8 @@ type runtimeClient struct {
 	binList                *connect.Client[v1.BinListRequest, v1.BinListResponse]
 	selfReload             *connect.Client[v1.SelfReloadRequest, v1.SelfReloadResponse]
 	addAgentCapability     *connect.Client[v1.AddAgentCapabilityRequest, v1.AddAgentCapabilityResponse]
+	setAgentCapabilities   *connect.Client[v1.SetAgentCapabilitiesRequest, v1.SetAgentCapabilitiesResponse]
+	setAgentLinks          *connect.Client[v1.SetAgentLinksRequest, v1.SetAgentLinksResponse]
 	listCapabilities       *connect.Client[v1.ListCapabilitiesRequest, v1.ListCapabilitiesResponse]
 	getAgentIdentity       *connect.Client[v1.GetAgentIdentityRequest, v1.GetAgentIdentityResponse]
 	watchAsyncJob          *connect.Client[v1.WatchAsyncJobRequest, v1.WatchAsyncJobResponse]
@@ -1033,6 +1067,16 @@ func (c *runtimeClient) AddAgentCapability(ctx context.Context, req *connect.Req
 	return c.addAgentCapability.CallUnary(ctx, req)
 }
 
+// SetAgentCapabilities calls openotters.daemon.v1.Runtime.SetAgentCapabilities.
+func (c *runtimeClient) SetAgentCapabilities(ctx context.Context, req *connect.Request[v1.SetAgentCapabilitiesRequest]) (*connect.Response[v1.SetAgentCapabilitiesResponse], error) {
+	return c.setAgentCapabilities.CallUnary(ctx, req)
+}
+
+// SetAgentLinks calls openotters.daemon.v1.Runtime.SetAgentLinks.
+func (c *runtimeClient) SetAgentLinks(ctx context.Context, req *connect.Request[v1.SetAgentLinksRequest]) (*connect.Response[v1.SetAgentLinksResponse], error) {
+	return c.setAgentLinks.CallUnary(ctx, req)
+}
+
 // ListCapabilities calls openotters.daemon.v1.Runtime.ListCapabilities.
 func (c *runtimeClient) ListCapabilities(ctx context.Context, req *connect.Request[v1.ListCapabilitiesRequest]) (*connect.Response[v1.ListCapabilitiesResponse], error) {
 	return c.listCapabilities.CallUnary(ctx, req)
@@ -1164,6 +1208,21 @@ type RuntimeHandler interface {
 	// caps. Idempotent: re-adding an already-granted cap returns
 	// ok without restarting.
 	AddAgentCapability(context.Context, *connect.Request[v1.AddAgentCapabilityRequest]) (*connect.Response[v1.AddAgentCapabilityResponse], error)
+	// SetAgentCapabilities replaces the agent's effective cap set
+	// with the given list. Idempotent against the current set; a
+	// single restart bounces the runtime once per save, no matter
+	// how many adds + removes the operator batched. Used by the
+	// dashboard's inline-edit Capabilities panel — every checkbox
+	// toggle stays client-side until the user clicks Save. Operator-
+	// only. Unknown cap names fail the call atomically (nothing
+	// persists).
+	SetAgentCapabilities(context.Context, *connect.Request[v1.SetAgentCapabilitiesRequest]) (*connect.Response[v1.SetAgentCapabilitiesResponse], error)
+	// SetAgentLinks replaces the agent's outbound links with the
+	// given list of target refs (name or id). Same single-restart
+	// contract as SetAgentCapabilities. Operator-only. Targets that
+	// resolve to the source itself or to missing agents fail the
+	// call atomically.
+	SetAgentLinks(context.Context, *connect.Request[v1.SetAgentLinksRequest]) (*connect.Response[v1.SetAgentLinksResponse], error)
 	// ListCapabilities returns the daemon's full capability catalogue
 	// (name + description per entry). Operator-only — used by the
 	// dashboard's "Add capability" picker to populate the dropdown
@@ -1523,6 +1582,18 @@ func NewRuntimeHandler(svc RuntimeHandler, opts ...connect.HandlerOption) (strin
 		connect.WithSchema(runtimeMethods.ByName("AddAgentCapability")),
 		connect.WithHandlerOptions(opts...),
 	)
+	runtimeSetAgentCapabilitiesHandler := connect.NewUnaryHandler(
+		RuntimeSetAgentCapabilitiesProcedure,
+		svc.SetAgentCapabilities,
+		connect.WithSchema(runtimeMethods.ByName("SetAgentCapabilities")),
+		connect.WithHandlerOptions(opts...),
+	)
+	runtimeSetAgentLinksHandler := connect.NewUnaryHandler(
+		RuntimeSetAgentLinksProcedure,
+		svc.SetAgentLinks,
+		connect.WithSchema(runtimeMethods.ByName("SetAgentLinks")),
+		connect.WithHandlerOptions(opts...),
+	)
 	runtimeListCapabilitiesHandler := connect.NewUnaryHandler(
 		RuntimeListCapabilitiesProcedure,
 		svc.ListCapabilities,
@@ -1653,6 +1724,10 @@ func NewRuntimeHandler(svc RuntimeHandler, opts ...connect.HandlerOption) (strin
 			runtimeSelfReloadHandler.ServeHTTP(w, r)
 		case RuntimeAddAgentCapabilityProcedure:
 			runtimeAddAgentCapabilityHandler.ServeHTTP(w, r)
+		case RuntimeSetAgentCapabilitiesProcedure:
+			runtimeSetAgentCapabilitiesHandler.ServeHTTP(w, r)
+		case RuntimeSetAgentLinksProcedure:
+			runtimeSetAgentLinksHandler.ServeHTTP(w, r)
 		case RuntimeListCapabilitiesProcedure:
 			runtimeListCapabilitiesHandler.ServeHTTP(w, r)
 		case RuntimeGetAgentIdentityProcedure:
@@ -1886,6 +1961,14 @@ func (UnimplementedRuntimeHandler) SelfReload(context.Context, *connect.Request[
 
 func (UnimplementedRuntimeHandler) AddAgentCapability(context.Context, *connect.Request[v1.AddAgentCapabilityRequest]) (*connect.Response[v1.AddAgentCapabilityResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("openotters.daemon.v1.Runtime.AddAgentCapability is not implemented"))
+}
+
+func (UnimplementedRuntimeHandler) SetAgentCapabilities(context.Context, *connect.Request[v1.SetAgentCapabilitiesRequest]) (*connect.Response[v1.SetAgentCapabilitiesResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("openotters.daemon.v1.Runtime.SetAgentCapabilities is not implemented"))
+}
+
+func (UnimplementedRuntimeHandler) SetAgentLinks(context.Context, *connect.Request[v1.SetAgentLinksRequest]) (*connect.Response[v1.SetAgentLinksResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("openotters.daemon.v1.Runtime.SetAgentLinks is not implemented"))
 }
 
 func (UnimplementedRuntimeHandler) ListCapabilities(context.Context, *connect.Request[v1.ListCapabilitiesRequest]) (*connect.Response[v1.ListCapabilitiesResponse], error) {

@@ -796,6 +796,55 @@ func (h *runtimeHandler) AddAgentCapability(
 	}), nil
 }
 
+// SetAgentCapabilities replaces an agent's effective cap set in
+// one shot — the batch mutator behind the dashboard's inline-edit
+// Capabilities panel. Operator-only.
+func (h *runtimeHandler) SetAgentCapabilities(
+	ctx context.Context, req *connect.Request[daemonv1.SetAgentCapabilitiesRequest],
+) (*connect.Response[daemonv1.SetAgentCapabilitiesResponse], error) {
+	if c := auth.ClaimsFromContext(ctx); c == nil || c.AgentRef != "" {
+		return nil, connect.NewError(connect.CodeUnauthenticated,
+			errors.New("SetAgentCapabilities requires an operator token"))
+	}
+	ref := req.Msg.GetRef()
+	if ref == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument,
+			errors.New("ref is required"))
+	}
+	restarted, caps, err := h.daemon.SetAgentCapabilities(ctx, ref, req.Msg.GetCapabilities())
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+	}
+	return connect.NewResponse(&daemonv1.SetAgentCapabilitiesResponse{
+		Restarted:    restarted,
+		Capabilities: caps,
+	}), nil
+}
+
+// SetAgentLinks replaces the source agent's outbound link set.
+// Adds + removes are batched into a single restart. Operator-only.
+func (h *runtimeHandler) SetAgentLinks(
+	ctx context.Context, req *connect.Request[daemonv1.SetAgentLinksRequest],
+) (*connect.Response[daemonv1.SetAgentLinksResponse], error) {
+	if c := auth.ClaimsFromContext(ctx); c == nil || c.AgentRef != "" {
+		return nil, connect.NewError(connect.CodeUnauthenticated,
+			errors.New("SetAgentLinks requires an operator token"))
+	}
+	ref := req.Msg.GetRef()
+	if ref == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument,
+			errors.New("ref is required"))
+	}
+	restarted, targets, err := h.daemon.SetAgentLinks(ctx, ref, req.Msg.GetTargets())
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+	}
+	return connect.NewResponse(&daemonv1.SetAgentLinksResponse{
+		Restarted: restarted,
+		Targets:   targets,
+	}), nil
+}
+
 // ListCapabilities dumps the daemon's full capability catalogue —
 // name + human-readable description per entry. Operator-only; the
 // dashboard's "Add capability" picker consumes this. Catalogue

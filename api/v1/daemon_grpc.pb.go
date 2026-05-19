@@ -74,6 +74,8 @@ const (
 	Runtime_BinList_FullMethodName                = "/openotters.daemon.v1.Runtime/BinList"
 	Runtime_SelfReload_FullMethodName             = "/openotters.daemon.v1.Runtime/SelfReload"
 	Runtime_AddAgentCapability_FullMethodName     = "/openotters.daemon.v1.Runtime/AddAgentCapability"
+	Runtime_SetAgentCapabilities_FullMethodName   = "/openotters.daemon.v1.Runtime/SetAgentCapabilities"
+	Runtime_SetAgentLinks_FullMethodName          = "/openotters.daemon.v1.Runtime/SetAgentLinks"
 	Runtime_ListCapabilities_FullMethodName       = "/openotters.daemon.v1.Runtime/ListCapabilities"
 	Runtime_GetAgentIdentity_FullMethodName       = "/openotters.daemon.v1.Runtime/GetAgentIdentity"
 	Runtime_WatchAsyncJob_FullMethodName          = "/openotters.daemon.v1.Runtime/WatchAsyncJob"
@@ -197,6 +199,21 @@ type RuntimeClient interface {
 	// caps. Idempotent: re-adding an already-granted cap returns
 	// ok without restarting.
 	AddAgentCapability(ctx context.Context, in *AddAgentCapabilityRequest, opts ...grpc.CallOption) (*AddAgentCapabilityResponse, error)
+	// SetAgentCapabilities replaces the agent's effective cap set
+	// with the given list. Idempotent against the current set; a
+	// single restart bounces the runtime once per save, no matter
+	// how many adds + removes the operator batched. Used by the
+	// dashboard's inline-edit Capabilities panel — every checkbox
+	// toggle stays client-side until the user clicks Save. Operator-
+	// only. Unknown cap names fail the call atomically (nothing
+	// persists).
+	SetAgentCapabilities(ctx context.Context, in *SetAgentCapabilitiesRequest, opts ...grpc.CallOption) (*SetAgentCapabilitiesResponse, error)
+	// SetAgentLinks replaces the agent's outbound links with the
+	// given list of target refs (name or id). Same single-restart
+	// contract as SetAgentCapabilities. Operator-only. Targets that
+	// resolve to the source itself or to missing agents fail the
+	// call atomically.
+	SetAgentLinks(ctx context.Context, in *SetAgentLinksRequest, opts ...grpc.CallOption) (*SetAgentLinksResponse, error)
 	// ListCapabilities returns the daemon's full capability catalogue
 	// (name + description per entry). Operator-only — used by the
 	// dashboard's "Add capability" picker to populate the dropdown
@@ -795,6 +812,26 @@ func (c *runtimeClient) AddAgentCapability(ctx context.Context, in *AddAgentCapa
 	return out, nil
 }
 
+func (c *runtimeClient) SetAgentCapabilities(ctx context.Context, in *SetAgentCapabilitiesRequest, opts ...grpc.CallOption) (*SetAgentCapabilitiesResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SetAgentCapabilitiesResponse)
+	err := c.cc.Invoke(ctx, Runtime_SetAgentCapabilities_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *runtimeClient) SetAgentLinks(ctx context.Context, in *SetAgentLinksRequest, opts ...grpc.CallOption) (*SetAgentLinksResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SetAgentLinksResponse)
+	err := c.cc.Invoke(ctx, Runtime_SetAgentLinks_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *runtimeClient) ListCapabilities(ctx context.Context, in *ListCapabilitiesRequest, opts ...grpc.CallOption) (*ListCapabilitiesResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(ListCapabilitiesResponse)
@@ -952,6 +989,21 @@ type RuntimeServer interface {
 	// caps. Idempotent: re-adding an already-granted cap returns
 	// ok without restarting.
 	AddAgentCapability(context.Context, *AddAgentCapabilityRequest) (*AddAgentCapabilityResponse, error)
+	// SetAgentCapabilities replaces the agent's effective cap set
+	// with the given list. Idempotent against the current set; a
+	// single restart bounces the runtime once per save, no matter
+	// how many adds + removes the operator batched. Used by the
+	// dashboard's inline-edit Capabilities panel — every checkbox
+	// toggle stays client-side until the user clicks Save. Operator-
+	// only. Unknown cap names fail the call atomically (nothing
+	// persists).
+	SetAgentCapabilities(context.Context, *SetAgentCapabilitiesRequest) (*SetAgentCapabilitiesResponse, error)
+	// SetAgentLinks replaces the agent's outbound links with the
+	// given list of target refs (name or id). Same single-restart
+	// contract as SetAgentCapabilities. Operator-only. Targets that
+	// resolve to the source itself or to missing agents fail the
+	// call atomically.
+	SetAgentLinks(context.Context, *SetAgentLinksRequest) (*SetAgentLinksResponse, error)
 	// ListCapabilities returns the daemon's full capability catalogue
 	// (name + description per entry). Operator-only — used by the
 	// dashboard's "Add capability" picker to populate the dropdown
@@ -1146,6 +1198,12 @@ func (UnimplementedRuntimeServer) SelfReload(context.Context, *SelfReloadRequest
 }
 func (UnimplementedRuntimeServer) AddAgentCapability(context.Context, *AddAgentCapabilityRequest) (*AddAgentCapabilityResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method AddAgentCapability not implemented")
+}
+func (UnimplementedRuntimeServer) SetAgentCapabilities(context.Context, *SetAgentCapabilitiesRequest) (*SetAgentCapabilitiesResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method SetAgentCapabilities not implemented")
+}
+func (UnimplementedRuntimeServer) SetAgentLinks(context.Context, *SetAgentLinksRequest) (*SetAgentLinksResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method SetAgentLinks not implemented")
 }
 func (UnimplementedRuntimeServer) ListCapabilities(context.Context, *ListCapabilitiesRequest) (*ListCapabilitiesResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListCapabilities not implemented")
@@ -2153,6 +2211,42 @@ func _Runtime_AddAgentCapability_Handler(srv interface{}, ctx context.Context, d
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Runtime_SetAgentCapabilities_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SetAgentCapabilitiesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(RuntimeServer).SetAgentCapabilities(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Runtime_SetAgentCapabilities_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(RuntimeServer).SetAgentCapabilities(ctx, req.(*SetAgentCapabilitiesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Runtime_SetAgentLinks_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SetAgentLinksRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(RuntimeServer).SetAgentLinks(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Runtime_SetAgentLinks_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(RuntimeServer).SetAgentLinks(ctx, req.(*SetAgentLinksRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _Runtime_ListCapabilities_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(ListCapabilitiesRequest)
 	if err := dec(in); err != nil {
@@ -2418,6 +2512,14 @@ var Runtime_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "AddAgentCapability",
 			Handler:    _Runtime_AddAgentCapability_Handler,
+		},
+		{
+			MethodName: "SetAgentCapabilities",
+			Handler:    _Runtime_SetAgentCapabilities_Handler,
+		},
+		{
+			MethodName: "SetAgentLinks",
+			Handler:    _Runtime_SetAgentLinks_Handler,
 		},
 		{
 			MethodName: "ListCapabilities",

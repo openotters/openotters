@@ -148,6 +148,23 @@ service Runtime {
   // ok without restarting.
   rpc AddAgentCapability(AddAgentCapabilityRequest) returns (AddAgentCapabilityResponse);
 
+  // SetAgentCapabilities replaces the agent's effective cap set
+  // with the given list. Idempotent against the current set; a
+  // single restart bounces the runtime once per save, no matter
+  // how many adds + removes the operator batched. Used by the
+  // dashboard's inline-edit Capabilities panel — every checkbox
+  // toggle stays client-side until the user clicks Save. Operator-
+  // only. Unknown cap names fail the call atomically (nothing
+  // persists).
+  rpc SetAgentCapabilities(SetAgentCapabilitiesRequest) returns (SetAgentCapabilitiesResponse);
+
+  // SetAgentLinks replaces the agent's outbound links with the
+  // given list of target refs (name or id). Same single-restart
+  // contract as SetAgentCapabilities. Operator-only. Targets that
+  // resolve to the source itself or to missing agents fail the
+  // call atomically.
+  rpc SetAgentLinks(SetAgentLinksRequest) returns (SetAgentLinksResponse);
+
   // ListCapabilities returns the daemon's full capability catalogue
   // (name + description per entry). Operator-only — used by the
   // dashboard's "Add capability" picker to populate the dropdown
@@ -1220,6 +1237,31 @@ message AddAgentCapabilityResponse {
   // The full updated cap set after the grant, so the caller
   // doesn't have to refetch.
   repeated string capabilities = 3;
+}
+
+// SetAgentCapabilities — replace-all mutator backing the
+// dashboard's batch save. The full desired set lives in
+// `capabilities`; the daemon computes the diff and restarts the
+// runtime once.
+message SetAgentCapabilitiesRequest {
+  string ref               = 1; // agent name or id
+  repeated string capabilities = 2; // desired full set (catalogued names)
+}
+message SetAgentCapabilitiesResponse {
+  bool restarted               = 1;
+  repeated string capabilities = 2; // the set actually persisted (dedup applied)
+}
+
+// SetAgentLinks — replace-all mutator for the agent's outbound
+// link table. Targets are agent refs (name or id) which the
+// daemon resolves; unknown / self-referential refs fail the call.
+message SetAgentLinksRequest {
+  string ref              = 1; // source agent (name or id)
+  repeated string targets = 2; // desired outbound link set
+}
+message SetAgentLinksResponse {
+  bool restarted          = 1;
+  repeated string targets = 2; // resolved target ids actually persisted
 }
 
 // ListCapabilities — operator-only catalogue dump. No filters; the
