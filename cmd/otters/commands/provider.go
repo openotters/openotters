@@ -67,21 +67,44 @@ var staticProviderPresets = []providerPreset{
 	{ID: "anthropic", Display: "Anthropic", APIBase: "https://api.anthropic.com"},
 	{ID: "openai", Display: "OpenAI", APIBase: "https://api.openai.com/v1"},
 	{ID: "openrouter", Display: "OpenRouter", APIBase: "https://openrouter.ai/api/v1"},
+	{ID: "gemini", Display: "Google Gemini", APIBase: "https://generativelanguage.googleapis.com/v1beta/openai/"},
+	{ID: "azure", Display: "Azure OpenAI", APIBase: ""},
+	{ID: "bedrock", Display: "AWS Bedrock", APIBase: ""},
+	{ID: "vercel", Display: "Vercel AI Gateway", APIBase: "https://ai-gateway.vercel.sh/v1"},
 	{ID: "ollama", Display: "Ollama (local)", APIBase: "http://localhost:11434/v1"},
 }
 
+// catwalkTypeSupported gates which Catwalk provider types make it into
+// the interactive `otters provider add` preset list. The set tracks
+// what the runtime's createProvider switch can actually route — adding
+// a type here that the runtime can't speak yields a configured-but-
+// dead provider, which is worse than not surfacing it at all.
+//
+// Runtime support matrix (workspace/runtime/pkg/agent/agent.go):
+//
+//	TypeAnthropic     → fantasy/providers/anthropic    (native)
+//	TypeOpenAI        → fantasy/providers/openai       (native)
+//	TypeOpenAICompat  → fantasy/providers/openaicompat (default fallback)
+//	TypeOpenRouter    → fantasy/providers/openrouter   (native)
+//	TypeGoogle        → fantasy/providers/google       (native, Gemini API key path)
+//	TypeAzure         → fantasy/providers/azure        (native)
+//	TypeBedrock       → fantasy/providers/bedrock      (native)
+//	TypeVercel        → fantasy/providers/vercel       (native)
+//	TypeVertexAI      → ❌  needs WithVertex(project, location) not WithGeminiAPIKey;
+//	                       leave excluded until the runtime exposes a
+//	                       separate vertex slug with the right auth shape
 func catwalkTypeSupported(t catwalk.Type) bool {
 	switch t {
 	case catwalk.TypeAnthropic,
 		catwalk.TypeOpenAI,
 		catwalk.TypeOpenAICompat,
-		catwalk.TypeOpenRouter:
-		return true
-	case catwalk.TypeAzure,
-		catwalk.TypeBedrock,
+		catwalk.TypeOpenRouter,
 		catwalk.TypeGoogle,
-		catwalk.TypeVercel,
-		catwalk.TypeVertexAI:
+		catwalk.TypeAzure,
+		catwalk.TypeBedrock,
+		catwalk.TypeVercel:
+		return true
+	case catwalk.TypeVertexAI:
 		return false
 	}
 
