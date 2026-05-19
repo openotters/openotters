@@ -2962,11 +2962,17 @@ func (x *ChatStreamRequest) GetRegenerate() bool {
 }
 
 type ChatStreamEvent struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Type          string                 `protobuf:"bytes,1,opt,name=type,proto3" json:"type,omitempty"`
-	Step          int32                  `protobuf:"varint,2,opt,name=step,proto3" json:"step,omitempty"`
-	Tool          string                 `protobuf:"bytes,3,opt,name=tool,proto3" json:"tool,omitempty"`
-	Content       string                 `protobuf:"bytes,4,opt,name=content,proto3" json:"content,omitempty"`
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	Type    string                 `protobuf:"bytes,1,opt,name=type,proto3" json:"type,omitempty"`
+	Step    int32                  `protobuf:"varint,2,opt,name=step,proto3" json:"step,omitempty"`
+	Tool    string                 `protobuf:"bytes,3,opt,name=tool,proto3" json:"tool,omitempty"`
+	Content string                 `protobuf:"bytes,4,opt,name=content,proto3" json:"content,omitempty"`
+	// tool_id correlates tool.call and tool.result events for the
+	// same invocation. Stable for the lifetime of one tool call.
+	ToolId string `protobuf:"bytes,5,opt,name=tool_id,json=toolId,proto3" json:"tool_id,omitempty"`
+	// duration_ms is the wall-clock time the tool spent executing.
+	// Set on tool.result events; zero on every other type.
+	DurationMs    int64 `protobuf:"varint,6,opt,name=duration_ms,json=durationMs,proto3" json:"duration_ms,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3027,6 +3033,20 @@ func (x *ChatStreamEvent) GetContent() string {
 		return x.Content
 	}
 	return ""
+}
+
+func (x *ChatStreamEvent) GetToolId() string {
+	if x != nil {
+		return x.ToolId
+	}
+	return ""
+}
+
+func (x *ChatStreamEvent) GetDurationMs() int64 {
+	if x != nil {
+		return x.DurationMs
+	}
+	return 0
 }
 
 type ListSessionMessagesRequest struct {
@@ -8787,12 +8807,15 @@ const file_v1_daemon_proto_rawDesc = "" +
 	"\x06prompt\x18\x03 \x01(\tR\x06prompt\x12\x1e\n" +
 	"\n" +
 	"regenerate\x18\x04 \x01(\bR\n" +
-	"regenerate\"g\n" +
+	"regenerate\"\xa1\x01\n" +
 	"\x0fChatStreamEvent\x12\x12\n" +
 	"\x04type\x18\x01 \x01(\tR\x04type\x12\x12\n" +
 	"\x04step\x18\x02 \x01(\x05R\x04step\x12\x12\n" +
 	"\x04tool\x18\x03 \x01(\tR\x04tool\x12\x18\n" +
-	"\acontent\x18\x04 \x01(\tR\acontent\"c\n" +
+	"\acontent\x18\x04 \x01(\tR\acontent\x12\x17\n" +
+	"\atool_id\x18\x05 \x01(\tR\x06toolId\x12\x1f\n" +
+	"\vduration_ms\x18\x06 \x01(\x03R\n" +
+	"durationMs\"c\n" +
 	"\x1aListSessionMessagesRequest\x12\x10\n" +
 	"\x03ref\x18\x01 \x01(\tR\x03ref\x12\x1d\n" +
 	"\n" +

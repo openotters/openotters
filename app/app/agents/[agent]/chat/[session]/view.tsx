@@ -85,6 +85,19 @@ function estimateTokens(s: string): number {
 	return Math.ceil(s.length / 4)
 }
 
+// formatDuration renders ms as the smallest sensible unit:
+//   < 1s   → "843ms"
+//   < 60s  → "12.3s"
+//   ≥ 60s  → "1m02s"
+function formatDuration(ms: number): string {
+	if (ms < 1000) return `${ms}ms`
+	const s = ms / 1000
+	if (s < 60) return `${s.toFixed(s < 10 ? 1 : 0)}s`
+	const m = Math.floor(s / 60)
+	const rem = Math.floor(s % 60)
+	return `${m}m${rem.toString().padStart(2, "0")}s`
+}
+
 // Per-message rendering decomposes the assistant's reply into ordered
 // parts. Text deltas accumulate into the trailing "text" part; each
 // tool.call / tool.result pair gets its own collapsible Tool block,
@@ -105,6 +118,13 @@ type Part =
 			// "input-available" (running) — so a long job_wait shows
 			// "running 12s" instead of just an inert spinner.
 			startedAt?: number
+			// durationMs is the runtime-measured wall-clock time
+			// from OnToolCall to OnToolResult. Set when the result
+			// lands (tool.result event) and preserved across page
+			// refreshes via the persisted StoredPart.duration_ms
+			// field. CompactToolRow renders "took Xs" once it's
+			// known.
+			durationMs?: number
 	  }
 
 interface UIMessage {
@@ -366,6 +386,7 @@ interface StoredPart {
 	input?: string
 	output?: string
 	state?: string
+	duration_ms?: number
 }
 
 function parsePersistedParts(content: string): Part[] {
@@ -396,6 +417,7 @@ function parsePersistedParts(content: string): Part[] {
 					input: parsedInput,
 					output: p.output ?? null,
 					state: p.state === "input-available" ? "input-available" : "output-available",
+					durationMs: typeof p.duration_ms === "number" ? p.duration_ms : undefined,
 				})
 			}
 		}
@@ -589,14 +611,19 @@ function pushToolCall(parts: Part[], id: string, name: string, content: string):
 
 // attachToolResult flips the most recent still-running tool call with
 // the matching name to "output-available" and records the result.
-// We match on name because the daemon's ChatStreamEvent doesn't
-// carry the tool-call ID — it only has the tool name + content.
-function attachToolResult(parts: Part[], name: string, content: string): Part[] {
+// We match on name because the daemon's ChatStreamEvent already
+// carries the tool_id but the older code didn't thread it through;
+// name-match still works because tool calls within a single turn
+// don't repeat without the model regenerating. durationMs is the
+// runtime-measured wall-clock for the tool execution.
+function attachToolResult(
+	parts: Part[], name: string, content: string, durationMs?: number,
+): Part[] {
 	const next = parts.slice()
 	for (let i = next.length - 1; i >= 0; i--) {
 		const p = next[i]
 		if (p.kind === "tool" && p.name === name && p.state === "input-available") {
-			next[i] = { ...p, output: content, state: "output-available" }
+			next[i] = { ...p, output: content, state: "output-available", durationMs }
 			return next
 		}
 	}
@@ -611,6 +638,7 @@ function attachToolResult(parts: Part[], name: string, content: string): Part[] 
 			input: undefined,
 			output: content,
 			state: "output-available",
+			durationMs,
 		},
 	]
 }
@@ -920,7 +948,10 @@ export default function ChatPage() {
 								)
 							case "tool.result":
 								return updateActiveBranch(m, (parts) =>
-									attachToolResult(parts, event.tool, event.content),
+									attachToolResult(
+										parts, event.tool, event.content,
+										event.durationMs ? Number(event.durationMs) : undefined,
+									),
 								)
 							// step.start / step.finish drive streamLabel
 							// (handled above) and don't add parts.
@@ -1722,6 +1753,13 @@ function CompactToolRow({ part, densityCompact }: CompactToolRowProps) {
 							{elapsed >= 60
 								? `${Math.floor(elapsed / 60)}m${(elapsed % 60).toString().padStart(2, "0")}s`
 								: `${elapsed}s`}
+						</span>
+					)}
+					{status !== "running" && typeof part.durationMs === "number" && part.durationMs > 0 && (
+						<span
+							className="shrink-0 font-mono text-[10px] text-muted-foreground tabular-nums"
+							title={`${part.durationMs} ms`}>
+							{formatDuration(part.durationMs)}
 						</span>
 					)}
 					{hasClipped && (

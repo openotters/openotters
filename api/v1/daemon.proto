@@ -550,6 +550,12 @@ message ChatStreamEvent {
   int32 step = 2;
   string tool = 3;
   string content = 4;
+  // tool_id correlates tool.call and tool.result events for the
+  // same invocation. Stable for the lifetime of one tool call.
+  string tool_id = 5;
+  // duration_ms is the wall-clock time the tool spent executing.
+  // Set on tool.result events; zero on every other type.
+  int64 duration_ms = 6;
 }
 
 message ListSessionMessagesRequest {

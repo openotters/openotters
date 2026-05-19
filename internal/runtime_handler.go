@@ -286,10 +286,12 @@ func (h *runtimeHandler) ChatStreamWithAgent(
 		req.Msg.GetRegenerate(),
 		func(ev agentpkg.PromptEvent) {
 			_ = stream.Send(&daemonv1.ChatStreamEvent{
-				Type:    ev.Type,
-				Step:    ev.Step,
-				Tool:    ev.Tool,
-				Content: ev.Content,
+				Type:       ev.Type,
+				Step:       ev.Step,
+				Tool:       ev.Tool,
+				Content:    ev.Content,
+				ToolId:     ev.ToolID,
+				DurationMs: ev.DurationMs,
 			})
 		},
 	)
