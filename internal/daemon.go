@@ -89,6 +89,15 @@ type managedAgent struct {
 	token    string
 	tokenJTI string
 
+	// capabilities is the agent's effective runtime cap set, as
+	// resolved from Agentfile.CAPABILITY directives unioned with
+	// any operator --cap override. Persisted alongside the agent
+	// so the JWT issuance + AGENT.md rendering + AgentInfo
+	// responses all see the same authoritative list. Per-agent;
+	// the daemon's capabilityCatalogue still owns the
+	// descriptions.
+	capabilities []string
+
 	// Image / runtime / tools metadata captured at create time.
 	// Populated for agents created since the daemon started; left
 	// empty on restored agents (would require a state-store migration
@@ -1124,6 +1133,7 @@ func (d *Daemon) Restore(ctx context.Context) error {
 			labels:       pa.Labels,
 			token:        pa.Token,
 			tokenJTI:     pa.TokenJTI,
+			capabilities: pa.Capabilities,
 		}
 
 		agentOpts := []system.AgentOption{
@@ -1146,8 +1156,9 @@ func (d *Daemon) Restore(ctx context.Context) error {
 
 		if pa.Status != statusStopped {
 			d.pool.Add(id, ref, agentOpts, AgentExtras{
-				DaemonURL:  d.agentReachableURL(),
-				AgentToken: pa.Token,
+				DaemonURL:       d.agentReachableURL(),
+				AgentToken:      pa.Token,
+				CapabilityNames: pa.Capabilities,
 			}, overrides...)
 
 			// Restored agents go through Run() again on daemon boot —
@@ -1644,15 +1655,28 @@ func (d *Daemon) CreateAgent(
 		linkIDs = append(linkIDs, target.id.String())
 	}
 
+	// Effective cap set: Agentfile.CAPABILITY directives unioned
+	// with the operator's --cap override (req.GetCapabilities()).
+	// The override is APPEND semantics — adds to whatever the
+	// image baked in, never subtracts. Empty Agentfile +
+	// empty --cap = the strict default (zero caps).
+	capPlaceholder := AgentExtras{
+		DaemonURL:  d.agentReachableURL(),
+		AgentToken: "placeholder", // non-empty so daemon-URL-gated catalogue entries land
+	}
+	known := catalogueNames(capPlaceholder)
+	effectiveCaps := mergeCapabilityNames(af.Agent.Capabilities, req.GetCapabilities())
+	for _, c := range req.GetCapabilities() {
+		if _, ok := known[c]; !ok {
+			return nil, fmt.Errorf("--cap %q: unknown capability (run `otters info` for the catalogue)", c)
+		}
+	}
+
 	var agentToken, agentJTI string
 	if len(d.signingKey) > 0 {
 		var tokErr error
-		capNames := capabilityNames(runtimeCapsForExtras(AgentExtras{
-			DaemonURL:  d.agentReachableURL(),
-			AgentToken: "placeholder", // non-empty so daemon-URL-gated caps land
-		}))
 		agentToken, agentJTI, tokErr = auth.IssueAgent(
-			d.signingKey, id.String(), linkIDs, capNames,
+			d.signingKey, id.String(), linkIDs, effectiveCaps,
 		)
 		if tokErr != nil {
 			return nil, fmt.Errorf("issuing agent token: %w", tokErr)
@@ -1660,8 +1684,9 @@ func (d *Daemon) CreateAgent(
 	}
 
 	d.pool.Add(id, ref, agentOpts, AgentExtras{
-		DaemonURL:  d.agentReachableURL(),
-		AgentToken: agentToken,
+		DaemonURL:       d.agentReachableURL(),
+		AgentToken:      agentToken,
+		CapabilityNames: effectiveCaps,
 	}, overrides...)
 
 	// Provenance fields are populated lazily by hydrateProvenance the
@@ -1688,6 +1713,7 @@ func (d *Daemon) CreateAgent(
 		labels:       req.GetLabels(),
 		token:        agentToken,
 		tokenJTI:     agentJTI,
+		capabilities: effectiveCaps,
 	}
 
 	if req.GetModel() != "" {
@@ -1706,19 +1732,20 @@ func (d *Daemon) CreateAgent(
 	}
 
 	if saveErr := d.state.SaveAgent(ctx, persistedAgent{
-		ID:        id.String(),
-		Name:      name,
-		AgentName: agentName,
-		Model:     ma.model,
-		Runtime:   effectiveRuntime,
-		Tag:       ma.tag,
-		Status:    statusPulling,
-		CreatedAt: ma.createdAt,
-		Mounts:    mountsToPersisted(mounts),
-		Labels:    ma.labels,
-		Envs:      envsToPersisted(envOverrides),
-		Token:     ma.token,
-		TokenJTI:  ma.tokenJTI,
+		ID:           id.String(),
+		Name:         name,
+		AgentName:    agentName,
+		Model:        ma.model,
+		Runtime:      effectiveRuntime,
+		Tag:          ma.tag,
+		Status:       statusPulling,
+		CreatedAt:    ma.createdAt,
+		Mounts:       mountsToPersisted(mounts),
+		Labels:       ma.labels,
+		Envs:         envsToPersisted(envOverrides),
+		Capabilities: ma.capabilities,
+		Token:        ma.token,
+		TokenJTI:     ma.tokenJTI,
 	}); saveErr != nil {
 		d.logger.Warn("failed to persist agent", zap.Error(saveErr))
 	}
@@ -1829,14 +1856,11 @@ func (d *Daemon) List(labelSelector map[string]string) []*daemonv1.AgentInfo {
 			})
 		}
 
-		caps := runtimeCapsForExtras(AgentExtras{
-			DaemonURL:  d.agentReachableURL(),
-			AgentToken: ma.token,
-		})
-		capNames := make([]string, 0, len(caps))
-		for _, c := range caps {
-			capNames = append(capNames, c.Name)
-		}
+		// AgentInfo's capabilities field surfaces the agent's
+		// effective cap set — Agentfile + operator override
+		// (resolved at CreateAgent). The daemon's catalogue holds
+		// descriptions; here we just return the name list.
+		capNames := append([]string(nil), ma.capabilities...)
 
 		infos = append(infos, &daemonv1.AgentInfo{
 			Id: ma.id.String(), Name: ma.name, Model: ma.model,

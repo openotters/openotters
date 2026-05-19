@@ -1930,7 +1930,14 @@ type CreateAgentRequest struct {
 	// the daemon resolves to ids and rejects unknown refs before
 	// issuing the token. Empty ⇒ no outbound link permissions
 	// (can be added later via LinkAgents).
-	Links         []string `protobuf:"bytes,8,rep,name=links,proto3" json:"links,omitempty"`
+	Links []string `protobuf:"bytes,8,rep,name=links,proto3" json:"links,omitempty"`
+	// Capability names to APPEND to the agent's Agentfile-declared
+	// CAPABILITY directives. The union (Agentfile ∪ this list) is
+	// the agent's effective cap set — stamped into the JWT, into
+	// agent.yaml, and into AGENT.md. Unknown names against the
+	// daemon's catalogue fail the create. Empty ⇒ only the
+	// Agentfile's directives apply.
+	Capabilities  []string `protobuf:"bytes,9,rep,name=capabilities,proto3" json:"capabilities,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2017,6 +2024,13 @@ func (x *CreateAgentRequest) GetLabels() map[string]string {
 func (x *CreateAgentRequest) GetLinks() []string {
 	if x != nil {
 		return x.Links
+	}
+	return nil
+}
+
+func (x *CreateAgentRequest) GetCapabilities() []string {
+	if x != nil {
+		return x.Capabilities
 	}
 	return nil
 }
@@ -8953,7 +8967,7 @@ const file_v1_daemon_proto_rawDesc = "" +
 	"\x04host\x18\x01 \x01(\tR\x04host\x12\x16\n" +
 	"\x06target\x18\x02 \x01(\tR\x06target\x12 \n" +
 	"\vdescription\x18\x03 \x01(\tR\vdescription\x12\x1b\n" +
-	"\tread_only\x18\x04 \x01(\bR\breadOnly\"\xf5\x02\n" +
+	"\tread_only\x18\x04 \x01(\bR\breadOnly\"\x99\x03\n" +
 	"\x12CreateAgentRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x10\n" +
 	"\x03ref\x18\x02 \x01(\tR\x03ref\x12\x14\n" +
@@ -8962,7 +8976,8 @@ const file_v1_daemon_proto_rawDesc = "" +
 	"\x06mounts\x18\x05 \x03(\v2\x1b.openotters.daemon.v1.MountR\x06mounts\x125\n" +
 	"\x04envs\x18\x06 \x03(\v2!.openotters.daemon.v1.EnvOverrideR\x04envs\x12L\n" +
 	"\x06labels\x18\a \x03(\v24.openotters.daemon.v1.CreateAgentRequest.LabelsEntryR\x06labels\x12\x14\n" +
-	"\x05links\x18\b \x03(\tR\x05links\x1a9\n" +
+	"\x05links\x18\b \x03(\tR\x05links\x12\"\n" +
+	"\fcapabilities\x18\t \x03(\tR\fcapabilities\x1a9\n" +
 	"\vLabelsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"5\n" +

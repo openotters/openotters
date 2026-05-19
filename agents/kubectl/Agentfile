@@ -10,6 +10,30 @@ LABEL org.opencontainers.image.source="https://github.com/openotters/openotters"
 LABEL org.opencontainers.image.version="1.1.0"
 LABEL io.openotters.required-mounts="/kubeconfig.yaml — kubeconfig, mount with -v ~/.kube/config:/kubeconfig.yaml:ro"
 
+# Specialist cap profile: local introspection, notes, link-scoped
+# delegation, jobs (BIN runs via kubectl/jq/sh). No admin / spawn
+# / delete caps — operator grants explicitly with --cap if needed.
+CAPABILITY context_list
+CAPABILITY context_show
+CAPABILITY env_list
+CAPABILITY mount_list
+CAPABILITY note_save
+CAPABILITY note_list
+CAPABILITY note_show
+CAPABILITY note_delete
+CAPABILITY note_pin
+CAPABILITY note_unpin
+CAPABILITY agent_list
+CAPABILITY agent_info
+CAPABILITY agent_exec
+CAPABILITY self_reload
+CAPABILITY job_submit
+CAPABILITY job_status
+CAPABILITY job_list
+CAPABILITY job_cancel
+CAPABILITY job_wait
+CAPABILITY job_watch
+
 CONTEXT SOUL "Operating rules" <<EOF
 You operate a Kubernetes cluster through kubectl. \$KUBECONFIG points
 at the mounted kubeconfig. Every fact you state must come from a

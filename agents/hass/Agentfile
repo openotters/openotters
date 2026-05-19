@@ -13,6 +13,31 @@ LABEL org.opencontainers.image.version="1.0.0"
 # spawn env; the model references them through sh / curl.
 LABEL io.openotters.required-env="HASS_URL, HASS_TOKEN"
 
+# Specialist cap profile: local introspection, notes, link-scoped
+# delegation, jobs (BIN runs via curl/jq). No admin / spawn /
+# delete caps — operator grants those explicitly with --cap if
+# they ever need this agent to manage other agents.
+CAPABILITY context_list
+CAPABILITY context_show
+CAPABILITY env_list
+CAPABILITY mount_list
+CAPABILITY note_save
+CAPABILITY note_list
+CAPABILITY note_show
+CAPABILITY note_delete
+CAPABILITY note_pin
+CAPABILITY note_unpin
+CAPABILITY agent_list
+CAPABILITY agent_info
+CAPABILITY agent_exec
+CAPABILITY self_reload
+CAPABILITY job_submit
+CAPABILITY job_status
+CAPABILITY job_list
+CAPABILITY job_cancel
+CAPABILITY job_wait
+CAPABILITY job_watch
+
 CONTEXT SOUL "Operating rules" <<EOF
 You operate a Home Assistant instance through its REST API.
 \$HASS_URL is the base URL. \$HASS_TOKEN is the long-lived access

@@ -207,14 +207,11 @@ func (d *Daemon) AgentInfo(agentID string) (*daemonv1.AgentInfoResponse, error) 
 	if ma.labels != nil {
 		description = ma.labels["description"]
 	}
-	caps := runtimeCapsForExtras(AgentExtras{
-		DaemonURL:  d.agentReachableURL(),
-		AgentToken: ma.token,
-	})
-	capNames := make([]string, 0, len(caps))
-	for _, c := range caps {
-		capNames = append(capNames, c.Name)
-	}
+	// Surface the agent's effective cap set (computed at create
+	// time from Agentfile + operator --cap). The daemon's
+	// catalogue carries descriptions; only names flow through
+	// AgentInfoResponse.
+	capNames := append([]string(nil), ma.capabilities...)
 	return &daemonv1.AgentInfoResponse{
 		Agent: &daemonv1.LinkedAgent{
 			Id:     agentID,
@@ -277,10 +274,9 @@ func (d *Daemon) refreshAgentTokenAndMaybeRestart(
 		return false, nil
 	}
 
-	capNames := capabilityNames(runtimeCapsForExtras(AgentExtras{
-		DaemonURL:  d.agentReachableURL(),
-		AgentToken: "placeholder", // non-empty so daemon-URL-gated caps land
-	}))
+	// JWT refresh preserves the agent's existing cap set —
+	// link mutation doesn't change the caller's tool surface.
+	capNames := append([]string(nil), source.capabilities...)
 	newToken, newJTI, err := auth.IssueAgent(d.signingKey, source.id.String(), linkIDs, capNames)
 	if err != nil {
 		return false, fmt.Errorf("re-issue agent token: %w", err)

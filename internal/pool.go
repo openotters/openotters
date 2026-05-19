@@ -27,6 +27,13 @@ import (
 type AgentExtras struct {
 	DaemonURL  string
 	AgentToken string
+	// CapabilityNames is the agent's effective cap set — Agentfile
+	// CAPABILITY directives unioned with any operator --cap
+	// override. Resolved against the daemon's catalogue at pool
+	// materialise time so the runtime sees full Capability
+	// entries (name + description) in agent.yaml + AGENT.md.
+	// Empty slice = no caps (strict default).
+	CapabilityNames []string
 }
 
 const (
@@ -95,13 +102,76 @@ func WithMaxConcurrent(n int) PoolOption {
 	}
 }
 
-// capabilityNames flattens runtimeCapsForExtras' output to just the
-// tool names — what the JWT stamps as the capabilities claim and
-// what UI listings render.
-func capabilityNames(caps []agentpkg.Capability) []string {
-	out := make([]string, 0, len(caps))
-	for _, c := range caps {
-		out = append(out, c.Name)
+// mergeCapabilityNames unions the Agentfile-declared cap names with
+// the operator's --cap override (append semantic). Order preserved
+// (Agentfile first, then override entries that weren't already
+// listed). Used at CreateAgent to compute the agent's effective
+// cap set.
+func mergeCapabilityNames(fromAgentfile, override []string) []string {
+	if len(fromAgentfile) == 0 && len(override) == 0 {
+		return nil
+	}
+	seen := make(map[string]struct{}, len(fromAgentfile)+len(override))
+	out := make([]string, 0, len(fromAgentfile)+len(override))
+	for _, n := range fromAgentfile {
+		if _, dup := seen[n]; dup {
+			continue
+		}
+		seen[n] = struct{}{}
+		out = append(out, n)
+	}
+	for _, n := range override {
+		if _, dup := seen[n]; dup {
+			continue
+		}
+		seen[n] = struct{}{}
+		out = append(out, n)
+	}
+	return out
+}
+
+// resolveCapabilities turns a list of declared cap names (from the
+// Agentfile + any operator --cap override) into the full
+// Capability entries the runtime stamps into agent.yaml +
+// AGENT.md + the JWT.Capabilities claim. Unknown names are
+// dropped silently — validation belongs at create time, before
+// the agent is materialised.
+//
+// Empty input returns an empty slice — the strict "no
+// CAPABILITY directive = no caps" contract.
+func resolveCapabilities(extras AgentExtras, names []string) []agentpkg.Capability {
+	if len(names) == 0 {
+		return nil
+	}
+	catalogue := capabilityCatalogue(extras)
+	byName := make(map[string]agentpkg.Capability, len(catalogue))
+	for _, c := range catalogue {
+		byName[c.Name] = c
+	}
+	seen := make(map[string]struct{}, len(names))
+	out := make([]agentpkg.Capability, 0, len(names))
+	for _, n := range names {
+		if _, dup := seen[n]; dup {
+			continue
+		}
+		seen[n] = struct{}{}
+		if entry, ok := byName[n]; ok {
+			out = append(out, entry)
+		}
+	}
+	return out
+}
+
+// catalogueNames returns every known capability name. Used by
+// CreateAgent to validate operator-supplied --cap names: an
+// Agentfile directive is allowed to reference unknown names
+// (silently dropped) but an operator typo at run-time should
+// fail loudly.
+func catalogueNames(extras AgentExtras) map[string]struct{} {
+	catalogue := capabilityCatalogue(extras)
+	out := make(map[string]struct{}, len(catalogue))
+	for _, c := range catalogue {
+		out[c.Name] = struct{}{}
 	}
 	return out
 }
@@ -338,7 +408,12 @@ func (p *Pool) createAgent(
 	// live in agent.yaml's tools: block). Surfaced as agent.yaml's
 	// capabilities: block + the Capabilities section of AGENT.md
 	// so the LLM can read what each tool does without invoking it.
-	caps := runtimeCapsForExtras(extras)
+	//
+	// Per agentfile alpha.47, the agent's cap set is data-driven:
+	// CAPABILITY directives in the Agentfile (plus any operator
+	// --cap override) populate extras.CapabilityNames; we resolve
+	// names against the daemon's catalogue here.
+	caps := resolveCapabilities(extras, extras.CapabilityNames)
 
 	if sp, ok := p.provider.(*system.Provider); ok {
 		opts := agentOpts
@@ -390,15 +465,18 @@ func (p *Pool) createAgent(
 // registers needs an entry here so it shows up in agent.yaml +
 // AGENT.md, and any tool removed there needs to come off too.
 //
-// A future Agentfile CAPABILITY directive will let operators
-// opt-out of individual entries.
+// As of agentfile alpha.47, the catalogue is the daemon's source
+// of truth for cap *descriptions*. The agent's effective cap
+// *set* is driven by the Agentfile's CAPABILITY directives (plus
+// any operator --cap override) — `resolveCapabilities` looks up
+// declared names against this catalogue.
 //
 // authoritative table of every runtime-injected capability;
 // splitting it across helpers would make the cap surface
 // harder to scan, not easier.
 //
 //nolint:funlen // long by design — the function is a single
-func runtimeCapsForExtras(extras AgentExtras) []agentpkg.Capability {
+func capabilityCatalogue(extras AgentExtras) []agentpkg.Capability {
 	caps := []agentpkg.Capability{
 		{Name: "context_list", Description: "List the context files declared in agent.yaml (name, file, description)."},
 		{Name: "context_show", Description: "Show the content of one context file. Takes a name (e.g. SOUL)."},

@@ -10,6 +10,36 @@ LABEL org.opencontainers.image.source="https://github.com/openotters/openotters"
 LABEL org.opencontainers.image.version="1.0.0"
 LABEL io.openotters.required-env=""
 
+# Runtime tool surface. The orchestrator delegates + spawns +
+# cleans up, so it carries the full agent-management quartet
+# (scoped + bypass-link variants), the introspection set, notes,
+# and image/bin/model discovery. Operator can add more at run
+# time with --cap.
+CAPABILITY context_list
+CAPABILITY context_show
+CAPABILITY env_list
+CAPABILITY mount_list
+CAPABILITY note_save
+CAPABILITY note_list
+CAPABILITY note_show
+CAPABILITY note_delete
+CAPABILITY note_pin
+CAPABILITY note_unpin
+CAPABILITY agent_list
+CAPABILITY agent_info
+CAPABILITY agent_exec
+CAPABILITY agent_create
+CAPABILITY agent_create_from_source
+CAPABILITY agent_delete
+CAPABILITY agent_list_all
+CAPABILITY agent_info_any
+CAPABILITY agent_exec_any
+CAPABILITY agent_delete_any
+CAPABILITY image_list
+CAPABILITY bin_list
+CAPABILITY model_list
+CAPABILITY self_reload
+
 CONTEXT SOUL "Operating rules" <<EOF
 You are an orchestrator. You don't run shell commands, query
 APIs, or call kubectl yourself. You ROUTE the user's request to

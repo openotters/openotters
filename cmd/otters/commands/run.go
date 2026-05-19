@@ -30,6 +30,7 @@ type Run struct {
 	Envs    []string `short:"e" name:"env" help:"Set or override an env var on the agent: KEY=VALUE. Repeatable. Wins over Agentfile-declared ENV with the same key. Reserved keys (PATH, *_API_KEY, OTTERS_AGENT_ROOT, …) are rejected."`
 	Labels  []string `name:"label" help:"Attach a key=value label. Repeatable. Reserved keys live under io.openotters.* — see the daemon proto for the standard set (origin, etc.). Filterable via 'otters ps --label'."`
 	Links   []string `name:"link" help:"Outbound link the new agent should have at create time: another agent's name or id. Repeatable. The link is stamped into the agent's JWT immediately so the agent_* tools work on first turn. Add or remove links later with 'otters link' / 'otters unlink'."`
+	Caps    []string `name:"cap" help:"Append a capability to the agent's runtime tool surface — beyond what the Agentfile's CAPABILITY directives declare. Repeatable. Unknown names fail the create. The Agentfile-declared set is the baseline; --cap APPENDS, never removes."`
 }
 
 func (r *Run) Run(ctx context.Context, common *cmd.Commons, d *Daemon) error {
@@ -96,14 +97,15 @@ func (r *Run) Run(ctx context.Context, common *cmd.Commons, d *Daemon) error {
 	}
 
 	resp, err := c.CreateAgent(ctx, &daemonv1.CreateAgentRequest{
-		Name:    r.Name,
-		Ref:     ref,
-		Model:   r.Model,
-		Runtime: r.Runtime,
-		Mounts:  mounts,
-		Envs:    envs,
-		Labels:  labels,
-		Links:   r.Links,
+		Name:         r.Name,
+		Ref:          ref,
+		Model:        r.Model,
+		Runtime:      r.Runtime,
+		Mounts:       mounts,
+		Envs:         envs,
+		Labels:       labels,
+		Links:        r.Links,
+		Capabilities: r.Caps,
 	})
 	if err != nil {
 		return fmt.Errorf("creating agent: %w", unwrapRPC(err))

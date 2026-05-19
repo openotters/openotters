@@ -431,6 +431,13 @@ message CreateAgentRequest {
   // issuing the token. Empty ⇒ no outbound link permissions
   // (can be added later via LinkAgents).
   repeated string links = 8;
+  // Capability names to APPEND to the agent's Agentfile-declared
+  // CAPABILITY directives. The union (Agentfile ∪ this list) is
+  // the agent's effective cap set — stamped into the JWT, into
+  // agent.yaml, and into AGENT.md. Unknown names against the
+  // daemon's catalogue fail the create. Empty ⇒ only the
+  // Agentfile's directives apply.
+  repeated string capabilities = 9;
 }
 
 message EnvOverride {

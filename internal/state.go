@@ -56,6 +56,14 @@ type persistedAgent struct {
 	// boot under this schema.
 	Token    string
 	TokenJTI string
+	// Capabilities is the agent's effective runtime cap set,
+	// resolved at CreateAgent from Agentfile.CAPABILITY directives
+	// unioned with the operator's --cap override. Stored as JSON
+	// in the agents.capabilities_json column. Re-applied on
+	// Restore so the agent's tool surface + JWT.Capabilities claim
+	// survive daemon restarts. Empty for v1-era rows; daemon.Restore
+	// re-tokenizes with whatever's persisted.
+	Capabilities []string
 }
 
 type StateStore struct {
@@ -121,6 +129,17 @@ func migrateState(ctx context.Context, db *sql.DB) error {
 	// addColumnIfMissing default.
 	if err := addColumnIfMissing(ctx, db, "agents",
 		"envs_json", "TEXT NOT NULL DEFAULT '[]'"); err != nil {
+		return err
+	}
+
+	// capabilities_json carries the agent's effective runtime cap
+	// set (Agentfile CAPABILITY directives unioned with the
+	// operator's --cap override), so the surface survives daemon
+	// restarts. Pre-existing rows default to "[]" — those agents
+	// will recreate with zero caps until the operator recreates
+	// them with a non-empty Agentfile.Capabilities + --cap.
+	if err := addColumnIfMissing(ctx, db, "agents",
+		"capabilities_json", "TEXT NOT NULL DEFAULT '[]'"); err != nil {
 		return err
 	}
 
@@ -630,14 +649,24 @@ func (s *StateStore) SaveAgent(ctx context.Context, a persistedAgent) error {
 		envs = []byte("[]")
 	}
 
+	caps, err := json.Marshal(a.Capabilities)
+	if err != nil {
+		return fmt.Errorf("encoding capabilities: %w", err)
+	}
+
+	if len(a.Capabilities) == 0 {
+		caps = []byte("[]")
+	}
+
 	_, err = s.db.ExecContext(ctx,
 		`INSERT OR REPLACE INTO agents
 		   (id, name, agent_name, model, runtime, tag, status, failure_reason,
-		    created_at, mounts, labels_json, envs_json, token, token_jti)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		    created_at, mounts, labels_json, envs_json, capabilities_json,
+		    token, token_jti)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		a.ID, a.Name, a.AgentName, a.Model, a.Runtime, a.Tag, a.Status,
 		a.FailureReason, a.CreatedAt, string(mounts), string(labels),
-		string(envs), a.Token, a.TokenJTI,
+		string(envs), string(caps), a.Token, a.TokenJTI,
 	)
 
 	return err
@@ -895,7 +924,8 @@ func (s *StateStore) ReplaceAllImages(ctx context.Context, imgs []PersistedImage
 func (s *StateStore) ListAgents(ctx context.Context) ([]persistedAgent, error) {
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT id, name, agent_name, model, runtime, tag, status, failure_reason,
-		        created_at, mounts, labels_json, envs_json, token, token_jti
+		        created_at, mounts, labels_json, envs_json, capabilities_json,
+		        token, token_jti
 		 FROM agents ORDER BY created_at ASC`,
 	)
 	if err != nil {
@@ -911,12 +941,13 @@ func (s *StateStore) ListAgents(ctx context.Context) ([]persistedAgent, error) {
 			mounts string
 			labels string
 			envs   string
+			caps   string
 		)
 
 		if err = rows.Scan(
 			&a.ID, &a.Name, &a.AgentName, &a.Model, &a.Runtime,
 			&a.Tag, &a.Status, &a.FailureReason, &a.CreatedAt, &mounts, &labels,
-			&envs, &a.Token, &a.TokenJTI,
+			&envs, &caps, &a.Token, &a.TokenJTI,
 		); err != nil {
 			return nil, fmt.Errorf("scanning agent: %w", err)
 		}
@@ -934,6 +965,11 @@ func (s *StateStore) ListAgents(ctx context.Context) ([]persistedAgent, error) {
 		if envs != "" && envs != "[]" {
 			if err = json.Unmarshal([]byte(envs), &a.Envs); err != nil {
 				return nil, fmt.Errorf("decoding envs for %s: %w", a.ID, err)
+			}
+		}
+		if caps != "" && caps != "[]" {
+			if err = json.Unmarshal([]byte(caps), &a.Capabilities); err != nil {
+				return nil, fmt.Errorf("decoding capabilities for %s: %w", a.ID, err)
 			}
 		}
 
