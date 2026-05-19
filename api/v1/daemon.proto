@@ -140,6 +140,22 @@ service Runtime {
   // still carries the stale Links claim from agent startup.
   rpc SelfReload(SelfReloadRequest) returns (SelfReloadResponse);
 
+  // AddAgentCapability appends one capability to an agent's
+  // effective cap set, re-issues its JWT, and bounces the runtime
+  // so the new tool surfaces in agent.yaml + the JWT claim
+  // immediately. Operator-only — agents can't grant themselves
+  // caps. Idempotent: re-adding an already-granted cap returns
+  // ok without restarting.
+  rpc AddAgentCapability(AddAgentCapabilityRequest) returns (AddAgentCapabilityResponse);
+
+  // ListCapabilities returns the daemon's full capability catalogue
+  // (name + description per entry). Operator-only — used by the
+  // dashboard's "Add capability" picker to populate the dropdown
+  // and to render capability descriptions on image / agent views.
+  // The catalogue is static for a given daemon version; cache it
+  // on the client.
+  rpc ListCapabilities(ListCapabilitiesRequest) returns (ListCapabilitiesResponse);
+
   // GetAgentIdentity exposes an agent's persisted JWT + decoded
   // claims for the operator UI's Identity tab. Operator-only
   // (rejected for agent tokens). The token field is the raw
@@ -1183,6 +1199,43 @@ message AgentExecAnyRequest {
 }
 
 message AgentDeleteAnyRequest { string ref = 1; }
+
+// AddAgentCapability — operator action to grant one cap to a
+// running agent. Daemon validates the name against its catalogue,
+// appends to the persisted cap set, re-issues the JWT, and
+// bounces the runtime so the cap actually takes effect.
+message AddAgentCapabilityRequest {
+  string ref        = 1; // agent name or id
+  string capability = 2; // cap name (must be in the catalogue)
+}
+message AddAgentCapabilityResponse {
+  // True when the agent was running and got restarted to pick up
+  // the new cap. False on a no-op (cap already present) or when
+  // the agent was stopped (the new cap is persisted; next start
+  // will see it).
+  bool restarted     = 1;
+  // True when the cap was added; false when it was already
+  // present (idempotent re-add).
+  bool added         = 2;
+  // The full updated cap set after the grant, so the caller
+  // doesn't have to refetch.
+  repeated string capabilities = 3;
+}
+
+// ListCapabilities — operator-only catalogue dump. No filters; the
+// caller pages it client-side if needed (the catalogue is tiny).
+message ListCapabilitiesRequest {}
+message ListCapabilitiesResponse {
+  repeated CapabilityEntry capabilities = 1;
+}
+
+// CapabilityEntry mirrors agentpkg.Capability (name + human-
+// readable description). Pure data — no enforcement bit here, that
+// happens server-side on each RPC.
+message CapabilityEntry {
+  string name        = 1;
+  string description = 2;
+}
 
 // SelfReload — caller identified by JWT, no fields needed.
 message SelfReloadRequest  {}

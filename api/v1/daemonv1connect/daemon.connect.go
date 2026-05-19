@@ -148,6 +148,12 @@ const (
 	RuntimeBinListProcedure = "/openotters.daemon.v1.Runtime/BinList"
 	// RuntimeSelfReloadProcedure is the fully-qualified name of the Runtime's SelfReload RPC.
 	RuntimeSelfReloadProcedure = "/openotters.daemon.v1.Runtime/SelfReload"
+	// RuntimeAddAgentCapabilityProcedure is the fully-qualified name of the Runtime's
+	// AddAgentCapability RPC.
+	RuntimeAddAgentCapabilityProcedure = "/openotters.daemon.v1.Runtime/AddAgentCapability"
+	// RuntimeListCapabilitiesProcedure is the fully-qualified name of the Runtime's ListCapabilities
+	// RPC.
+	RuntimeListCapabilitiesProcedure = "/openotters.daemon.v1.Runtime/ListCapabilities"
 	// RuntimeGetAgentIdentityProcedure is the fully-qualified name of the Runtime's GetAgentIdentity
 	// RPC.
 	RuntimeGetAgentIdentityProcedure = "/openotters.daemon.v1.Runtime/GetAgentIdentity"
@@ -299,6 +305,20 @@ type RuntimeClient interface {
 	// to call the new agent — without it, the JWT in memory
 	// still carries the stale Links claim from agent startup.
 	SelfReload(context.Context, *connect.Request[v1.SelfReloadRequest]) (*connect.Response[v1.SelfReloadResponse], error)
+	// AddAgentCapability appends one capability to an agent's
+	// effective cap set, re-issues its JWT, and bounces the runtime
+	// so the new tool surfaces in agent.yaml + the JWT claim
+	// immediately. Operator-only — agents can't grant themselves
+	// caps. Idempotent: re-adding an already-granted cap returns
+	// ok without restarting.
+	AddAgentCapability(context.Context, *connect.Request[v1.AddAgentCapabilityRequest]) (*connect.Response[v1.AddAgentCapabilityResponse], error)
+	// ListCapabilities returns the daemon's full capability catalogue
+	// (name + description per entry). Operator-only — used by the
+	// dashboard's "Add capability" picker to populate the dropdown
+	// and to render capability descriptions on image / agent views.
+	// The catalogue is static for a given daemon version; cache it
+	// on the client.
+	ListCapabilities(context.Context, *connect.Request[v1.ListCapabilitiesRequest]) (*connect.Response[v1.ListCapabilitiesResponse], error)
 	// GetAgentIdentity exposes an agent's persisted JWT + decoded
 	// claims for the operator UI's Identity tab. Operator-only
 	// (rejected for agent tokens). The token field is the raw
@@ -649,6 +669,18 @@ func NewRuntimeClient(httpClient connect.HTTPClient, baseURL string, opts ...con
 			connect.WithSchema(runtimeMethods.ByName("SelfReload")),
 			connect.WithClientOptions(opts...),
 		),
+		addAgentCapability: connect.NewClient[v1.AddAgentCapabilityRequest, v1.AddAgentCapabilityResponse](
+			httpClient,
+			baseURL+RuntimeAddAgentCapabilityProcedure,
+			connect.WithSchema(runtimeMethods.ByName("AddAgentCapability")),
+			connect.WithClientOptions(opts...),
+		),
+		listCapabilities: connect.NewClient[v1.ListCapabilitiesRequest, v1.ListCapabilitiesResponse](
+			httpClient,
+			baseURL+RuntimeListCapabilitiesProcedure,
+			connect.WithSchema(runtimeMethods.ByName("ListCapabilities")),
+			connect.WithClientOptions(opts...),
+		),
 		getAgentIdentity: connect.NewClient[v1.GetAgentIdentityRequest, v1.GetAgentIdentityResponse](
 			httpClient,
 			baseURL+RuntimeGetAgentIdentityProcedure,
@@ -720,6 +752,8 @@ type runtimeClient struct {
 	imageList              *connect.Client[v1.ImageListRequest, v1.ImageListResponse]
 	binList                *connect.Client[v1.BinListRequest, v1.BinListResponse]
 	selfReload             *connect.Client[v1.SelfReloadRequest, v1.SelfReloadResponse]
+	addAgentCapability     *connect.Client[v1.AddAgentCapabilityRequest, v1.AddAgentCapabilityResponse]
+	listCapabilities       *connect.Client[v1.ListCapabilitiesRequest, v1.ListCapabilitiesResponse]
 	getAgentIdentity       *connect.Client[v1.GetAgentIdentityRequest, v1.GetAgentIdentityResponse]
 	watchAsyncJob          *connect.Client[v1.WatchAsyncJobRequest, v1.WatchAsyncJobResponse]
 }
@@ -994,6 +1028,16 @@ func (c *runtimeClient) SelfReload(ctx context.Context, req *connect.Request[v1.
 	return c.selfReload.CallUnary(ctx, req)
 }
 
+// AddAgentCapability calls openotters.daemon.v1.Runtime.AddAgentCapability.
+func (c *runtimeClient) AddAgentCapability(ctx context.Context, req *connect.Request[v1.AddAgentCapabilityRequest]) (*connect.Response[v1.AddAgentCapabilityResponse], error) {
+	return c.addAgentCapability.CallUnary(ctx, req)
+}
+
+// ListCapabilities calls openotters.daemon.v1.Runtime.ListCapabilities.
+func (c *runtimeClient) ListCapabilities(ctx context.Context, req *connect.Request[v1.ListCapabilitiesRequest]) (*connect.Response[v1.ListCapabilitiesResponse], error) {
+	return c.listCapabilities.CallUnary(ctx, req)
+}
+
 // GetAgentIdentity calls openotters.daemon.v1.Runtime.GetAgentIdentity.
 func (c *runtimeClient) GetAgentIdentity(ctx context.Context, req *connect.Request[v1.GetAgentIdentityRequest]) (*connect.Response[v1.GetAgentIdentityResponse], error) {
 	return c.getAgentIdentity.CallUnary(ctx, req)
@@ -1113,6 +1157,20 @@ type RuntimeHandler interface {
 	// to call the new agent — without it, the JWT in memory
 	// still carries the stale Links claim from agent startup.
 	SelfReload(context.Context, *connect.Request[v1.SelfReloadRequest]) (*connect.Response[v1.SelfReloadResponse], error)
+	// AddAgentCapability appends one capability to an agent's
+	// effective cap set, re-issues its JWT, and bounces the runtime
+	// so the new tool surfaces in agent.yaml + the JWT claim
+	// immediately. Operator-only — agents can't grant themselves
+	// caps. Idempotent: re-adding an already-granted cap returns
+	// ok without restarting.
+	AddAgentCapability(context.Context, *connect.Request[v1.AddAgentCapabilityRequest]) (*connect.Response[v1.AddAgentCapabilityResponse], error)
+	// ListCapabilities returns the daemon's full capability catalogue
+	// (name + description per entry). Operator-only — used by the
+	// dashboard's "Add capability" picker to populate the dropdown
+	// and to render capability descriptions on image / agent views.
+	// The catalogue is static for a given daemon version; cache it
+	// on the client.
+	ListCapabilities(context.Context, *connect.Request[v1.ListCapabilitiesRequest]) (*connect.Response[v1.ListCapabilitiesResponse], error)
 	// GetAgentIdentity exposes an agent's persisted JWT + decoded
 	// claims for the operator UI's Identity tab. Operator-only
 	// (rejected for agent tokens). The token field is the raw
@@ -1459,6 +1517,18 @@ func NewRuntimeHandler(svc RuntimeHandler, opts ...connect.HandlerOption) (strin
 		connect.WithSchema(runtimeMethods.ByName("SelfReload")),
 		connect.WithHandlerOptions(opts...),
 	)
+	runtimeAddAgentCapabilityHandler := connect.NewUnaryHandler(
+		RuntimeAddAgentCapabilityProcedure,
+		svc.AddAgentCapability,
+		connect.WithSchema(runtimeMethods.ByName("AddAgentCapability")),
+		connect.WithHandlerOptions(opts...),
+	)
+	runtimeListCapabilitiesHandler := connect.NewUnaryHandler(
+		RuntimeListCapabilitiesProcedure,
+		svc.ListCapabilities,
+		connect.WithSchema(runtimeMethods.ByName("ListCapabilities")),
+		connect.WithHandlerOptions(opts...),
+	)
 	runtimeGetAgentIdentityHandler := connect.NewUnaryHandler(
 		RuntimeGetAgentIdentityProcedure,
 		svc.GetAgentIdentity,
@@ -1581,6 +1651,10 @@ func NewRuntimeHandler(svc RuntimeHandler, opts ...connect.HandlerOption) (strin
 			runtimeBinListHandler.ServeHTTP(w, r)
 		case RuntimeSelfReloadProcedure:
 			runtimeSelfReloadHandler.ServeHTTP(w, r)
+		case RuntimeAddAgentCapabilityProcedure:
+			runtimeAddAgentCapabilityHandler.ServeHTTP(w, r)
+		case RuntimeListCapabilitiesProcedure:
+			runtimeListCapabilitiesHandler.ServeHTTP(w, r)
 		case RuntimeGetAgentIdentityProcedure:
 			runtimeGetAgentIdentityHandler.ServeHTTP(w, r)
 		case RuntimeWatchAsyncJobProcedure:
@@ -1808,6 +1882,14 @@ func (UnimplementedRuntimeHandler) BinList(context.Context, *connect.Request[v1.
 
 func (UnimplementedRuntimeHandler) SelfReload(context.Context, *connect.Request[v1.SelfReloadRequest]) (*connect.Response[v1.SelfReloadResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("openotters.daemon.v1.Runtime.SelfReload is not implemented"))
+}
+
+func (UnimplementedRuntimeHandler) AddAgentCapability(context.Context, *connect.Request[v1.AddAgentCapabilityRequest]) (*connect.Response[v1.AddAgentCapabilityResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("openotters.daemon.v1.Runtime.AddAgentCapability is not implemented"))
+}
+
+func (UnimplementedRuntimeHandler) ListCapabilities(context.Context, *connect.Request[v1.ListCapabilitiesRequest]) (*connect.Response[v1.ListCapabilitiesResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("openotters.daemon.v1.Runtime.ListCapabilities is not implemented"))
 }
 
 func (UnimplementedRuntimeHandler) GetAgentIdentity(context.Context, *connect.Request[v1.GetAgentIdentityRequest]) (*connect.Response[v1.GetAgentIdentityResponse], error) {

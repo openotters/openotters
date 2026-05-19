@@ -319,6 +319,30 @@ export const binList = Runtime.method.binList;
 export const selfReload = Runtime.method.selfReload;
 
 /**
+ * AddAgentCapability appends one capability to an agent's
+ * effective cap set, re-issues its JWT, and bounces the runtime
+ * so the new tool surfaces in agent.yaml + the JWT claim
+ * immediately. Operator-only — agents can't grant themselves
+ * caps. Idempotent: re-adding an already-granted cap returns
+ * ok without restarting.
+ *
+ * @generated from rpc openotters.daemon.v1.Runtime.AddAgentCapability
+ */
+export const addAgentCapability = Runtime.method.addAgentCapability;
+
+/**
+ * ListCapabilities returns the daemon's full capability catalogue
+ * (name + description per entry). Operator-only — used by the
+ * dashboard's "Add capability" picker to populate the dropdown
+ * and to render capability descriptions on image / agent views.
+ * The catalogue is static for a given daemon version; cache it
+ * on the client.
+ *
+ * @generated from rpc openotters.daemon.v1.Runtime.ListCapabilities
+ */
+export const listCapabilities = Runtime.method.listCapabilities;
+
+/**
  * GetAgentIdentity exposes an agent's persisted JWT + decoded
  * claims for the operator UI's Identity tab. Operator-only
  * (rejected for agent tokens). The token field is the raw

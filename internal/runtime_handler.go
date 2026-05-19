@@ -3,6 +3,7 @@ package internal
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 
@@ -370,6 +371,11 @@ func (h *runtimeHandler) GetAgentLogs(
 func (h *runtimeHandler) ListModels(
 	ctx context.Context, _ *connect.Request[daemonv1.ListModelsRequest],
 ) (*connect.Response[daemonv1.ListModelsResponse], error) {
+	// Operator callers pass through; agent callers need the
+	// model_list cap.
+	if _, err := requireCapability(ctx, "model_list"); err != nil {
+		return nil, err
+	}
 	rows := h.daemon.Models(ctx)
 	models := make([]*daemonv1.Model, 0, len(rows))
 
@@ -751,6 +757,76 @@ func buildRPCFilter(req *daemonv1.StreamRPCCallsRequest) func(observability.RPCC
 		}
 		return true
 	}
+}
+
+// AddAgentCapability grants one cap to a running agent. Operator-
+// only — agents can't grant themselves caps (that would defeat
+// the gate). Validates the cap name against the daemon's
+// catalogue, appends to the persisted cap set, re-issues the JWT,
+// and bounces the runtime so the new surface takes effect.
+func (h *runtimeHandler) AddAgentCapability(
+	ctx context.Context, req *connect.Request[daemonv1.AddAgentCapabilityRequest],
+) (*connect.Response[daemonv1.AddAgentCapabilityResponse], error) {
+	if c := auth.ClaimsFromContext(ctx); c == nil || c.AgentRef != "" {
+		return nil, connect.NewError(connect.CodeUnauthenticated,
+			errors.New("AddAgentCapability requires an operator token"))
+	}
+	ref := req.Msg.GetRef()
+	capName := req.Msg.GetCapability()
+	if ref == "" || capName == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument,
+			errors.New("ref and capability are required"))
+	}
+	known := catalogueNames(AgentExtras{
+		DaemonURL:  h.daemon.agentReachableURL(),
+		AgentToken: "placeholder",
+	})
+	if _, ok := known[capName]; !ok {
+		return nil, connect.NewError(connect.CodeInvalidArgument,
+			fmt.Errorf("unknown capability %q (call ListCapabilities to discover valid names)", capName))
+	}
+	restarted, added, caps, err := h.daemon.AddAgentCapability(ctx, ref, capName)
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(&daemonv1.AddAgentCapabilityResponse{
+		Restarted:    restarted,
+		Added:        added,
+		Capabilities: caps,
+	}), nil
+}
+
+// ListCapabilities dumps the daemon's full capability catalogue —
+// name + human-readable description per entry. Operator-only; the
+// dashboard's "Add capability" picker consumes this. Catalogue
+// content is static for a given daemon version, so the client may
+// cache the result for the dashboard session.
+//
+// Pass an extras stub with DaemonURL + AgentToken populated so the
+// daemon-callback caps (job_*) are included — the catalogue is
+// gated on those env vars at agent-build time, but the dashboard's
+// dropdown should show every cap an agent COULD theoretically have.
+func (h *runtimeHandler) ListCapabilities(
+	ctx context.Context, _ *connect.Request[daemonv1.ListCapabilitiesRequest],
+) (*connect.Response[daemonv1.ListCapabilitiesResponse], error) {
+	if c := auth.ClaimsFromContext(ctx); c == nil || c.AgentRef != "" {
+		return nil, connect.NewError(connect.CodeUnauthenticated,
+			errors.New("ListCapabilities requires an operator token"))
+	}
+	catalogue := capabilityCatalogue(AgentExtras{
+		DaemonURL:  h.daemon.agentReachableURL(),
+		AgentToken: "placeholder",
+	})
+	out := make([]*daemonv1.CapabilityEntry, 0, len(catalogue))
+	for _, c := range catalogue {
+		out = append(out, &daemonv1.CapabilityEntry{
+			Name:        c.Name,
+			Description: c.Description,
+		})
+	}
+	return connect.NewResponse(&daemonv1.ListCapabilitiesResponse{
+		Capabilities: out,
+	}), nil
 }
 
 // GetAgentIdentity returns an agent's persisted JWT alongside the

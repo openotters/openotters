@@ -144,6 +144,40 @@ func (d *Daemon) AgentLinkedAgents(ctx context.Context, agentID string) ([]Linke
 	return out, nil
 }
 
+// AddAgentCapability appends one cap to the agent's effective set,
+// persists it, re-issues the JWT (so the cap claim reflects the
+// new surface), and bounces the runtime if running. Returns
+// (restarted, added, fullCapList, err).
+//
+// Operator-only — the handler enforces; this helper assumes the
+// caller already validated authorization. Cap name MUST be
+// catalogued; the handler validates before calling here.
+func (d *Daemon) AddAgentCapability(ctx context.Context, ref, capName string) (bool, bool, []string, error) {
+	ma, err := d.resolve(ref)
+	if err != nil {
+		return false, false, nil, fmt.Errorf("resolve %q: %w", ref, err)
+	}
+	for _, c := range ma.capabilities {
+		if c == capName {
+			// Idempotent: cap already present, no-op.
+			return false, false, append([]string(nil), ma.capabilities...), nil
+		}
+	}
+	newCaps := append([]string(nil), ma.capabilities...)
+	newCaps = append(newCaps, capName)
+	ma.capabilities = newCaps
+
+	if persistErr := d.state.UpdateAgentCapabilities(ctx, ma.id.String(), newCaps); persistErr != nil {
+		return false, false, nil, fmt.Errorf("persist capabilities: %w", persistErr)
+	}
+
+	restarted, err := d.RefreshAgentTokenAndMaybeRestart(ctx, ma)
+	if err != nil {
+		return false, false, newCaps, fmt.Errorf("refresh token / restart: %w", err)
+	}
+	return restarted, true, newCaps, nil
+}
+
 // AllAgents returns every agent currently in the pool, hydrated
 // to the LinkedAgentInfo shape. Drives the bypass-link
 // AgentListAll RPC — same projection as AgentLinkedAgents but

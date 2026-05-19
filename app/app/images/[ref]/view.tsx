@@ -1,5 +1,7 @@
 "use client"
 
+import { useQuery } from "@connectrpc/connect-query"
+import { KeyRound } from "lucide-react"
 import { ArtifactDetailView } from "@/components/artifact-detail-view"
 import {
 	Accordion,
@@ -14,12 +16,22 @@ import {
 	CardHeader,
 	CardTitle,
 } from "@/components/ui/card"
+import { listCapabilities } from "@/lib/proto/v1/daemon-Runtime_connectquery"
 import { useRouteParams } from "@/lib/use-route-params"
 import { runActionForVersion } from "@/components/agents/run-version-action"
 
 export default function ImageDetailPage() {
 	const params = useRouteParams<{ ref: string }>("/images/:ref")
 	const ref = params.ref ?? ""
+
+	// Catalogue is image-independent (daemon-version-scoped); fetch
+	// it once at page mount so the Capabilities section can render
+	// names + descriptions without a per-name lookup.
+	const catalogue = useQuery(listCapabilities, {})
+	const capDescriptions = new Map<string, string>()
+	for (const c of catalogue.data?.capabilities ?? []) {
+		capDescriptions.set(c.name, c.description)
+	}
 
 	return (
 		<ArtifactDetailView
@@ -28,8 +40,45 @@ export default function ImageDetailPage() {
 				if (!describe) return null
 				const envs = parseEnvsFromConfig(describe.config)
 				const contexts = parseContextsFromConfig(describe.config)
+				const capabilities = parseCapabilitiesFromConfig(describe.config)
 				return (
 					<>
+						{capabilities.length > 0 && (
+							<Card>
+								<CardHeader>
+									<CardTitle className="text-base">
+										Capabilities ({capabilities.length})
+									</CardTitle>
+									<CardDescription>
+										Runtime tool surface declared by this image's{" "}
+										<code className="font-mono text-xs">CAPABILITY</code>{" "}
+										directives. Operators may append more at run-time with{" "}
+										<code className="font-mono text-xs">--cap</code>; the
+										final set lives on the agent's JWT.
+									</CardDescription>
+								</CardHeader>
+								<CardContent>
+									<div className="space-y-2">
+										{capabilities.map((name) => (
+											<div className="rounded-lg border p-3" key={name}>
+												<div className="flex items-center gap-2">
+													<KeyRound className="h-4 w-4 text-primary" />
+													<code className="font-mono font-medium text-sm">
+														{name}
+													</code>
+												</div>
+												{capDescriptions.has(name) && (
+													<p className="mt-1 pl-6 text-muted-foreground text-xs">
+														{capDescriptions.get(name)}
+													</p>
+												)}
+											</div>
+										))}
+									</div>
+								</CardContent>
+							</Card>
+						)}
+
 						{contexts.length > 0 && (
 							<Card>
 								<CardHeader>
@@ -142,6 +191,23 @@ function parseEnvsFromConfig(configJSON: string): EnvDecl[] {
 				value: e.value,
 				description: typeof e.description === "string" ? e.description : undefined,
 			}))
+	} catch {
+		return []
+	}
+}
+
+// parseCapabilitiesFromConfig extracts the agent's CAPABILITY
+// declarations. The spec serialises them as a flat string array
+// (`agent.capabilities`); descriptions are looked up server-side
+// via ListCapabilities since the image config only stores names.
+// Tolerates absent / malformed input — empty array on any parse
+// failure.
+function parseCapabilitiesFromConfig(configJSON: string): string[] {
+	try {
+		const parsed = JSON.parse(configJSON)
+		const caps = parsed?.agent?.capabilities
+		if (!Array.isArray(caps)) return []
+		return caps.filter((c): c is string => typeof c === "string")
 	} catch {
 		return []
 	}

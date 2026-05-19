@@ -73,6 +73,8 @@ const (
 	Runtime_ImageList_FullMethodName              = "/openotters.daemon.v1.Runtime/ImageList"
 	Runtime_BinList_FullMethodName                = "/openotters.daemon.v1.Runtime/BinList"
 	Runtime_SelfReload_FullMethodName             = "/openotters.daemon.v1.Runtime/SelfReload"
+	Runtime_AddAgentCapability_FullMethodName     = "/openotters.daemon.v1.Runtime/AddAgentCapability"
+	Runtime_ListCapabilities_FullMethodName       = "/openotters.daemon.v1.Runtime/ListCapabilities"
 	Runtime_GetAgentIdentity_FullMethodName       = "/openotters.daemon.v1.Runtime/GetAgentIdentity"
 	Runtime_WatchAsyncJob_FullMethodName          = "/openotters.daemon.v1.Runtime/WatchAsyncJob"
 )
@@ -188,6 +190,20 @@ type RuntimeClient interface {
 	// to call the new agent — without it, the JWT in memory
 	// still carries the stale Links claim from agent startup.
 	SelfReload(ctx context.Context, in *SelfReloadRequest, opts ...grpc.CallOption) (*SelfReloadResponse, error)
+	// AddAgentCapability appends one capability to an agent's
+	// effective cap set, re-issues its JWT, and bounces the runtime
+	// so the new tool surfaces in agent.yaml + the JWT claim
+	// immediately. Operator-only — agents can't grant themselves
+	// caps. Idempotent: re-adding an already-granted cap returns
+	// ok without restarting.
+	AddAgentCapability(ctx context.Context, in *AddAgentCapabilityRequest, opts ...grpc.CallOption) (*AddAgentCapabilityResponse, error)
+	// ListCapabilities returns the daemon's full capability catalogue
+	// (name + description per entry). Operator-only — used by the
+	// dashboard's "Add capability" picker to populate the dropdown
+	// and to render capability descriptions on image / agent views.
+	// The catalogue is static for a given daemon version; cache it
+	// on the client.
+	ListCapabilities(ctx context.Context, in *ListCapabilitiesRequest, opts ...grpc.CallOption) (*ListCapabilitiesResponse, error)
 	// GetAgentIdentity exposes an agent's persisted JWT + decoded
 	// claims for the operator UI's Identity tab. Operator-only
 	// (rejected for agent tokens). The token field is the raw
@@ -769,6 +785,26 @@ func (c *runtimeClient) SelfReload(ctx context.Context, in *SelfReloadRequest, o
 	return out, nil
 }
 
+func (c *runtimeClient) AddAgentCapability(ctx context.Context, in *AddAgentCapabilityRequest, opts ...grpc.CallOption) (*AddAgentCapabilityResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(AddAgentCapabilityResponse)
+	err := c.cc.Invoke(ctx, Runtime_AddAgentCapability_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *runtimeClient) ListCapabilities(ctx context.Context, in *ListCapabilitiesRequest, opts ...grpc.CallOption) (*ListCapabilitiesResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListCapabilitiesResponse)
+	err := c.cc.Invoke(ctx, Runtime_ListCapabilities_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *runtimeClient) GetAgentIdentity(ctx context.Context, in *GetAgentIdentityRequest, opts ...grpc.CallOption) (*GetAgentIdentityResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(GetAgentIdentityResponse)
@@ -909,6 +945,20 @@ type RuntimeServer interface {
 	// to call the new agent — without it, the JWT in memory
 	// still carries the stale Links claim from agent startup.
 	SelfReload(context.Context, *SelfReloadRequest) (*SelfReloadResponse, error)
+	// AddAgentCapability appends one capability to an agent's
+	// effective cap set, re-issues its JWT, and bounces the runtime
+	// so the new tool surfaces in agent.yaml + the JWT claim
+	// immediately. Operator-only — agents can't grant themselves
+	// caps. Idempotent: re-adding an already-granted cap returns
+	// ok without restarting.
+	AddAgentCapability(context.Context, *AddAgentCapabilityRequest) (*AddAgentCapabilityResponse, error)
+	// ListCapabilities returns the daemon's full capability catalogue
+	// (name + description per entry). Operator-only — used by the
+	// dashboard's "Add capability" picker to populate the dropdown
+	// and to render capability descriptions on image / agent views.
+	// The catalogue is static for a given daemon version; cache it
+	// on the client.
+	ListCapabilities(context.Context, *ListCapabilitiesRequest) (*ListCapabilitiesResponse, error)
 	// GetAgentIdentity exposes an agent's persisted JWT + decoded
 	// claims for the operator UI's Identity tab. Operator-only
 	// (rejected for agent tokens). The token field is the raw
@@ -1093,6 +1143,12 @@ func (UnimplementedRuntimeServer) BinList(context.Context, *BinListRequest) (*Bi
 }
 func (UnimplementedRuntimeServer) SelfReload(context.Context, *SelfReloadRequest) (*SelfReloadResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method SelfReload not implemented")
+}
+func (UnimplementedRuntimeServer) AddAgentCapability(context.Context, *AddAgentCapabilityRequest) (*AddAgentCapabilityResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method AddAgentCapability not implemented")
+}
+func (UnimplementedRuntimeServer) ListCapabilities(context.Context, *ListCapabilitiesRequest) (*ListCapabilitiesResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListCapabilities not implemented")
 }
 func (UnimplementedRuntimeServer) GetAgentIdentity(context.Context, *GetAgentIdentityRequest) (*GetAgentIdentityResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetAgentIdentity not implemented")
@@ -2079,6 +2135,42 @@ func _Runtime_SelfReload_Handler(srv interface{}, ctx context.Context, dec func(
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Runtime_AddAgentCapability_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AddAgentCapabilityRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(RuntimeServer).AddAgentCapability(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Runtime_AddAgentCapability_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(RuntimeServer).AddAgentCapability(ctx, req.(*AddAgentCapabilityRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Runtime_ListCapabilities_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListCapabilitiesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(RuntimeServer).ListCapabilities(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Runtime_ListCapabilities_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(RuntimeServer).ListCapabilities(ctx, req.(*ListCapabilitiesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _Runtime_GetAgentIdentity_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(GetAgentIdentityRequest)
 	if err := dec(in); err != nil {
@@ -2322,6 +2414,14 @@ var Runtime_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "SelfReload",
 			Handler:    _Runtime_SelfReload_Handler,
+		},
+		{
+			MethodName: "AddAgentCapability",
+			Handler:    _Runtime_AddAgentCapability_Handler,
+		},
+		{
+			MethodName: "ListCapabilities",
+			Handler:    _Runtime_ListCapabilities_Handler,
 		},
 		{
 			MethodName: "GetAgentIdentity",

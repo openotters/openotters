@@ -72,7 +72,7 @@ func (h *runtimeHandler) ListAgentLinks(
 func (h *runtimeHandler) AgentList(
 	ctx context.Context, _ *connect.Request[daemonv1.AgentListRequest],
 ) (*connect.Response[daemonv1.AgentListResponse], error) {
-	caller, err := requireAgentCaller(ctx)
+	caller, err := requireCapability(ctx, "agent_list")
 	if err != nil {
 		return nil, err
 	}
@@ -88,7 +88,7 @@ func (h *runtimeHandler) AgentList(
 func (h *runtimeHandler) AgentInfo(
 	ctx context.Context, req *connect.Request[daemonv1.AgentInfoRequest],
 ) (*connect.Response[daemonv1.AgentInfoResponse], error) {
-	caller, err := requireAgentCaller(ctx)
+	caller, err := requireCapability(ctx, "agent_info")
 	if err != nil {
 		return nil, err
 	}
@@ -131,7 +131,7 @@ func (h *runtimeHandler) AgentInfo(
 func (h *runtimeHandler) AgentExec(
 	ctx context.Context, req *connect.Request[daemonv1.AgentExecRequest],
 ) (*connect.Response[daemonv1.AgentExecResponse], error) {
-	caller, err := requireAgentCaller(ctx)
+	caller, err := requireCapability(ctx, "agent_exec")
 	if err != nil {
 		return nil, err
 	}
@@ -170,7 +170,7 @@ func (h *runtimeHandler) AgentExec(
 func (h *runtimeHandler) AgentCreate(
 	ctx context.Context, req *connect.Request[daemonv1.AgentCreateRequest],
 ) (*connect.Response[daemonv1.AgentCreateResponse], error) {
-	if _, err := requireAgentCaller(ctx); err != nil {
+	if _, err := requireCapability(ctx, "agent_create"); err != nil {
 		return nil, err
 	}
 	if req.Msg.GetRef() == "" {
@@ -217,7 +217,7 @@ func (h *runtimeHandler) AgentCreate(
 func (h *runtimeHandler) AgentCreateFromSource(
 	ctx context.Context, req *connect.Request[daemonv1.AgentCreateFromSourceRequest],
 ) (*connect.Response[daemonv1.AgentCreateResponse], error) {
-	caller, err := requireAgentCaller(ctx)
+	caller, err := requireCapability(ctx, "agent_create_from_source")
 	if err != nil {
 		return nil, err
 	}
@@ -310,7 +310,7 @@ func (h *runtimeHandler) persistInboundLinks(
 func (h *runtimeHandler) SelfReload(
 	ctx context.Context, _ *connect.Request[daemonv1.SelfReloadRequest],
 ) (*connect.Response[daemonv1.SelfReloadResponse], error) {
-	caller, err := requireAgentCaller(ctx)
+	caller, err := requireCapability(ctx, "self_reload")
 	if err != nil {
 		return nil, err
 	}
@@ -340,6 +340,9 @@ func (h *runtimeHandler) SelfReload(
 func (h *runtimeHandler) AgentDelete(
 	ctx context.Context, req *connect.Request[daemonv1.AgentDeleteRequest],
 ) (*connect.Response[daemonv1.AgentDeleteResponse], error) {
+	if _, err := requireCapability(ctx, "agent_delete"); err != nil {
+		return nil, err
+	}
 	if req.Msg.GetRef() == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument,
 			errors.New("ref is required"))
@@ -358,19 +361,16 @@ func (h *runtimeHandler) AgentDelete(
 //
 // These four RPCs do the same work as AgentList / AgentInfo /
 // AgentExec / AgentDelete but skip the requireLinkedTarget step.
-// Today every agent is granted access (the capability surface
-// includes the corresponding *_all / *_any entry). A future
-// capability-management wave will move them behind an explicit
-// operator grant; for now they exist to establish the surface so
-// supervisor agents can do their job without being pre-linked to
-// every spawn.
+// Gated on their cap name in JWT.Capabilities — an agent without
+// the cap can neither see the tool (runtime-side filter) nor
+// reach the RPC (daemon-side enforcement).
 
 // AgentListAll returns every agent in the daemon's pool, not
 // just the caller's outbound links.
 func (h *runtimeHandler) AgentListAll(
 	ctx context.Context, _ *connect.Request[daemonv1.AgentListAllRequest],
 ) (*connect.Response[daemonv1.AgentListAllResponse], error) {
-	if _, err := requireAgentCaller(ctx); err != nil {
+	if _, err := requireCapability(ctx, "agent_list_all"); err != nil {
 		return nil, err
 	}
 	all := h.daemon.AllAgents()
@@ -383,7 +383,7 @@ func (h *runtimeHandler) AgentListAll(
 func (h *runtimeHandler) AgentInfoAny(
 	ctx context.Context, req *connect.Request[daemonv1.AgentInfoAnyRequest],
 ) (*connect.Response[daemonv1.AgentInfoResponse], error) {
-	if _, err := requireAgentCaller(ctx); err != nil {
+	if _, err := requireCapability(ctx, "agent_info_any"); err != nil {
 		return nil, err
 	}
 	if req.Msg.GetRef() == "" {
@@ -406,7 +406,7 @@ func (h *runtimeHandler) AgentInfoAny(
 func (h *runtimeHandler) AgentExecAny(
 	ctx context.Context, req *connect.Request[daemonv1.AgentExecAnyRequest],
 ) (*connect.Response[daemonv1.AgentExecResponse], error) {
-	caller, err := requireAgentCaller(ctx)
+	caller, err := requireCapability(ctx, "agent_exec_any")
 	if err != nil {
 		return nil, err
 	}
@@ -437,7 +437,7 @@ func (h *runtimeHandler) AgentExecAny(
 func (h *runtimeHandler) AgentDeleteAny(
 	ctx context.Context, req *connect.Request[daemonv1.AgentDeleteAnyRequest],
 ) (*connect.Response[daemonv1.AgentDeleteResponse], error) {
-	if _, err := requireAgentCaller(ctx); err != nil {
+	if _, err := requireCapability(ctx, "agent_delete_any"); err != nil {
 		return nil, err
 	}
 	if req.Msg.GetRef() == "" {
@@ -457,7 +457,7 @@ func (h *runtimeHandler) AgentDeleteAny(
 func (h *runtimeHandler) ImageList(
 	ctx context.Context, _ *connect.Request[daemonv1.ImageListRequest],
 ) (*connect.Response[daemonv1.ImageListResponse], error) {
-	if _, err := requireAgentCaller(ctx); err != nil {
+	if _, err := requireCapability(ctx, "image_list"); err != nil {
 		return nil, err
 	}
 	rows, err := h.daemon.state.ListImages(ctx)
@@ -483,7 +483,7 @@ func (h *runtimeHandler) ImageList(
 func (h *runtimeHandler) BinList(
 	ctx context.Context, _ *connect.Request[daemonv1.BinListRequest],
 ) (*connect.Response[daemonv1.BinListResponse], error) {
-	if _, err := requireAgentCaller(ctx); err != nil {
+	if _, err := requireCapability(ctx, "bin_list"); err != nil {
 		return nil, err
 	}
 	rows, err := h.daemon.state.ListImages(ctx)
@@ -517,6 +517,40 @@ func requireAgentCaller(ctx context.Context) (*auth.Claims, error) {
 			errors.New("this RPC requires an agent token"))
 	}
 	return claims, nil
+}
+
+// requireCapability gates an RPC on the caller having the named
+// capability in their JWT.Capabilities claim. Operators (empty
+// AgentRef) bypass the cap check — the daemon's auth-side
+// distinction between operator and agent tokens is preserved.
+// Agent tokens must carry the cap; missing the cap returns
+// PermissionDenied with a model-friendly message.
+//
+// The JWT is the authoritative source — handlers should NOT
+// consult the agents table directly. Operator-driven cap grants
+// flow through AddAgentCapability which re-issues the JWT
+// before this gate will accept the new cap on the next request.
+func requireCapability(ctx context.Context, capName string) (*auth.Claims, error) {
+	claims := auth.ClaimsFromContext(ctx)
+	if claims == nil {
+		return nil, connect.NewError(connect.CodeUnauthenticated,
+			errors.New("this RPC requires an authenticated token"))
+	}
+	if claims.AgentRef == "" {
+		// Operator token — open access. Operators don't have
+		// per-cap scoping; they're the ones granting caps.
+		return claims, nil
+	}
+	for _, c := range claims.Capabilities {
+		if c == capName {
+			return claims, nil
+		}
+	}
+	return nil, connect.NewError(connect.CodePermissionDenied,
+		fmt.Errorf("agent %q does not have the %q capability — "+
+			"operator must grant it via `otters run --cap %s` at create time "+
+			"or via the dashboard's Capabilities tab",
+			claims.AgentRef, capName, capName))
 }
 
 // requireLinkedTarget resolves `ref` to a managedAgent AND

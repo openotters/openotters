@@ -96,6 +96,9 @@ const watchPollInterval = 250 * time.Millisecond
 func (h *runtimeHandler) SubmitAsyncJob(
 	ctx context.Context, req *connect.Request[daemonv1.SubmitAsyncJobRequest],
 ) (*connect.Response[daemonv1.SubmitAsyncJobResponse], error) {
+	if _, err := requireCapability(ctx, "job_submit"); err != nil {
+		return nil, err
+	}
 	ref, ok := boundAgentRef(ctx, req.Msg.GetAgentRef())
 	if !ok {
 		return nil, connect.NewError(connect.CodeInvalidArgument,
@@ -189,6 +192,9 @@ func (h *runtimeHandler) validateAgentBin(agentIDStr, bin string) *connect.Error
 func (h *runtimeHandler) CancelAsyncJob(
 	ctx context.Context, req *connect.Request[daemonv1.CancelAsyncJobRequest],
 ) (*connect.Response[daemonv1.CancelAsyncJobResponse], error) {
+	if _, err := requireCapability(ctx, "job_cancel"); err != nil {
+		return nil, err
+	}
 	jobID := req.Msg.GetJobId()
 	if scopeErr := h.assertJobInScope(ctx, jobID); scopeErr != nil {
 		return nil, scopeErr
@@ -206,6 +212,9 @@ func (h *runtimeHandler) CancelAsyncJob(
 func (h *runtimeHandler) GetAsyncJob(
 	ctx context.Context, req *connect.Request[daemonv1.GetAsyncJobRequest],
 ) (*connect.Response[daemonv1.GetAsyncJobResponse], error) {
+	if _, err := requireCapability(ctx, "job_status"); err != nil {
+		return nil, err
+	}
 	store := asyncjobs.NewStore(h.daemon.state.db)
 	j, err := store.Get(ctx, req.Msg.GetJobId())
 	if errors.Is(err, asyncjobs.ErrNotFound) {
@@ -226,6 +235,9 @@ func (h *runtimeHandler) GetAsyncJob(
 func (h *runtimeHandler) ListAsyncJobs(
 	ctx context.Context, req *connect.Request[daemonv1.ListAsyncJobsRequest],
 ) (*connect.Response[daemonv1.ListAsyncJobsResponse], error) {
+	if _, err := requireCapability(ctx, "job_list"); err != nil {
+		return nil, err
+	}
 	store := asyncjobs.NewStore(h.daemon.state.db)
 
 	filter := asyncjobs.ListFilter{Labels: req.Msg.GetLabelSelector()}
@@ -278,6 +290,9 @@ func (h *runtimeHandler) WatchAsyncJob(
 	req *connect.Request[daemonv1.WatchAsyncJobRequest],
 	stream *connect.ServerStream[daemonv1.WatchAsyncJobResponse],
 ) error {
+	if _, err := requireCapability(ctx, "job_watch"); err != nil {
+		return err
+	}
 	jobID := req.Msg.GetJobId()
 	if jobID == "" {
 		return connect.NewError(connect.CodeInvalidArgument,

@@ -703,6 +703,25 @@ func (s *StateStore) RemoveAgent(ctx context.Context, id string) error {
 	return err
 }
 
+// UpdateAgentCapabilities replaces the persisted capabilities_json
+// column for one agent. Used by the operator's
+// AddAgentCapability RPC after appending one cap to the
+// effective set.
+func (s *StateStore) UpdateAgentCapabilities(ctx context.Context, id string, caps []string) error {
+	data, err := json.Marshal(caps)
+	if err != nil {
+		return fmt.Errorf("encoding capabilities: %w", err)
+	}
+	if len(caps) == 0 {
+		data = []byte("[]")
+	}
+	_, err = s.db.ExecContext(ctx,
+		`UPDATE agents SET capabilities_json = ? WHERE id = ?`,
+		string(data), id,
+	)
+	return err
+}
+
 // UpdateAgentToken rotates the token + jti columns for one agent.
 // Used by the link-mutation path: when an agent's outbound link
 // set changes, the daemon re-issues the JWT and persists the new
