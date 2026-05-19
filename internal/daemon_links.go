@@ -12,12 +12,19 @@ package internal
 // lifecycle (pool, JWT signing key, etc.).
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"path/filepath"
 	"time"
 
+	"github.com/go-git/go-billy/v6"
+	"github.com/go-git/go-billy/v6/osfs"
+	"github.com/go-git/go-billy/v6/util"
 	"github.com/google/uuid"
+	agentpkg "github.com/openotters/agentfile/executor"
+	"github.com/openotters/agentfile/spec"
 	daemonv1 "github.com/openotters/openotters/api/v1"
 	"github.com/openotters/openotters/internal/auth"
 	"go.uber.org/zap"
@@ -171,11 +178,100 @@ func (d *Daemon) AddAgentCapability(ctx context.Context, ref, capName string) (b
 		return false, false, nil, fmt.Errorf("persist capabilities: %w", persistErr)
 	}
 
+	// Re-render the on-disk artefacts the runtime reads at start.
+	// The JWT alone isn't enough: agent.yaml's capabilities: block
+	// drives runtime tool registration, and AGENT.md surfaces the
+	// list in the model's system prompt. Both files were rendered
+	// at materialise time and stay frozen otherwise — without this
+	// step a granted cap lands in the JWT but the runtime starts
+	// against the stale agent.yaml and never registers the new
+	// tool.
+	if rewriteErr := d.rewriteAgentCapabilitiesOnDisk(ma); rewriteErr != nil {
+		// Best-effort: a write failure shouldn't block the grant —
+		// the cap is persisted in daemon.db and the JWT carries
+		// the claim. Next natural recreate picks the new caps up
+		// from the persistence column. Log so an operator notices.
+		d.logger.Warn("rewrite agent.yaml / AGENT.md after cap grant failed",
+			zap.String("id", ma.id.String()), zap.String("cap", capName),
+			zap.Error(rewriteErr))
+	}
+
 	restarted, err := d.RefreshAgentTokenAndMaybeRestart(ctx, ma)
 	if err != nil {
 		return false, false, newCaps, fmt.Errorf("refresh token / restart: %w", err)
 	}
 	return restarted, true, newCaps, nil
+}
+
+// rewriteAgentCapabilitiesOnDisk replaces the capabilities: block
+// in <agent-root>/etc/agent.yaml AND regenerates
+// <agent-root>/etc/context/AGENT.md so a restart picks up the new
+// surface. Called by AddAgentCapability after the in-memory + DB
+// updates land — both files are otherwise frozen at materialise
+// time.
+//
+// Errors are warned (not fatal) by the caller: the persistence
+// column is authoritative for the next recreate; this is a
+// best-effort sync for live restart.
+func (d *Daemon) rewriteAgentCapabilitiesOnDisk(ma *managedAgent) error {
+	chroot := filepath.Join(d.agentsDir, ma.id.String())
+	fs := osfs.New(chroot)
+
+	// Resolve full Capability entries (name + description) for the
+	// new set so agent.yaml's block matches what materialise would
+	// have written. Use the same extras shape as create-time so the
+	// daemon-callback caps (job_*) get the description copy.
+	extras := AgentExtras{
+		DaemonURL:  d.agentReachableURL(),
+		AgentToken: "placeholder",
+	}
+	caps := resolveCapabilities(extras, ma.capabilities)
+
+	if err := rewriteAgentYAMLCapabilities(fs, caps); err != nil {
+		return fmt.Errorf("agent.yaml: %w", err)
+	}
+	if err := rewriteAgentMDCapabilities(fs, ma.id.String(), caps); err != nil {
+		return fmt.Errorf("AGENT.md: %w", err)
+	}
+	return nil
+}
+
+// rewriteAgentYAMLCapabilities loads etc/agent.yaml, swaps in the
+// new Capabilities slice, and writes it back. The rest of the
+// Runtime (Tools / Envs / Mounts / Context / Image …) is preserved
+// byte-for-byte modulo YAML re-marshalling.
+func rewriteAgentYAMLCapabilities(fs billy.Filesystem, caps []agentpkg.Capability) error {
+	rt, err := agentpkg.LoadRuntime(fs)
+	if err != nil {
+		return fmt.Errorf("load: %w", err)
+	}
+	rt.Capabilities = caps
+	if writeErr := rt.WriteTo(fs); writeErr != nil {
+		return fmt.Errorf("write: %w", writeErr)
+	}
+	return nil
+}
+
+// rewriteAgentMDCapabilities re-renders the Capabilities section
+// of etc/context/AGENT.md by re-parsing etc/Agentfile (the source
+// DSL persisted alongside the materialised tree) and calling
+// spec.GenerateAgentMD with the new cap list. The Agentfile body
+// itself doesn't change — only the cap-list section the generator
+// renders into the markdown.
+func rewriteAgentMDCapabilities(fs billy.Filesystem, id string, caps []agentpkg.Capability) error {
+	body, err := util.ReadFile(fs, "etc/Agentfile")
+	if err != nil {
+		return fmt.Errorf("read Agentfile: %w", err)
+	}
+	af, parseErr := spec.Parse(bytes.NewReader(body))
+	if parseErr != nil {
+		return fmt.Errorf("parse Agentfile: %w", parseErr)
+	}
+	md := spec.GenerateAgentMD(af, id, caps)
+	if writeErr := util.WriteFile(fs, "etc/context/AGENT.md", []byte(md), 0o644); writeErr != nil {
+		return fmt.Errorf("write AGENT.md: %w", writeErr)
+	}
+	return nil
 }
 
 // AllAgents returns every agent currently in the pool, hydrated
