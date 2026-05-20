@@ -21,14 +21,20 @@ CONTEXT <NAME> ["desc"] <<EOF
                                encouraged; one concern per block.
 
 CONFIG <key>[=<value>] ["desc"]
-CONFIG <key>! ["desc"]       — runtime config knob. `!` = required.
+CONFIG <key>! ["desc"]       — runtime config knob. Free-form key
+                               (DNS-1123, kebab case). `!` = required.
+                               Passed to the runtime via agent.yaml's
+                               configs: block AND as RUNTIME_<UPPER>
+                               on the spawn env (max-tokens → 
+                               RUNTIME_MAX_TOKENS).
 
 ENV <KEY>=<value> ["desc"]   — OS env var on the spawned agent
                                process (NODE_ENV, FEATURE_X, etc.).
                                UPPERCASE only. Reserved keys
                                (PATH, HOME, XDG_*, TMPDIR, LANG,
                                OTTERS_AGENT_ROOT, *_API_KEY,
-                               *_API_BASE) are rejected at build.
+                               *_API_BASE, RUNTIME_*) are rejected
+                               at build.
 
 BIN <name> <image-ref> ["desc"] [<<USAGE]
                              — tool binary. USAGE heredoc is the
@@ -43,6 +49,14 @@ EXEC ["arg1", "arg2", …]     — override runtime argv. Rarely needed.
 LABEL <key>=<value>          — OCI manifest annotation.
 
 ARG <key>[=<default>]        — build-time argument.
+
+CAPABILITY <name>            — allowlist one runtime-provided
+                               LLM-facing tool (note-save,
+                               job-submit, etc.). Repeatable. Empty
+                               = no caps at all (strict default).
+                               Names DNS-1123, same shape as CONFIG
+                               keys. Operator can extend with
+                               `otters run --cap <name>`.
 ```
 
 ## Rules
