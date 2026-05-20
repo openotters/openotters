@@ -220,7 +220,7 @@ func (d *Daemon) SetAgentCapabilities(ctx context.Context, ref string, desired [
 	// when the caller sent duplicates.
 	known := catalogueNames(AgentExtras{
 		DaemonURL:  d.agentReachableURL(),
-		AgentToken: "placeholder",
+		AgentToken: placeholderToken,
 	})
 	seen := make(map[string]struct{}, len(desired))
 	clean := make([]string, 0, len(desired))
@@ -382,7 +382,7 @@ func (d *Daemon) rewriteAgentCapabilitiesOnDisk(ma *managedAgent) error {
 	// daemon-callback caps (job_*) get the description copy.
 	extras := AgentExtras{
 		DaemonURL:  d.agentReachableURL(),
-		AgentToken: "placeholder",
+		AgentToken: placeholderToken,
 	}
 	caps := resolveCapabilities(extras, ma.capabilities)
 

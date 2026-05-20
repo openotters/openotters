@@ -1664,7 +1664,7 @@ func (d *Daemon) CreateAgent(
 	// empty --cap = the strict default (zero caps).
 	capPlaceholder := AgentExtras{
 		DaemonURL:  d.agentReachableURL(),
-		AgentToken: "placeholder", // non-empty so daemon-URL-gated catalogue entries land
+		AgentToken: placeholderToken,
 	}
 	known := catalogueNames(capPlaceholder)
 	effectiveCaps := mergeCapabilityNames(af.Agent.Capabilities, req.GetCapabilities())

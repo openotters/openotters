@@ -818,7 +818,7 @@ func (h *runtimeHandler) AddAgentCapability(
 	}
 	known := catalogueNames(AgentExtras{
 		DaemonURL:  h.daemon.agentReachableURL(),
-		AgentToken: "placeholder",
+		AgentToken: placeholderToken,
 	})
 	if _, ok := known[capName]; !ok {
 		return nil, connect.NewError(connect.CodeInvalidArgument,
@@ -903,7 +903,7 @@ func (h *runtimeHandler) ListCapabilities(
 	}
 	catalogue := capabilityCatalogue(AgentExtras{
 		DaemonURL:  h.daemon.agentReachableURL(),
-		AgentToken: "placeholder",
+		AgentToken: placeholderToken,
 	})
 	out := make([]*daemonv1.CapabilityEntry, 0, len(catalogue))
 	for _, c := range catalogue {

@@ -162,6 +162,14 @@ func resolveCapabilities(extras AgentExtras, names []string) []agentpkg.Capabili
 	return out
 }
 
+// placeholderToken is a non-empty value used as AgentToken when
+// the daemon assembles AgentExtras solely for catalogue inspection
+// (e.g. enumerating capabilities, validating --cap names). The
+// catalogue's entry-points gate on DaemonURL + AgentToken both
+// being non-empty; this placeholder unblocks the gate without
+// committing a real JWT to the call site.
+const placeholderToken = "placeholder"
+
 // catalogueNames returns every known capability name. Used by
 // CreateAgent to validate operator-supplied --cap names: an
 // Agentfile directive is allowed to reference unknown names
