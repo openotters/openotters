@@ -50,12 +50,13 @@ LABEL <key>=<value>          — OCI manifest annotation.
 
 ARG <key>[=<default>]        — build-time argument.
 
-CAPABILITY <name>            — allowlist one runtime-provided
-                               LLM-facing tool (note-save,
-                               job-submit, etc.). Repeatable. Empty
-                               = no caps at all (strict default).
-                               Names DNS-1123, same shape as CONFIG
-                               keys. Operator can extend with
+CAPABILITY <name> [<name>…]  — allowlist one or more runtime-
+                               provided LLM-facing tools (note-save,
+                               job-submit, etc.). Repeatable across
+                               lines too. Empty = no caps at all
+                               (strict default). Names DNS-1123,
+                               same shape as CONFIG keys. Duplicates
+                               de-duped. Operator can extend with
                                `otters run --cap <name>`.
 ```
 
