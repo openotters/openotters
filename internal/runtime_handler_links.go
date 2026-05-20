@@ -587,6 +587,50 @@ func (h *runtimeHandler) requireLinkedTarget(
 		fmt.Errorf("agent %q is not linked to target %q", caller.AgentRef, ref))
 }
 
+// requireOwnAgent gates an RPC on EITHER an operator token (full
+// access across any agent's per-agent state) OR an agent token
+// whose identity matches the resolved ref (self-only).
+//
+// Used by every notes + agent_messages handler — neither surface
+// crosses agents, so the link-table lookup that requireLinkedTarget
+// performs is unnecessary. Without this check an agent token could
+// pass req.Ref = "<another agent>" and read/write that agent's
+// state via the daemon's direct-state path.
+func (h *runtimeHandler) requireOwnAgent(
+	ctx context.Context, ref string,
+) (*managedAgent, error) {
+	claims := auth.ClaimsFromContext(ctx)
+	if claims == nil {
+		return nil, connect.NewError(connect.CodeUnauthenticated,
+			errors.New("per-agent state RPC requires an authenticated token"))
+	}
+	// Agent tokens may omit the ref — the daemon scopes from the
+	// JWT in that case so the runtime client doesn't need to thread
+	// its own UUID through every call.
+	if ref == "" && claims.AgentRef != "" {
+		ref = claims.AgentRef
+	}
+	target, err := h.daemon.resolve(ref)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeNotFound, err)
+	}
+	if claims.AgentRef == "" {
+		// Operator token — no scope check.
+		return target, nil
+	}
+	caller, err := h.daemon.resolve(claims.AgentRef)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeUnauthenticated,
+			fmt.Errorf("agent token references unknown agent %q: %w", claims.AgentRef, err))
+	}
+	if caller.id != target.id {
+		return nil, connect.NewError(connect.CodePermissionDenied,
+			fmt.Errorf("agent %q cannot access agent %q's per-agent state",
+				claims.AgentRef, target.name))
+	}
+	return target, nil
+}
+
 func linkedAgentsToProto(list []LinkedAgentInfo) []*daemonv1.LinkedAgent {
 	out := make([]*daemonv1.LinkedAgent, 0, len(list))
 	for _, l := range list {

@@ -3,7 +3,9 @@ package internal
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -2022,72 +2024,45 @@ func (d *Daemon) PromptObjectWithAgent(
 	})
 }
 
-// ListSessionMessages returns historical messages for (ref, sessionID)
-// by asking the running agent's SessionReader. Used by the CLI to
-// preload prompt history when a chat session opens.
+// ListSessionMessages returns historical messages for (ref,
+// sessionID) directly from the daemon's agent_messages table. Used
+// by the CLI / dashboard to preload prompt history.
+//
+// Works for stopped agents — the daemon owns the state now, the
+// runtime no longer has to be alive for history to be readable.
 func (d *Daemon) ListSessionMessages(
 	ctx context.Context, ref, sessionID string, limit int,
-) ([]agentpkg.SessionMessage, error) {
+) ([]AgentMessageRow, error) {
 	ma, err := d.resolve(ref)
 	if err != nil {
 		return nil, err
 	}
 
-	a, ok := d.pool.Get(ma.id)
-	if !ok || a == nil {
-		return nil, fmt.Errorf("agent %q is not running", ma.name)
-	}
-
-	reader, ok := a.(agentpkg.SessionReader)
-	if !ok {
-		return nil, fmt.Errorf("agent %q does not expose session history", ma.name)
-	}
-
-	return reader.ListSessionMessages(ctx, sessionID, limit)
+	return d.state.AgentMessagesList(ctx, ma.id.String(), sessionID, int32(limit)) //nolint:gosec // caller-bounded
 }
 
-// ListSessions enumerates the live agent's session log. Returns an
-// empty slice (not an error) for agents that don't implement
-// SessionLister, so the dashboard can render "no history yet" on
-// older agents without surfacing an error toast.
-func (d *Daemon) ListSessions(ctx context.Context, ref string) ([]agentpkg.SessionInfo, error) {
+// ListSessions enumerates every distinct session_id seen for the
+// resolved agent, with each session's message count and most-recent
+// activity timestamp. Empty slice (not nil, not an error) when the
+// agent has no chat history yet.
+func (d *Daemon) ListSessions(ctx context.Context, ref string) ([]AgentSessionInfo, error) {
 	ma, err := d.resolve(ref)
 	if err != nil {
 		return nil, err
 	}
 
-	a, ok := d.pool.Get(ma.id)
-	if !ok || a == nil {
-		return nil, fmt.Errorf("agent %q is not running", ma.name)
-	}
-
-	lister, ok := a.(agentpkg.SessionLister)
-	if !ok {
-		return []agentpkg.SessionInfo{}, nil
-	}
-
-	return lister.ListSessions(ctx)
+	return d.state.AgentSessionsList(ctx, ma.id.String())
 }
 
-// DeleteSession removes a single session from the live agent's session
-// store. Idempotent on the runtime side.
+// DeleteSession removes every message row for one session.
+// Idempotent — no error if the session doesn't exist.
 func (d *Daemon) DeleteSession(ctx context.Context, ref, sessionID string) error {
 	ma, err := d.resolve(ref)
 	if err != nil {
 		return err
 	}
 
-	a, ok := d.pool.Get(ma.id)
-	if !ok || a == nil {
-		return fmt.Errorf("agent %q is not running", ma.name)
-	}
-
-	deleter, ok := a.(agentpkg.SessionDeleter)
-	if !ok {
-		return fmt.Errorf("agent %q does not support session deletion", ma.name)
-	}
-
-	return deleter.DeleteSession(ctx, sessionID)
+	return d.state.AgentSessionsDelete(ctx, ma.id.String(), sessionID)
 }
 
 // ChatStreamWithAgent invokes the agent's StreamPrompter and forwards every
@@ -2118,70 +2093,89 @@ func (d *Daemon) ChatStreamWithAgent(
 	}, cb)
 }
 
-// notesAPI resolves ref to a running agent and casts it to the
-// executor's NotesAPI capability-interface. The error messages
-// embed the agent name so the operator UI can show a useful
-// "agent X does not support notes" instead of a generic 404.
-func (d *Daemon) notesAPI(ref string) (agentpkg.NotesAPI, error) {
-	ma, err := d.resolve(ref)
-	if err != nil {
-		return nil, err
-	}
-	a, ok := d.pool.Get(ma.id)
-	if !ok || a == nil {
-		return nil, fmt.Errorf("agent %q is not running", ma.name)
-	}
-	napi, ok := a.(agentpkg.NotesAPI)
-	if !ok {
-		return nil, fmt.Errorf("agent %q does not support notes", ma.name)
-	}
-	return napi, nil
+// notes helpers — daemon owns the agent_notes table directly via
+// the AgentState surface (see state_agentstate.go). The dashboard /
+// CLI hits these methods through the operator-facing Runtime RPCs;
+// agents hit AgentState directly with their JWT.
+
+// SaveNoteResult bundles the saved note with a flag indicating
+// whether it replaced an existing key. The dashboard surfaces
+// "overwrote" vs "created" so a typo doesn't silently clobber a
+// prior fact.
+type SaveNoteResult struct {
+	Note      AgentNoteRow
+	Overwrote bool
 }
 
 func (d *Daemon) ListAgentNotes(
 	ctx context.Context, ref string, onlyInContext bool,
-) ([]agentpkg.Note, error) {
-	napi, err := d.notesAPI(ref)
+) ([]AgentNoteRow, error) {
+	ma, err := d.resolve(ref)
 	if err != nil {
 		return nil, err
 	}
-	return napi.ListNotes(ctx, onlyInContext)
+	rows, err := d.state.AgentNotesList(ctx, ma.id.String(), onlyInContext)
+	if err != nil {
+		return nil, err
+	}
+	for i := range rows {
+		// List responses elide Content to keep payloads small —
+		// callers pull bodies via GetAgentNote.
+		rows[i].Content = ""
+	}
+	return rows, nil
 }
 
-func (d *Daemon) GetAgentNote(ctx context.Context, ref, key string) (agentpkg.Note, error) {
-	napi, err := d.notesAPI(ref)
+func (d *Daemon) GetAgentNote(ctx context.Context, ref, key string) (AgentNoteRow, error) {
+	ma, err := d.resolve(ref)
 	if err != nil {
-		return agentpkg.Note{}, err
+		return AgentNoteRow{}, err
 	}
-	return napi.GetNote(ctx, key)
+	n, err := d.state.AgentNotesGet(ctx, ma.id.String(), key)
+	if errors.Is(err, sql.ErrNoRows) {
+		return AgentNoteRow{}, ErrAgentNoteNotFound
+	}
+	return n, err
 }
 
 func (d *Daemon) SaveAgentNote(
 	ctx context.Context, ref, key, content string, maxBytes, maxCount int32,
-) (agentpkg.SaveResult, error) {
-	napi, err := d.notesAPI(ref)
+) (SaveNoteResult, error) {
+	ma, err := d.resolve(ref)
 	if err != nil {
-		return agentpkg.SaveResult{}, err
+		return SaveNoteResult{}, err
 	}
-	return napi.SaveNote(ctx, key, content, maxBytes, maxCount)
+	saved, overwrote, err := d.state.AgentNotesSave(
+		ctx, ma.id.String(), key, content, int(maxBytes), int(maxCount),
+	)
+	if err != nil {
+		return SaveNoteResult{}, err
+	}
+	return SaveNoteResult{Note: saved, Overwrote: overwrote}, nil
 }
 
 func (d *Daemon) DeleteAgentNote(ctx context.Context, ref, key string) (bool, error) {
-	napi, err := d.notesAPI(ref)
+	ma, err := d.resolve(ref)
 	if err != nil {
 		return false, err
 	}
-	return napi.DeleteNote(ctx, key)
+	return d.state.AgentNotesDelete(ctx, ma.id.String(), key)
 }
 
 func (d *Daemon) SetAgentNoteInContext(
 	ctx context.Context, ref, key string, inContext bool,
-) (agentpkg.Note, error) {
-	napi, err := d.notesAPI(ref)
+) (AgentNoteRow, error) {
+	ma, err := d.resolve(ref)
 	if err != nil {
-		return agentpkg.Note{}, err
+		return AgentNoteRow{}, err
 	}
-	return napi.SetNoteInContext(ctx, key, inContext)
+	if setErr := d.state.AgentNotesSetInContext(ctx, ma.id.String(), key, inContext); setErr != nil {
+		if errors.Is(setErr, sql.ErrNoRows) {
+			return AgentNoteRow{}, ErrAgentNoteNotFound
+		}
+		return AgentNoteRow{}, setErr
+	}
+	return d.state.AgentNotesGet(ctx, ma.id.String(), key)
 }
 
 func (d *Daemon) nameExists(name string) bool {

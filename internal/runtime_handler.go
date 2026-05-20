@@ -301,8 +301,12 @@ func (h *runtimeHandler) ChatStreamWithAgent(
 func (h *runtimeHandler) ListSessionMessages(
 	ctx context.Context, req *connect.Request[daemonv1.ListSessionMessagesRequest],
 ) (*connect.Response[daemonv1.ListSessionMessagesResponse], error) {
+	target, err := h.requireOwnAgent(ctx, req.Msg.GetRef())
+	if err != nil {
+		return nil, err
+	}
 	msgs, err := h.daemon.ListSessionMessages(
-		ctx, req.Msg.GetRef(), req.Msg.GetSessionId(), int(req.Msg.GetLimit()),
+		ctx, target.id.String(), req.Msg.GetSessionId(), int(req.Msg.GetLimit()),
 	)
 	if err != nil {
 		return nil, err
@@ -315,7 +319,7 @@ func (h *runtimeHandler) ListSessionMessages(
 			Content:      m.Content,
 			CreatedAt:    m.CreatedAt.Unix(),
 			BranchesJson: m.BranchesJSON,
-			ActiveBranch: int32(m.ActiveBranch), //nolint:gosec // small int, daemon-bounded
+			ActiveBranch: m.ActiveBranch,
 		}
 	}
 
@@ -325,7 +329,11 @@ func (h *runtimeHandler) ListSessionMessages(
 func (h *runtimeHandler) ListSessions(
 	ctx context.Context, req *connect.Request[daemonv1.ListSessionsRequest],
 ) (*connect.Response[daemonv1.ListSessionsResponse], error) {
-	sessions, err := h.daemon.ListSessions(ctx, req.Msg.GetRef())
+	target, err := h.requireOwnAgent(ctx, req.Msg.GetRef())
+	if err != nil {
+		return nil, err
+	}
+	sessions, err := h.daemon.ListSessions(ctx, target.id.String())
 	if err != nil {
 		return nil, err
 	}
@@ -334,7 +342,7 @@ func (h *runtimeHandler) ListSessions(
 	for i, s := range sessions {
 		out[i] = &daemonv1.SessionInfo{
 			Id:           s.ID,
-			MessageCount: int32(s.MessageCount), //nolint:gosec // caller-bounded
+			MessageCount: s.MessageCount,
 			LastActive:   s.LastActive.Unix(),
 		}
 	}
@@ -345,8 +353,12 @@ func (h *runtimeHandler) ListSessions(
 func (h *runtimeHandler) DeleteSession(
 	ctx context.Context, req *connect.Request[daemonv1.DeleteSessionRequest],
 ) (*connect.Response[daemonv1.DeleteSessionResponse], error) {
-	if err := h.daemon.DeleteSession(ctx, req.Msg.GetRef(), req.Msg.GetSessionId()); err != nil {
+	target, err := h.requireOwnAgent(ctx, req.Msg.GetRef())
+	if err != nil {
 		return nil, err
+	}
+	if delErr := h.daemon.DeleteSession(ctx, target.id.String(), req.Msg.GetSessionId()); delErr != nil {
+		return nil, delErr
 	}
 
 	return connect.NewResponse(&daemonv1.DeleteSessionResponse{}), nil
@@ -561,7 +573,11 @@ func mapProviderError(err error) error {
 func (h *runtimeHandler) ListAgentNotes(
 	ctx context.Context, req *connect.Request[daemonv1.ListAgentNotesRequest],
 ) (*connect.Response[daemonv1.ListAgentNotesResponse], error) {
-	all, err := h.daemon.ListAgentNotes(ctx, req.Msg.GetRef(), req.Msg.GetOnlyInContext())
+	target, err := h.requireOwnAgent(ctx, req.Msg.GetRef())
+	if err != nil {
+		return nil, err
+	}
+	all, err := h.daemon.ListAgentNotes(ctx, target.id.String(), req.Msg.GetOnlyInContext())
 	if err != nil {
 		return nil, mapNotesError(err)
 	}
@@ -575,7 +591,11 @@ func (h *runtimeHandler) ListAgentNotes(
 func (h *runtimeHandler) GetAgentNote(
 	ctx context.Context, req *connect.Request[daemonv1.GetAgentNoteRequest],
 ) (*connect.Response[daemonv1.GetAgentNoteResponse], error) {
-	n, err := h.daemon.GetAgentNote(ctx, req.Msg.GetRef(), req.Msg.GetKey())
+	target, err := h.requireOwnAgent(ctx, req.Msg.GetRef())
+	if err != nil {
+		return nil, err
+	}
+	n, err := h.daemon.GetAgentNote(ctx, target.id.String(), req.Msg.GetKey())
 	if err != nil {
 		return nil, mapNotesError(err)
 	}
@@ -585,8 +605,12 @@ func (h *runtimeHandler) GetAgentNote(
 func (h *runtimeHandler) SaveAgentNote(
 	ctx context.Context, req *connect.Request[daemonv1.SaveAgentNoteRequest],
 ) (*connect.Response[daemonv1.SaveAgentNoteResponse], error) {
+	target, err := h.requireOwnAgent(ctx, req.Msg.GetRef())
+	if err != nil {
+		return nil, err
+	}
 	res, err := h.daemon.SaveAgentNote(
-		ctx, req.Msg.GetRef(), req.Msg.GetKey(), req.Msg.GetContent(),
+		ctx, target.id.String(), req.Msg.GetKey(), req.Msg.GetContent(),
 		req.Msg.GetMaxBytes(), req.Msg.GetMaxCount(),
 	)
 	if err != nil {
@@ -601,7 +625,11 @@ func (h *runtimeHandler) SaveAgentNote(
 func (h *runtimeHandler) DeleteAgentNote(
 	ctx context.Context, req *connect.Request[daemonv1.DeleteAgentNoteRequest],
 ) (*connect.Response[daemonv1.DeleteAgentNoteResponse], error) {
-	existed, err := h.daemon.DeleteAgentNote(ctx, req.Msg.GetRef(), req.Msg.GetKey())
+	target, err := h.requireOwnAgent(ctx, req.Msg.GetRef())
+	if err != nil {
+		return nil, err
+	}
+	existed, err := h.daemon.DeleteAgentNote(ctx, target.id.String(), req.Msg.GetKey())
 	if err != nil {
 		return nil, mapNotesError(err)
 	}
@@ -611,8 +639,12 @@ func (h *runtimeHandler) DeleteAgentNote(
 func (h *runtimeHandler) SetAgentNoteInContext(
 	ctx context.Context, req *connect.Request[daemonv1.SetAgentNoteInContextRequest],
 ) (*connect.Response[daemonv1.SetAgentNoteInContextResponse], error) {
+	target, err := h.requireOwnAgent(ctx, req.Msg.GetRef())
+	if err != nil {
+		return nil, err
+	}
 	n, err := h.daemon.SetAgentNoteInContext(
-		ctx, req.Msg.GetRef(), req.Msg.GetKey(), req.Msg.GetInContext(),
+		ctx, target.id.String(), req.Msg.GetKey(), req.Msg.GetInContext(),
 	)
 	if err != nil {
 		return nil, mapNotesError(err)
@@ -620,10 +652,10 @@ func (h *runtimeHandler) SetAgentNoteInContext(
 	return connect.NewResponse(&daemonv1.SetAgentNoteInContextResponse{Note: noteToProto(n)}), nil
 }
 
-// noteToProto converts an executor.Note into the wire shape. Unix
+// noteToProto converts an AgentNoteRow into the wire shape. Unix
 // timestamps so the TS side can keep notes as plain objects without
 // pulling a Timestamp dep.
-func noteToProto(n agentpkg.Note) *daemonv1.AgentNote {
+func noteToProto(n AgentNoteRow) *daemonv1.AgentNote {
 	pn := &daemonv1.AgentNote{
 		Key:       n.Key,
 		Content:   n.Content,
@@ -639,14 +671,21 @@ func noteToProto(n agentpkg.Note) *daemonv1.AgentNote {
 	return pn
 }
 
-// mapNotesError translates executor sentinels into Connect codes so
-// the UI can render meaningful errors without string-matching.
+// mapNotesError translates note-related sentinels into Connect
+// codes so the UI can render meaningful errors without string-
+// matching.
 func mapNotesError(err error) error {
 	if err == nil {
 		return nil
 	}
-	if errors.Is(err, agentpkg.ErrNoteNotFound) {
+	if errors.Is(err, ErrAgentNoteNotFound) {
 		return connect.NewError(connect.CodeNotFound, err)
+	}
+	switch {
+	case errors.Is(err, ErrAgentNoteInvalidKey),
+		errors.Is(err, ErrAgentNoteTooLarge),
+		errors.Is(err, ErrAgentNoteTooMany):
+		return connect.NewError(connect.CodeFailedPrecondition, err)
 	}
 	return err
 }
